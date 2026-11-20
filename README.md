@@ -78,10 +78,12 @@ Order matters for step 1: said within 10 minutes of a fix at the station, «Я �
 
 The short version is below. [docs/setup.md](docs/setup.md) has every step with a check, including offline mode and the transmitter on a phone.
 
+A Mistral key is optional. Without one, run offline mode ([below](#offline-models-on-this-computer)).
+
 ```bash
 npm install
-cp .env.example .env.local   # then fill in MISTRAL_API_KEY; never commit it
-npm run dev -- -p 3117
+npm run dev -- -p 3117                         # hosted mode: needs MISTRAL_API_KEY in .env.local
+PROVIDER_MODE=local npm run dev -- -p 3117     # offline mode: no key, needs Ollama (below)
 ```
 
 ```bash
@@ -89,7 +91,7 @@ npm test             # resolver unit tests
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes or kyiv)
 ```
 
-Environment: `MISTRAL_API_KEY` (required for speech-to-text). Extraction falls back to `FEATHERLESS_API_KEY` behind the same interface if it is absent. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
+Environment (all optional; see `.env.example`): `MISTRAL_API_KEY` for hosted mode, the default; copy `.env.example` to `.env.local` and paste it there, never in a commit. Without it, use offline mode. Extraction falls back to `FEATHERLESS_API_KEY` behind the same interface if it is absent. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
 
 ### Offline: models on this computer
 

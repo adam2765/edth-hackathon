@@ -77,8 +77,9 @@ The name keeps working when addresses change, and it works over the USB cable al
 shared Wi-Fi. A numeric address does not: over the cable the Mac's address changes every time
 the link re-forms, and the app then reports "no answer from the coordinator". iOS must be
 allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
-network is allowed. The coordinator on the computer still calls Mistral, so the computer needs
-the internet until local models exist.
+network is allowed. In hosted mode the coordinator calls Mistral, so the computer needs the
+internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither, but it takes text
+only: use "Phone: base" or "Phone: small", not "Server" ([../docs/setup.md](../docs/setup.md), part 3).
 
 Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
 ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server

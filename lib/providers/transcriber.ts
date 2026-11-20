@@ -69,6 +69,6 @@ export function getTranscriber(): Transcriber {
   if (providerMode() === "local") throw new NoLocalTranscriberError();
   if (process.env.MISTRAL_API_KEY) cached = new MistralTranscriber(process.env.MISTRAL_API_KEY);
   else if (process.env.GRADIUM_API_KEY) throw new Error("GRADIUM_API_KEY is set but the Gradium transcriber is not built in stage 1");
-  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY");
+  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY, or run offline with PROVIDER_MODE=local and send text (docs/setup.md, part 3)");
   return cached;
 }

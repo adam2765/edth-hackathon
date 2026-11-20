@@ -32,7 +32,8 @@ docs/                       design docs, one Markdown file per topic; start at d
 
 ```bash
 npm install
-npm run dev -- -p 3117      # port 3117, not 3000
+npm run dev -- -p 3117      # port 3117, not 3000; hosted mode, needs MISTRAL_API_KEY
+PROVIDER_MODE=local npm run dev -- -p 3117   # offline mode: no key, needs Ollama (docs/setup.md, part 3)
 npm test                    # unit tests; no network or key needed
 npx tsc --noEmit            # type-check (excludes transmitter/)
 npm run lint
@@ -42,7 +43,7 @@ npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`.
 
-Anything that calls Mistral needs `MISTRAL_API_KEY` and network access (see `.env.example`). A sandbox without network can run the tests, not the live pipeline.
+A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: only Ollama on the same computer with `ministral-3:3b` (`docs/setup.md`, part 3). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
 
 ## Rules
 

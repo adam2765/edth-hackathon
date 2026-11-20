@@ -186,7 +186,7 @@ export function getExtractor(): IntentExtractor {
       "featherless",
       false,
     );
-  } else throw new Error("No extraction key: set MISTRAL_API_KEY (or FEATHERLESS_API_KEY)");
+  } else throw new Error("No extraction key: set MISTRAL_API_KEY (or FEATHERLESS_API_KEY), or run offline with PROVIDER_MODE=local (docs/setup.md, part 3)");
   return cached;
 }
 
