@@ -48,15 +48,17 @@ If hall noise defeats transcription, type the same sentences in the text box; te
 
 ### Kyiv, in Ukrainian
 
-Switch to **Київ** (2,112 features: 26 stations, 67 churches, 317 streets). Checked with a synthetic Ukrainian voice, not yet with a native speaker.
+Switch to **Київ** (2,112 features: 26 stations, 67 churches, 317 streets) and start from a fresh page. Checked with a synthetic Ukrainian voice, not yet with a native speaker.
 
 | # | Say | Expected |
 |---|---|---|
-| 1 | «Я біля станції метро Хрещатик.» | Pin at Khreshchatyk station, ±80 m |
-| 2 | «Я на Хрещатику.» | Asks «вулиця Хрещатик чи Хрещатик (станція)?»; tap one |
-| 3 | «Рухаюсь до Софійського собору.» | Arrow to Saint Sophia Cathedral |
+| 1 | «Я на Хрещатику.» | Asks «вулиця Хрещатик чи Хрещатик (станція)?»; tap **вулиця Хрещатик** |
+| 2 | «Рухаюсь до Софійського собору.» | Arrow to Saint Sophia Cathedral |
+| 3 | «Я біля станції метро Хрещатик.» | Pin at Khreshchatyk station, ±80 m |
 | 4 | «Я на Майдані Незалежності.» | Pin ±249 m, no question: station, square and street are one place |
 | 5 | "I'm at the Golden Gate." | English in the same session: pin at Золоті ворота, ±30 m |
+
+Order matters for step 1: said within 10 minutes of a fix at the station, «Я на Хрещатику» resolves to the station without asking (nearest wins).
 
 ## Run locally
 
