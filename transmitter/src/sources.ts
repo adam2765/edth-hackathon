@@ -3,7 +3,7 @@
 //   microphone     hold to talk (see useMicSource in App.tsx, which owns the recorder hook)
 //   open mic       later: continuous listening that cuts at pauses
 import { Asset } from "expo-asset";
-import { AudioQuality, IOSOutputFormat, type RecordingOptions } from "expo-audio";
+import { AudioQuality, IOSOutputFormat, createAudioPlayer, type RecordingOptions } from "expo-audio";
 
 /** Local file URI of a bundled clip (a Metro asset id). */
 export async function clipUri(assetId: number): Promise<string> {
@@ -11,6 +11,32 @@ export async function clipUri(assetId: number): Promise<string> {
   if (!asset.localUri) await asset.downloadAsync();
   if (!asset.localUri) throw new Error("A bundled clip is not available");
   return asset.localUri;
+}
+
+/**
+ * Plays a bundled clip through the phone's speaker and resolves when it ends, so people in the
+ * room can hear what the scenario "said". Sending does not depend on this.
+ */
+export function playClipAloud(assetId: number): Promise<void> {
+  return new Promise((resolve) => {
+    const player = createAudioPlayer(assetId);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(giveUp);
+      try {
+        player.remove();
+      } catch {}
+      resolve();
+    };
+    // No clip is longer than a few seconds; never let a playback problem hold up a report.
+    const giveUp = setTimeout(finish, 10_000);
+    player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) finish();
+    });
+    player.play();
+  });
 }
 
 /** Speech-sized recording: 16 kHz mono AAC in an m4a file, the same as the scenario clips. */

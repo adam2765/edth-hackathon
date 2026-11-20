@@ -35,8 +35,18 @@ computer's address. It sends reports to the coordinator on that same computer, p
 "This Mac" and "Live site" (`https://edth-hackathon.vercel.app`), and a light shows whether the
 coordinator answers. `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
-For a phone, the phone and the computer must be on the same network, and iOS must be allowed
-to "find devices on your local network" when it asks. A plain `http://` address on the local
+For a phone, open the app with the computer's network name, not a numeric address:
+
+```bash
+xcrun devicectl device process launch --device <phone id> --terminate-existing \
+  --payload-url "exp+transmitter://expo-development-client/?url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081" \
+  dev.voicetomap.transmitter
+```
+
+The name keeps working when addresses change, and it works over the USB cable alone, with no
+shared Wi-Fi. A numeric address does not: over the cable the Mac's address changes every time
+the link re-forms, and the app then reports "no answer from the coordinator". iOS must be
+allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
 network is allowed. The coordinator on the computer still calls Mistral, so the computer needs
 the internet until local models exist.
 
@@ -80,6 +90,13 @@ A step counts when the coordinator's answer is the expected one.
 
 Phone modes transcribe scenario clips on both platforms. The microphone uses them on iOS only for
 now: Whisper needs uncompressed audio, which Android's recorder cannot write.
+
+## What you hear
+
+A scenario sends its clips as data, so by default nothing is played: that is what makes it
+usable in a quiet room. The phone speaks only the coordinator's question ("Speak"), and only
+when the coordinator asks one. "Play each clip aloud before sending it" plays the clip through
+the phone's speaker first, for an audience. Sound comes out even with the ring switch on silent.
 
 ## Scenarios
 

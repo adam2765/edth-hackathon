@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
-import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri } from "./src/sources";
+import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
 import { PHONE_MODELS, STT_MODES, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendUtterance } from "./src/transport";
@@ -99,6 +99,7 @@ function Transmitter() {
   const [stepResults, setStepResults] = useState<Record<string, StepResult>>({});
   const [realTime, setRealTime] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
+  const [playClips, setPlayClips] = useState(false);
   const [sttMode, setSttMode] = useState<SttMode>("server");
   const [useHints, setUseHints] = useState(true);
   const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
@@ -138,6 +139,16 @@ function Transmitter() {
       controller.abort();
     };
   }, [serverUrl]);
+
+  // Sound should come out of the loudspeaker even when the phone's ring switch is on silent,
+  // as it would from a radio.
+  useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    console.log("[coordinator]", JSON.stringify({ address: serverUrl, reach }));
+  }, [serverUrl, reach]);
 
   const setBusyBoth = (b: Busy) => {
     busyRef.current = b;
@@ -182,6 +193,8 @@ function Transmitter() {
         return { reply, entryId, roundTripMs };
       } catch (e) {
         const msg = e instanceof Error ? (e.name === "AbortError" ? "The coordinator did not answer in time." : e.message) : "Sending failed.";
+        // In the dev-server log too, so a failure on a phone can be diagnosed from the computer.
+        console.log("[send-error]", JSON.stringify({ coordinator: serverUrl, error: msg }));
         setEntries((es) => [{ id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: "", outcome: msg, status: "error" }, ...es]);
         setStatus(msg);
         return null;
@@ -206,6 +219,8 @@ function Transmitter() {
       const base = { seq: ++seqRef.current, callsign: step.callsign, source: "scenario" as const, startedAt: now, endedAt: now, scenarioStepId: step.id };
       let u: Utterance;
       let phoneMs: number | undefined;
+      // Optional: let the room hear the clip first, as if someone had just said it.
+      if (playClips) await playClipAloud(step.audio);
       if (sttMode === "server") {
         u = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
       } else {
@@ -238,7 +253,7 @@ function Transmitter() {
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
       return verdict.pass;
     },
-    [handleUtterance, choose, speakReplies, sttMode, useHints],
+    [handleUtterance, choose, speakReplies, sttMode, useHints, playClips],
   );
 
   const playScenario = useCallback(async () => {
@@ -500,6 +515,10 @@ function Transmitter() {
               <Switch value={speakReplies} onValueChange={setSpeakReplies} />
               <Text style={styles.muted}>Speak</Text>
             </View>
+          </View>
+          <View style={styles.toggle}>
+            <Switch value={playClips} onValueChange={setPlayClips} />
+            <Text style={styles.muted}>Play each clip aloud before sending it</Text>
           </View>
           {scenario?.steps.map((step) => {
             const r = stepResults[`${scenario.id}/${step.id}`];
