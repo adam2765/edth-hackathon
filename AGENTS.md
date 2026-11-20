@@ -6,9 +6,10 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 ## Read first
 
-- `docs/DESIGN.md`: what we are building and why, what exists, the contracts between parts, what is left, open questions.
+- `docs/README.md`: the index of the design docs, one file per topic: overview, architecture, contracts, plan, gazetteer, open questions, known gaps, glossary. Update the matching file in the same change as the code.
 - `README.md`: how the pipeline works, the resolver rules, demo scripts, how to run.
 - `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it.
+- `CONTRIBUTING.md`: setup, checks and working agreements for the four of us.
 
 ## Layout
 
@@ -23,6 +24,7 @@ lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
 tests/                      vitest
+docs/                       design docs, one Markdown file per topic; start at docs/README.md
 ```
 
 ## Commands
@@ -52,6 +54,7 @@ Anything that calls Mistral needs `MISTRAL_API_KEY` and network access (see `.en
 - `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the receiver. Change them on purpose, and say so in the decision line.
 - Do not deploy to production, push, or move the `prior-work-fri-1800` tag unless the person you are working for asks.
 - Write user-facing text and docs in plain, short sentences, in the same style as `README.md` and `DECISIONS.md`.
+- The docs live only in this repo, as Markdown. Do not create or update copies in other tools (Claude Docs, Google Docs, Notion); not everyone on the team uses them.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -2,7 +2,7 @@ This is an Expo/React Native mobile application. Prioritize mobile-first pattern
 
 ## This app
 
-The transmitter: it stands in for a field radio and sends spoken reports to the coordinator (`POST /api/report` in the web app one folder up). Read `README.md` here, section 8.3 of `../docs/DESIGN.md`, and decisions 58 to 67 in `../DECISIONS.md`. The root `AGENTS.md` rules apply here too.
+The transmitter: it stands in for a field radio and sends spoken reports to the coordinator (`POST /api/report` in the web app one folder up). Read `README.md` here, the Transmitter section of `../docs/plan.md`, `../docs/contracts.md`, and decisions 58 to 67 in `../DECISIONS.md`. The root `AGENTS.md` rules apply here too.
 
 Where this app differs from the Expo template advice below:
 

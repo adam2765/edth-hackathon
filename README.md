@@ -110,7 +110,8 @@ lib/geo/areas.ts                           areas: centre, bounding box, hint tex
 lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms
 lib/geo/resolver.ts                        pure resolver
 scripts/build-gazetteer.ts                 one Overpass query → data/gazetteer.<area>.json
-docs/DESIGN.md                             design document: goals, what exists, contracts, plan, open questions
+docs/                                      design docs, one file per topic; start at docs/README.md
+CONTRIBUTING.md                            setup, checks and working agreements for the team
 DECISIONS.md                               every choice made, one line each
 AGENTS.md                                  instructions for coding agents (Claude Code and Codex read the same file)
 ```
