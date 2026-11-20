@@ -152,7 +152,7 @@ function Transmitter() {
 
   // ---------- source: scenario clips ----------
   const runStep = useCallback(
-    async (sc: Scenario, step: ScenarioStep): Promise<boolean> => {
+    async (sc: Scenario, step: ScenarioStep, manual = false): Promise<boolean> => {
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "running", note: "sending" } }));
       const audioUri = await scenarioClipUri(step);
       const now = Date.now();
@@ -165,9 +165,11 @@ function Transmitter() {
       let chosen: Candidate | undefined;
       if (out.reply.resolution.status === "ambiguous" && step.choose) {
         chosen = out.reply.resolution.candidates.find((c) => c.id === step.choose);
-        if (chosen) choose(out.entryId, chosen);
+        // Sent on its own, the question is left open for a person to answer.
+        if (chosen && !manual) choose(out.entryId, chosen);
       }
       const verdict = evaluate(step, out.reply, chosen);
+      if (manual && verdict.pass && chosen) verdict.note = "asked: answer below";
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
       return verdict.pass;
     },
@@ -196,6 +198,19 @@ function Transmitter() {
     setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.`);
     setBusyBoth("idle");
   }, [scenarioId, realTime, runStep]);
+
+  /** Sends one step on its own, from wherever the unit is now, and leaves any question open. */
+  const sendOneStep = useCallback(
+    async (sc: Scenario, step: ScenarioStep) => {
+      if (busyRef.current !== "idle") return;
+      setBusyBoth("scenario");
+      setArea(sc.area);
+      setStatus(`Sending “${step.text}”`);
+      await runStep(sc, step, true);
+      setBusyBoth("idle");
+    },
+    [runStep],
+  );
 
   // ---------- source: microphone, hold to talk ----------
   const stopAndSend = useCallback(async () => {
@@ -349,15 +364,15 @@ function Transmitter() {
           {scenario?.steps.map((step) => {
             const r = stepResults[`${scenario.id}/${step.id}`];
             return (
-              <View key={step.id} style={styles.step}>
-                <Text style={[styles.stepMark, r?.state === "pass" && styles.ok, r?.state === "fail" && styles.bad]}>{r?.state === "pass" ? "✓" : r?.state === "fail" ? "✗" : r?.state === "running" ? "…" : "·"}</Text>
+              <Pressable key={step.id} style={styles.step} onPress={() => sendOneStep(scenario, step)} accessibilityLabel={`Send step ${step.id}`}>
+                <Text style={[styles.stepMark, r?.state === "pass" && styles.ok, r?.state === "fail" && styles.bad]}>{r?.state === "pass" ? "✓" : r?.state === "fail" ? "✗" : r?.state === "running" ? "…" : "▶"}</Text>
                 <View style={styles.flex}>
                   <Text style={styles.stepText}>
                     {step.callsign}: “{step.text}”
                   </Text>
-                  <Text style={styles.muted}>{r ? r.note : `expects ${step.expect.status}${step.choose ? ", then a choice" : ""}`}</Text>
+                  <Text style={styles.muted}>{r ? r.note : `expects ${step.expect.status}${step.choose ? ", then a choice" : ""} · tap to send alone`}</Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
