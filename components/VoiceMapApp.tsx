@@ -47,7 +47,8 @@ type ApiResponse = {
   timings_ms: Timings;
   error?: string;
 };
-type Position = { lat: number; lon: number; ts: number; radius_m: number; label: string };
+/** `estimated`: placed from a movement report (middle of the leg), not from a stated position. */
+type Position = { lat: number; lon: number; ts: number; radius_m: number; label: string; estimated?: boolean };
 type Arrow = { from?: { lat: number; lon: number }; to: HeadingTo };
 type Report = {
   id: string;
@@ -220,6 +221,14 @@ export default function VoiceMapApp() {
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": "#2c9cff" } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(44,156,255,0.15)", "circle-stroke-color": "#2c9cff", "circle-stroke-width": 2 } });
         map.addLayer({ id: "pos", type: "circle", source: "pos", paint: { "circle-radius": 8, "circle-color": "#ff6b2c", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+        // Time of the last update next to the marker, as in Lysk's brief.
+        map.addLayer({
+          id: "pos-label",
+          type: "symbol",
+          source: "pos",
+          layout: { "text-field": ["get", "time"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-offset": [0, 1.3], "text-anchor": "top", "text-allow-overlap": true, "text-ignore-placement": true },
+          paint: { "text-color": "#16212c", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+        });
         setMapReady(true);
       });
       mapRef.current = map;
@@ -239,7 +248,12 @@ export default function VoiceMapApp() {
     if (!el || typeof ResizeObserver === "undefined") return;
     const apply = () => {
       document.documentElement.style.setProperty("--sheet-h", `${el.offsetHeight}px`);
-      mapRef.current?.setPadding({ top: 0, left: 0, right: 0, bottom: el.offsetHeight + 44 });
+      const map = mapRef.current;
+      if (!map) return;
+      const pad = { top: 0, left: 0, right: 0, bottom: el.offsetHeight + 44 };
+      // setPadding stops a camera animation in progress, so wait for it to finish.
+      if (map.isMoving()) map.once("moveend", () => map.setPadding(pad));
+      else map.setPadding(pad);
     };
     const ro = new ResizeObserver(apply);
     ro.observe(el);
@@ -249,13 +263,26 @@ export default function VoiceMapApp() {
 
   const sheetPadding = useCallback(() => ({ top: 76, left: 40, right: 60, bottom: 30 }), []);
 
+  // Camera moves wait a moment: the sheet usually changes height in the same update, and the
+  // move should start from the new padding rather than be cut short by it.
+  const cameraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moveCamera = useCallback((fn: (map: MLMap) => void) => {
+    if (cameraTimer.current) clearTimeout(cameraTimer.current);
+    cameraTimer.current = setTimeout(() => {
+      if (mapRef.current) fn(mapRef.current);
+    }, 80);
+  }, []);
+
   // Draw position, accuracy circle, trail.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const src = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
     if (position) {
-      src("pos")?.setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [position.lon, position.lat] } }] });
+      src("pos")?.setData({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { time: `${position.estimated ? "≈ " : ""}${fmtTime(position.ts)}` }, geometry: { type: "Point", coordinates: [position.lon, position.lat] } }],
+      });
       src("accuracy")?.setData({ type: "FeatureCollection", features: [circlePolygon(position.lat, position.lon, position.radius_m)] });
     } else {
       src("pos")?.setData(EMPTY_FC);
@@ -307,8 +334,8 @@ export default function VoiceMapApp() {
     const b = new ml.LngLatBounds();
     pending.candidates.forEach((c) => b.extend([c.lon, c.lat]));
     if (positionRef.current) b.extend([positionRef.current.lon, positionRef.current.lat]);
-    map.fitBounds(b, { padding: sheetPadding(), maxZoom: 16.5, duration: 600 });
-  }, [pending, mapReady, sheetPadding]);
+    moveCamera((m) => m.fitBounds(b, { padding: sheetPadding(), maxZoom: 16.5, duration: 600 }));
+  }, [pending, mapReady, sheetPadding, moveCamera]);
 
   // ---------- applying results ----------
   const applyPlacement = useCallback(
@@ -316,17 +343,29 @@ export default function VoiceMapApp() {
       const map = mapRef.current;
       const prev = positionRef.current;
       if (pl.heading_to) {
-        const from = pl.pin ?? (prev ? { lat: prev.lat, lon: prev.lon } : undefined);
+        // The arrow runs from where they were to where they are heading; the marker moves to the
+        // server's estimate (middle of that leg) and its circle spans the whole leg.
+        const from = prev ? { lat: prev.lat, lon: prev.lon } : undefined;
         setArrow({ from, to: pl.heading_to });
-        if (map) {
-          if (from) {
-            const b = new (mlRef.current!.LngLatBounds)();
-            b.extend([from.lon, from.lat]);
-            b.extend([pl.heading_to.lon, pl.heading_to.lat]);
-            map.fitBounds(b, { padding: sheetPadding(), maxZoom: 16.5, duration: 700 });
-          } else map.easeTo({ center: [pl.heading_to.lon, pl.heading_to.lat], zoom: 16, duration: 700 });
+        let moved: Position | null = null;
+        if (prev && pl.pin) {
+          moved = { lat: pl.pin.lat, lon: pl.pin.lon, ts: Date.now(), radius_m: pl.radius_m ?? 80, label: `towards ${pl.heading_to.name}`, estimated: true };
+          setTrail((t) => [...t, prev].slice(-30));
+          setPosition(moved);
+          positionRef.current = moved;
         }
-        return from ? `Moving towards ${pl.heading_to.name}` : `Heading to ${pl.heading_to.name} (no starting position yet)`;
+        const to = pl.heading_to;
+        if (map && mlRef.current) {
+          if (from) {
+            const b = new mlRef.current.LngLatBounds();
+            b.extend([from.lon, from.lat]);
+            b.extend([to.lon, to.lat]);
+            moveCamera((m) => m.fitBounds(b, { padding: sheetPadding(), maxZoom: 16.5, duration: 700 }));
+          } else moveCamera((m) => m.easeTo({ center: [to.lon, to.lat], zoom: 16, duration: 700 }));
+        }
+        return moved
+          ? `Moved towards ${pl.heading_to.name}: somewhere on the way (±${moved.radius_m} m)`
+          : `Heading to ${pl.heading_to.name} (no starting position yet)`;
       }
       if (pl.pin) {
         const next: Position = { lat: pl.pin.lat, lon: pl.pin.lon, ts: Date.now(), radius_m: pl.radius_m ?? 80, label };
@@ -334,12 +373,12 @@ export default function VoiceMapApp() {
         setPosition(next);
         positionRef.current = next;
         setArrow(null);
-        map?.easeTo({ center: [next.lon, next.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
+        moveCamera((m) => m.easeTo({ center: [next.lon, next.lat], zoom: Math.max(m.getZoom(), 16), duration: 700 }));
         return `Placed at ${label} (±${next.radius_m} m)`;
       }
       return "Nothing to place";
     },
-    [sheetPadding],
+    [sheetPadding, moveCamera],
   );
 
   const updateReport = (id: string, patch: Partial<Report>) => setReports((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -430,7 +469,8 @@ export default function VoiceMapApp() {
       }
       if (payload.text) fd.append("text", payload.text);
       const p = positionRef.current;
-      if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts }));
+      // An estimate from a movement report carries its uncertainty, so "nearest wins" stays honest.
+      if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts, ...(p.estimated ? { uncertainty_m: p.radius_m } : {}) }));
       fd.append("clientTs", String(Date.now()));
       fd.append("area", areaStore.get());
       const t0 = performance.now();

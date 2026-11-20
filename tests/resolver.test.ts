@@ -138,7 +138,7 @@ describe("resolver", () => {
     expect(r.question).toMatch(/Quelle mairie/);
   });
 
-  it("movement towards a place keeps the pin and sets heading_to", () => {
+  it("movement towards a place moves the pin to the middle of the leg, with a circle spanning it", () => {
     const last = at(CHATEAU_METRO, 1);
     const r = resolve({
       intent: intent({ kind: "movement", landmark_name: "Bérault", relation: "towards" }),
@@ -148,8 +148,45 @@ describe("resolver", () => {
       gazetteer: gaz,
     });
     expect(r.status).toBe("resolved");
-    expect(r.pin).toEqual({ lat: last.lat, lon: last.lon });
     expect(r.heading_to?.id).toBe(BERAULT.id);
+    const leg = distanceM(last, BERAULT);
+    expect(Math.abs(distanceM(r.pin!, last) - leg / 2)).toBeLessThan(2);
+    expect(Math.abs(distanceM(r.pin!, BERAULT) - leg / 2)).toBeLessThan(2);
+    // the circle reaches both where they were and where they are heading
+    expect(Math.abs(r.radius_m! - leg / 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("movement with no known starting point gives a target but no pin", () => {
+    const r = resolve({ intent: intent({ kind: "movement", landmark_name: "Bérault", relation: "towards" }), transcript: "Moving towards Bérault", now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("resolved");
+    expect(r.pin).toBeUndefined();
+    expect(r.heading_to?.id).toBe(BERAULT.id);
+  });
+
+  it("nearest wins from an estimated position only if it survives the uncertainty", () => {
+    // Demo steps 3 and 4: "moving towards the town hall" from the station, then "je suis devant la mairie".
+    const move = resolve({
+      intent: intent({ kind: "movement", landmark_name: null, landmark_category: "town_hall", relation: "towards" }),
+      transcript: "Moving towards the town hall",
+      lastPosition: at(CHATEAU_METRO, 1),
+      now: NOW,
+      gazetteer: gaz,
+    });
+    expect(move.heading_to?.id).toBe(MAIRIE_VINCENNES.id);
+    const estimate: LastPosition = { ...move.pin!, ts: NOW, uncertainty_m: move.radius_m };
+    const fr = intent({ landmark_name: "mairie", landmark_category: "town_hall", relation: "in_front_of", language: "fr" });
+    // From the estimate half way to the mairie, the demo's next step still resolves.
+    const next = resolve({ intent: fr, transcript: "Je suis devant la mairie", lastPosition: estimate, now: NOW, gazetteer: gaz });
+    expect(next.status).toBe("resolved");
+    expect(next.evidence.feature_id).toBe(MAIRIE_VINCENNES.id);
+
+    // The rule itself, from the station (town halls at 347 m and 1,455 m):
+    // ±100 m: 447 < 0.4 × 1,355, still clear. ±175 m: 522 > 0.4 × 1,280, so ask.
+    const sure = resolve({ intent: fr, transcript: "Je suis devant la mairie", lastPosition: { ...at(CHATEAU_METRO, 1), uncertainty_m: 100 }, now: NOW, gazetteer: gaz });
+    expect(sure.status).toBe("resolved");
+    expect(sure.evidence.detail).toMatch(/allowing ±100 m/);
+    const unsure = resolve({ intent: fr, transcript: "Je suis devant la mairie", lastPosition: { ...at(CHATEAU_METRO, 1), uncertainty_m: 175 }, now: NOW, gazetteer: gaz });
+    expect(unsure.status).toBe("ambiguous");
   });
 
   it("compass relation offsets about 100 m on that bearing", () => {

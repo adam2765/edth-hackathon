@@ -4,7 +4,7 @@
  * comes from the gazetteer or from geometry applied to a gazetteer feature.
  */
 import type { Candidate, Category, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
-import { bboxHalfDiagonalM, bboxHalfExtentM, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
+import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
 import { categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 
 export const FRESH_MS = 10 * 60 * 1000;
@@ -36,6 +36,8 @@ const REL_RADIUS: Record<Relation, number> = {
 const COMPASS: Partial<Record<Relation, number>> = { north_of: 0, east_of: 90, south_of: 180, west_of: 270 };
 const COMPASS_OFFSET_M = 100;
 const MAX_EXTENT_RADIUS_M = 500;
+/** Smallest circle for a position estimated from a movement report. */
+const MOVE_MIN_RADIUS_M = 50;
 
 export interface ResolveInput {
   intent: Intent;
@@ -59,10 +61,14 @@ export function placementFor(f: GazetteerFeature, relation: Relation | null, kin
   const anchor: LatLon = f.lines?.length && last ? nearestPointOnLines(last, f.lines) : { lat: f.lat, lon: f.lon };
 
   if (rel === "towards") {
-    return {
-      pin: last ? { lat: last.lat, lon: last.lon } : undefined,
-      heading_to: { lat: anchor.lat, lon: anchor.lon, id: f.id, name: f.name },
-    };
+    const heading_to = { lat: anchor.lat, lon: anchor.lon, id: f.id, name: f.name };
+    // With no starting point there is nothing to move: the client shows only the target.
+    if (!last) return { heading_to };
+    // "I moved towards X" gives a direction, not a distance. The marker moves to the middle of the
+    // leg and the circle spans all of it, from where they were to X: that is what we actually know.
+    const leg = distanceM(last, anchor);
+    const mid = leg < 1 ? { lat: last.lat, lon: last.lon } : destination(last, bearingDeg(last, anchor), leg / 2);
+    return { pin: mid, radius_m: Math.max(MOVE_MIN_RADIUS_M, Math.round(leg / 2)), heading_to };
   }
 
   // Size of the feature itself is uncertainty too: "at the park" is anywhere in the park.
@@ -202,12 +208,15 @@ export function resolve(input: ResolveInput): Resolution {
     if (!forceAsk && cands.length === 1) {
       return resolvedFrom(cands[0], cands, `${prefix}_unique`, `${extra}; one candidate`);
     }
-    if (!forceAsk && fresh && cands[0].distance_m < NEAREST_RATIO * cands[1].distance_m) {
+    // A last position estimated from a movement report is only known to ±u metres, so the nearest
+    // candidate has to win even in the worst case: it u farther away, the second u closer.
+    const u = last?.uncertainty_m ?? 0;
+    if (!forceAsk && fresh && cands[0].distance_m + u < NEAREST_RATIO * Math.max(0, cands[1].distance_m - u)) {
       return resolvedFrom(
         cands[0],
         cands.slice(0, MAX_CHOICES),
         `${prefix}_nearest_wins`,
-        `${extra}; nearest ${cands[0].distance_m} m < ${NEAREST_RATIO} × second ${cands[1].distance_m} m from fresh last position`,
+        `${extra}; nearest ${cands[0].distance_m} m < ${NEAREST_RATIO} × second ${cands[1].distance_m} m from fresh last position${u ? `, allowing ±${Math.round(u)} m on that estimate` : ""}`,
       );
     }
     const top = cands.slice(0, MAX_CHOICES);
@@ -261,7 +270,8 @@ export function resolve(input: ResolveInput): Resolution {
       const cands = groups.map(({ match, folded }) => {
         const c = toCandidate(match.feature, ref, intent, last, match.score);
         // The folded places widen the circle: "on Maidan" is the whole square, not just the station entrance.
-        for (const f of folded) {
+        // Not for a movement: there the circle is the length of the leg, not the size of the place.
+        for (const f of c.placement.heading_to ? [] : folded) {
           const r = placementFor(f.feature, intent.relation, intent.kind, last).radius_m;
           if (c.placement.radius_m != null && r != null) c.placement.radius_m = Math.max(c.placement.radius_m, r);
         }

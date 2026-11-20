@@ -31,7 +31,9 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 
-Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent. "Towards" keeps the pin and draws an arrow.
+Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
+
+Movement ("moving towards X", "I moved towards X") gives a direction, not a distance. The marker moves to the middle of the leg from the last position to X, its circle spans the whole leg, an arrow points at X, and the time is shown at the marker with a ≈. The next report can still use that estimate, but "nearest wins" must hold even if the estimate is off by its full radius.
 
 ## Demo script
 
@@ -41,7 +43,7 @@ Chosen from the real gazetteer (889 features: 6 rail/metro stations, 11 churches
 |---|---|---|
 | 1 | "I'm at Bérault metro." | Unique named place: pin at Bérault, ±30 m |
 | 2 | "Now I'm at the château de Vincennes." | Ambiguous: phone asks "castle or station?" aloud; tap **Château de Vincennes (metro station)** |
-| 3 | "Moving towards the town hall." | Movement: arrow from the station to Mairie de Vincennes (nearest town hall wins: 347 m vs 1.45 km to Saint-Mandé) |
+| 3 | "Moving towards the town hall." | Movement: the marker moves half way to Mairie de Vincennes (±174 m, the whole leg), with an arrow from the station to the mairie (nearest town hall wins: 347 m vs 1.45 km to Saint-Mandé) |
 | 4 | "Je suis devant la mairie." | French: pin in front of Mairie de Vincennes, ±80 m |
 
 If hall noise defeats transcription, type the same sentences in the text box; text and voice go through the same pipeline.
@@ -53,7 +55,7 @@ Switch to **Київ** (2,112 features: 26 stations, 67 churches, 317 streets) a
 | # | Say | Expected |
 |---|---|---|
 | 1 | «Я на Хрещатику.» | Asks «вулиця Хрещатик чи Хрещатик (станція)?»; tap **вулиця Хрещатик** |
-| 2 | «Рухаюсь до Софійського собору.» | Arrow to Saint Sophia Cathedral |
+| 2 | «Рухаюсь до Софійського собору.» | The marker moves half way, with an arrow to Saint Sophia Cathedral |
 | 3 | «Я біля станції метро Хрещатик.» | Pin at Khreshchatyk station, ±80 m |
 | 4 | «Я на Майдані Незалежності.» | Pin ±249 m, no question: station, square and street are one place |
 | 5 | "I'm at the Golden Gate." | English in the same session: pin at Золоті ворота, ±30 m |

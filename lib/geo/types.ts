@@ -60,6 +60,8 @@ export interface LastPosition {
   lon: number;
   /** epoch ms */
   ts: number;
+  /** Set when this position is an estimate from a movement report: how far off it may be, metres. */
+  uncertainty_m?: number;
 }
 
 export interface HeadingTo {
@@ -71,7 +73,10 @@ export interface HeadingTo {
 
 /** Where the report puts the speaker if this candidate is the one meant. */
 export interface Placement {
-  /** Absent for a movement with no known starting point. */
+  /**
+   * Absent for a movement with no known starting point. For a movement with one, this is an
+   * estimate: the middle of the leg from the last position to `heading_to`.
+   */
   pin?: { lat: number; lon: number };
   radius_m?: number;
   heading_to?: HeadingTo;

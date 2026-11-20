@@ -40,7 +40,10 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
   if (typeof v !== "string" || !v) return null;
   try {
     const o = JSON.parse(v);
-    if ([o.lat, o.lon, o.ts].every((x) => typeof x === "number" && Number.isFinite(x))) return { lat: o.lat, lon: o.lon, ts: o.ts };
+    if ([o.lat, o.lon, o.ts].every((x) => typeof x === "number" && Number.isFinite(x))) {
+      const u = typeof o.uncertainty_m === "number" && Number.isFinite(o.uncertainty_m) && o.uncertainty_m > 0 ? o.uncertainty_m : undefined;
+      return { lat: o.lat, lon: o.lon, ts: o.ts, uncertainty_m: u };
+    }
   } catch {}
   return null;
 }
