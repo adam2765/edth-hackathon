@@ -1,16 +1,24 @@
+import { Ionicons } from "@expo/vector-icons";
 import { requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import Constants from "expo-constants";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
 import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
-import { PHONE_MODELS, STT_MODES, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
+import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
+import { Button, Segmented } from "./src/ui/controls";
+import { LogList, QuestionCard } from "./src/ui/LogList";
+import { fmtTime, type Entry, type Reach, type StepResult } from "./src/ui/model";
+import { ScenarioCard } from "./src/ui/ScenarioCard";
+import { SetupSheet } from "./src/ui/SetupSheet";
+import { TalkButton } from "./src/ui/TalkButton";
+import { TOUCH, color, radius, space, tabular, type } from "./src/ui/theme";
 
 const LIVE_SITE = "https://edth-hackathon.vercel.app";
 /** The port the coordinator (the web app in the folder above) runs on with `npm run dev -- -p 3117`. */
@@ -34,29 +42,6 @@ const AREAS: { id: AreaId; label: string }[] = [
 ];
 
 type Busy = "idle" | "starting" | "recording" | "sending" | "scenario";
-
-interface Entry {
-  id: string;
-  ts: number;
-  callsign: string;
-  source: Utterance["source"];
-  /** What the scenario clip says, for comparison with the transcript. */
-  scripted?: string;
-  transcript: string;
-  outcome: string;
-  status: "resolved" | "ambiguous" | "unresolved" | "error";
-  timings?: string;
-  question?: string;
-  candidates?: Candidate[];
-  /** True while a question is waiting for a choice. */
-  pending?: boolean;
-}
-
-type StepResult = { state: "running" | "pass" | "fail"; note: string };
-
-function fmtTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
 
 function langOf(reply: ReportReply, area: AreaId): Lang {
   const l = reply.intent?.language;
@@ -90,7 +75,10 @@ function Transmitter() {
   const [callsign, setCallsign] = useState("ALPHA 1");
   const [area, setArea] = useState<AreaId>("vincennes");
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
-  const [reach, setReach] = useState<"checking" | "ok" | "unreachable">("checking");
+  const [reach, setReach] = useState<Reach>("checking");
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [tab, setTab] = useState<"scenarios" | "sent">("scenarios");
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const [busy, setBusy] = useState<Busy>("idle");
   const [status, setStatus] = useState("Hold the button and say where you are, or play a scenario.");
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -117,12 +105,11 @@ function Transmitter() {
   const recorder = useAudioRecorder(SPEECH_RECORDING);
 
   // Is the coordinator answering at this address? Any HTTP answer counts; only silence does not.
+  // Checked when the address changes and then every 15 seconds, so the light follows the network.
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      if (cancelled) return;
-      setReach("checking");
+    const check = async () => {
+      const controller = new AbortController();
       const giveUp = setTimeout(() => controller.abort(), 4000);
       try {
         await fetch(`${serverUrl.replace(/\/+$/, "")}/api/report`, { method: "GET", signal: controller.signal });
@@ -132,11 +119,17 @@ function Transmitter() {
       } finally {
         clearTimeout(giveUp);
       }
+    };
+    const first = setTimeout(() => {
+      if (cancelled) return;
+      setReach("checking");
+      check();
     }, 500);
+    const again = setInterval(check, 15_000);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
-      controller.abort();
+      clearTimeout(first);
+      clearInterval(again);
     };
   }, [serverUrl]);
 
@@ -207,7 +200,8 @@ function Transmitter() {
     stopSpeaking();
     const outcome = describePlacement(c.placement, c.name, positionRef.current);
     setPositionBoth(positionAfter(positionRef.current, c.placement, c.name, Date.now()));
-    patchEntry(entryId, { pending: false, outcome: `Chose ${c.name}. ${outcome}` });
+    // For a position the place is the whole story; for a movement, say where it leaves the unit.
+    patchEntry(entryId, { pending: false, outcome: c.placement.heading_to ? `Chose ${c.name}. ${outcome}` : `Chose ${c.name} (±${c.placement.radius_m ?? 80} m)` });
     setStatus(outcome);
   }, []);
 
@@ -247,7 +241,7 @@ function Transmitter() {
         if (chosen && !manual) choose(out.entryId, chosen);
       }
       const verdict = evaluate(step, out.reply, chosen);
-      if (manual && verdict.pass && chosen) verdict.note = "asked: answer below";
+      if (manual && verdict.pass && chosen) verdict.note = "asked a question";
       // One line per step in the dev-server log, so runs in different modes can be compared.
       console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: sttMode === "server" ? null : useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
@@ -388,6 +382,13 @@ function Transmitter() {
     stopAndSend();
   }, [stopAndSend]);
 
+  /** None of the offered places was right: close the question and ask for a clearer report. */
+  const noneOfThese = useCallback((entryId: string) => {
+    stopSpeaking();
+    patchEntry(entryId, { pending: false, outcome: "None of the choices was right." });
+    setStatus("Say it again with a street or place name.");
+  }, []);
+
   const reset = () => {
     stopSpeaking();
     cancelScenarioRef.current = true;
@@ -398,233 +399,158 @@ function Transmitter() {
     setStatus("Cleared.");
   };
 
-  const scenario = SCENARIOS.find((s) => s.id === scenarioId);
-  const talkLabel = busy === "starting" ? "Opening mic…" : busy === "recording" ? "Release to send" : busy === "sending" ? "Working…" : busy === "scenario" ? "Scenario running" : "Hold to talk";
+  const coordinatorName = serverUrl === LOCAL_COORDINATOR ? "This Mac" : serverUrl === LIVE_SITE ? "Live site" : serverUrl.replace(/^https?:\/\//, "");
+  const areaLabel = AREAS.find((a) => a.id === area)?.label ?? area;
+  const openSetup = () => setSetupOpen(true);
+  /** The newest question still waiting for an answer, if any. */
+  const asking = entries.find((e) => e.pending && e.candidates?.length);
+  const askingId = asking?.id;
+  // A new question should never arrive off screen.
+  useEffect(() => {
+    if (askingId) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [askingId]);
+
+  // At most one notice, for the thing that would make the next report fail.
+  const notice =
+    reach === "unreachable" ? (
+      <View style={[styles.notice, styles.noticeBad]} accessibilityRole="alert">
+        <Ionicons name="alert-circle" size={20} color={color.bad} />
+        <Text style={styles.noticeText}>Can’t reach the coordinator ({coordinatorName}). Reports will not go through.</Text>
+        <Button label="Setup" kind="quiet" onPress={openSetup} />
+      </View>
+    ) : modelMissing ? (
+      <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
+        <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
+        <Text style={styles.noticeText}>Speech-to-text is set to run on this phone, and its model is not downloaded yet.</Text>
+        <Button label={downloadPct === null ? `Get ${PHONE_MODELS[sttMode].mb} MB` : `${downloadPct}%`} kind="quiet" busy={downloadPct !== null} onPress={fetchModel} />
+      </View>
+    ) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <StatusBar style="light" />
-      <View style={styles.header}>
-        <View style={styles.row}>
-          <Text style={styles.title}>Transmitter</Text>
-          <TextInput
-            style={styles.callsign}
-            value={callsign}
-            onChangeText={(t) => setCallsign(t.toUpperCase())}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            accessibilityLabel="Call sign"
-            placeholder="CALL SIGN"
-            placeholderTextColor="#5b6b7c"
-          />
-        </View>
-        <View style={styles.row}>
-          {AREAS.map((a) => (
-            <Pressable key={a.id} onPress={() => busy === "idle" && setArea(a.id)} style={[styles.chip, area === a.id && styles.chipOn]} accessibilityLabel={`Area ${a.label}`}>
-              <Text style={[styles.chipText, area === a.id && styles.chipTextOn]}>{a.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.muted}>Coordinator</Text>
-          {LOCAL_COORDINATOR && (
-            <Pressable onPress={() => busy === "idle" && setServerUrl(LOCAL_COORDINATOR)} style={[styles.chipSmall, serverUrl === LOCAL_COORDINATOR && styles.chipOn]} accessibilityLabel="Coordinator on this computer">
-              <Text style={[styles.chipSmallText, serverUrl === LOCAL_COORDINATOR && styles.chipTextOn]}>This Mac</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={() => busy === "idle" && setServerUrl(LIVE_SITE)} style={[styles.chipSmall, serverUrl === LIVE_SITE && styles.chipOn]} accessibilityLabel="Coordinator on the live site">
-            <Text style={[styles.chipSmallText, serverUrl === LIVE_SITE && styles.chipTextOn]}>Live site</Text>
-          </Pressable>
-          <Text style={[styles.muted, reach === "ok" && styles.ok, reach === "unreachable" && styles.bad]} accessibilityLabel={`Coordinator ${reach}`}>
-            {reach === "ok" ? "● reachable" : reach === "unreachable" ? "● not reachable" : "● checking"}
-          </Text>
-        </View>
-        <TextInput
-          style={styles.server}
-          value={serverUrl}
-          onChangeText={setServerUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          accessibilityLabel="Coordinator address"
-        />
-      </View>
-
-      <View style={styles.sttRow}>
-        <Text style={styles.muted}>Speech-to-text</Text>
-        {STT_MODES.map((m) => (
-          <Pressable key={m.id} onPress={() => busy === "idle" && downloadPct === null && setSttMode(m.id)} style={[styles.chipSmall, sttMode === m.id && styles.chipOn]} accessibilityLabel={`Speech-to-text ${m.label}`}>
-            <Text style={[styles.chipSmallText, sttMode === m.id && styles.chipTextOn]}>{m.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {sttMode !== "server" && (
-        <View style={styles.sttRow}>
-          {modelMissing ? (
-            <Pressable onPress={fetchModel} style={styles.button} accessibilityLabel="Download model">
-              <Text style={styles.buttonText}>{downloadPct === null ? `Download model (${PHONE_MODELS[sttMode].mb} MB)` : `Downloading… ${downloadPct}%`}</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.muted}>{PHONE_MODELS[sttMode].file} is on this phone.</Text>
-          )}
-          <View style={styles.toggle}>
-            <Switch value={useHints} onValueChange={setUseHints} />
-            <Text style={styles.muted}>Place-name hints</Text>
-          </View>
-        </View>
-      )}
-
-      <View style={styles.talkRow}>
-        <Pressable
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          disabled={busy === "sending" || busy === "scenario" || modelMissing}
-          style={[styles.talk, busy === "recording" && styles.talkRec, (busy === "sending" || busy === "scenario" || busy === "starting" || modelMissing) && styles.talkBusy]}
-          accessibilityLabel={talkLabel}
-        >
-          <Text style={styles.talkIcon}>{busy === "recording" ? "●" : "🎙"}</Text>
-          <Text style={styles.talkLabel}>{talkLabel}</Text>
-        </Pressable>
-        <View style={styles.talkSide}>
-          <Text style={styles.status}>{status}</Text>
-          <Text style={styles.muted}>
-            {position ? `${position.estimated ? "≈ " : ""}${position.label} · ±${position.radius_m} m · ${fmtTime(position.ts)}` : "No position yet"}
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Scenario (no microphone)</Text>
-          <View style={styles.rowWrap}>
-            {SCENARIOS.map((s) => (
-              <Pressable key={s.id} onPress={() => busy === "idle" && setScenarioId(s.id)} style={[styles.chip, scenarioId === s.id && styles.chipOn]} accessibilityLabel={`Scenario ${s.title}`}>
-                <Text style={[styles.chipText, scenarioId === s.id && styles.chipTextOn]}>{s.title}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.row}>
-            <Pressable onPress={busy === "scenario" ? () => (cancelScenarioRef.current = true) : playScenario} disabled={(busy !== "idle" && busy !== "scenario") || modelMissing} style={[styles.button, ((busy !== "idle" && busy !== "scenario") || modelMissing) && styles.buttonOff]} accessibilityLabel="Play scenario">
-              <Text style={styles.buttonText}>{busy === "scenario" ? "Stop" : "Play scenario"}</Text>
-            </Pressable>
-            <View style={styles.toggle}>
-              <Switch value={realTime} onValueChange={setRealTime} />
-              <Text style={styles.muted}>Real timing</Text>
-            </View>
-            <View style={styles.toggle}>
-              <Switch value={speakReplies} onValueChange={setSpeakReplies} />
-              <Text style={styles.muted}>Speak</Text>
-            </View>
-          </View>
-          <View style={styles.toggle}>
-            <Switch value={playClips} onValueChange={setPlayClips} />
-            <Text style={styles.muted}>Play each clip aloud before sending it</Text>
-          </View>
-          {scenario?.steps.map((step) => {
-            const r = stepResults[`${scenario.id}/${step.id}`];
-            return (
-              <Pressable key={step.id} style={styles.step} onPress={() => !modelMissing && sendOneStep(scenario, step)} accessibilityLabel={`Send step ${step.id}`}>
-                <Text style={[styles.stepMark, r?.state === "pass" && styles.ok, r?.state === "fail" && styles.bad]}>{r?.state === "pass" ? "✓" : r?.state === "fail" ? "✗" : r?.state === "running" ? "…" : "▶"}</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.stepText}>
-                    {step.callsign}: “{step.text}”
-                  </Text>
-                  <Text style={styles.muted}>{r ? r.note : `expects ${step.expect.status}${step.choose ? ", then a choice" : ""} · tap to send alone`}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Sent ({entries.length})</Text>
-          {entries.length > 0 && (
-            <Pressable onPress={reset} accessibilityLabel="Clear">
-              <Text style={styles.link}>Clear</Text>
-            </Pressable>
-          )}
-        </View>
-        {entries.map((e) => (
-          <View key={e.id} style={[styles.entry, e.status === "error" && styles.entryError]}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.entryHead}>
-                {fmtTime(e.ts)} · {e.callsign}
+      <View style={styles.column}>
+        <View style={styles.header}>
+          <Pressable
+            style={styles.identity}
+            onPress={openSetup}
+            accessibilityRole="button"
+            accessibilityLabel={`Call sign ${callsign || "not set"}. Area ${areaLabel}. Coordinator ${coordinatorName}, ${reach === "ok" ? "answering" : reach === "unreachable" ? "not answering" : "checking"}`}
+            accessibilityHint="Opens setup"
+          >
+            <Text style={type.title} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+              {callsign.trim() || "No call sign"}
+            </Text>
+            <View style={styles.context}>
+              <Text style={type.footnote} numberOfLines={1}>
+                {areaLabel}
               </Text>
-              <Text style={styles.muted}>{e.source}</Text>
+              <View style={[styles.dot, { backgroundColor: reach === "ok" ? color.ok : reach === "unreachable" ? color.bad : color.textDim }]} />
+              <Text style={[type.footnote, styles.contextLast, reach === "unreachable" && styles.badText]} numberOfLines={1}>
+                {coordinatorName}
+              </Text>
             </View>
-            {e.transcript ? <Text style={styles.entryText}>“{e.transcript}”</Text> : null}
-            <Text style={styles.entryOutcome}>{e.outcome}</Text>
-            {e.question ? <Text style={styles.entryQuestion}>{e.question}</Text> : null}
-            {e.pending &&
-              e.candidates?.map((c, i) => (
-                <Pressable key={c.id} onPress={() => choose(e.id, c)} style={styles.choice} accessibilityLabel={`Choice ${i + 1}: ${c.name}`}>
-                  <Text style={styles.choiceN}>{i + 1}</Text>
-                  <View style={styles.flex}>
-                    <Text style={styles.choiceName}>{c.name}</Text>
-                    <Text style={styles.muted}>
-                      {c.category.replace("_", " ")} · {c.distance_m < 1000 ? `${c.distance_m} m` : `${(c.distance_m / 1000).toFixed(1)} km`}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            {e.timings ? <Text style={styles.entryTimings}>{e.timings}</Text> : null}
+          </Pressable>
+          <Pressable onPress={openSetup} style={({ pressed }) => [styles.gear, pressed && styles.gearPressed]} accessibilityRole="button" accessibilityLabel="Setup">
+            <Ionicons name="settings-outline" size={22} color={color.text} />
+          </Pressable>
+        </View>
+
+        {notice}
+
+        <View style={styles.talk}>
+          <TalkButton state={busy} blocked={modelMissing ? "Model needed" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <View style={styles.readout}>
+            <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
+              {asking ? "The coordinator needs an answer." : status}
+            </Text>
+            <Text style={[type.footnote, tabular, styles.fix]} numberOfLines={1}>
+              {position ? `${position.estimated ? "≈ " : ""}${position.label} · ±${position.radius_m} m · ${fmtTime(position.ts)}` : "No position yet"}
+            </Text>
           </View>
-        ))}
+        </View>
+      </View>
+
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollBody}>
+        {asking ? <QuestionCard entry={asking} onChoose={choose} onNone={noneOfThese} /> : null}
+        <Segmented
+          label="Scenarios or sent reports"
+          options={[
+            { id: "scenarios", label: "Scenarios" },
+            { id: "sent", label: entries.length ? `Sent · ${entries.length}` : "Sent" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+        {tab === "scenarios" ? (
+          <ScenarioCard
+            scenarios={SCENARIOS}
+            scenarioId={scenarioId}
+            onSelect={setScenarioId}
+            results={stepResults}
+            running={busy === "scenario"}
+            blocked={modelMissing || (busy !== "idle" && busy !== "scenario")}
+            onPlay={playScenario}
+            onStop={() => (cancelScenarioRef.current = true)}
+            onSendStep={sendOneStep}
+          />
+        ) : (
+          <LogList entries={entries} onClear={reset} />
+        )}
       </ScrollView>
+
+      <SetupSheet
+        visible={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        locked={busy !== "idle"}
+        callsign={callsign}
+        onCallsign={setCallsign}
+        areas={AREAS}
+        area={area}
+        onArea={setArea}
+        serverUrl={serverUrl}
+        onServerUrl={setServerUrl}
+        localCoordinator={LOCAL_COORDINATOR}
+        liveSite={LIVE_SITE}
+        reach={reach}
+        sttMode={sttMode}
+        onSttMode={setSttMode}
+        modelReady={modelReady}
+        downloadPct={downloadPct}
+        onDownload={fetchModel}
+        useHints={useHints}
+        onUseHints={setUseHints}
+        speakReplies={speakReplies}
+        onSpeakReplies={setSpeakReplies}
+        playClips={playClips}
+        onPlayClips={setPlayClips}
+        realTime={realTime}
+        onRealTime={setRealTime}
+      />
     </SafeAreaView>
   );
 }
 
-const C = { bg: "#0f1720", panel: "#16212c", panel2: "#1e2c3a", line: "#2a3a4b", text: "#e8eef4", muted: "#93a4b5", accent: "#ff6b2c", blue: "#2c9cff", ok: "#3ccf7a", warn: "#ffc940", bad: "#ff5a5a" };
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
-  flex: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { color: C.text, fontSize: 20, fontWeight: "700", flex: 1 },
-  callsign: { color: C.text, backgroundColor: C.panel2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, fontWeight: "700", minWidth: 120, textAlign: "center" },
-  server: { color: C.muted, backgroundColor: C.panel, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12 },
-  chip: { backgroundColor: C.panel2, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
-  chipOn: { backgroundColor: C.accent },
-  chipText: { color: C.muted, fontWeight: "600" },
-  chipTextOn: { color: "#fff" },
-  sttRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 8, flexWrap: "wrap" },
-  chipSmall: { backgroundColor: C.panel2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  chipSmallText: { color: C.muted, fontWeight: "600", fontSize: 12 },
-  talkRow: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16 },
-  talk: { width: 116, height: 116, borderRadius: 58, backgroundColor: C.accent, alignItems: "center", justifyContent: "center", gap: 2 },
-  talkRec: { backgroundColor: C.bad },
-  talkBusy: { backgroundColor: "#5b6b7c" },
-  talkIcon: { fontSize: 28, color: "#fff" },
-  talkLabel: { color: "#fff", fontWeight: "700", fontSize: 12, textAlign: "center", paddingHorizontal: 8 },
-  talkSide: { flex: 1, gap: 6 },
-  status: { color: C.text, fontSize: 15, lineHeight: 20 },
-  muted: { color: C.muted, fontSize: 12 },
+  screen: { flex: 1, backgroundColor: color.bg },
+  /** Phone-width column: on a tablet the screen stays a column instead of stretching. */
+  column: { width: "100%", maxWidth: 560, alignSelf: "center" },
+  header: { flexDirection: "row", alignItems: "center", gap: space.md, paddingLeft: space.lg, paddingRight: space.sm, paddingTop: space.sm },
+  identity: { flex: 1, minHeight: TOUCH, justifyContent: "center" },
+  context: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  contextLast: { flexShrink: 1 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginLeft: space.xs },
+  badText: { color: color.bad },
+  gear: { width: TOUCH, height: TOUCH, borderRadius: TOUCH / 2, alignItems: "center", justifyContent: "center" },
+  gearPressed: { backgroundColor: color.raised },
+  notice: { flexDirection: "row", alignItems: "center", gap: space.md, marginHorizontal: space.lg, marginTop: space.md, paddingLeft: space.md, paddingRight: space.xs, paddingVertical: space.xs, borderRadius: radius.control },
+  noticeBad: { backgroundColor: color.badWash },
+  noticeWarn: { backgroundColor: color.warnWash },
+  noticeText: { ...type.footnote, color: color.text, flex: 1, paddingVertical: space.sm },
+  talk: { alignItems: "center", gap: space.sm, paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.lg },
+  readout: { alignItems: "center", gap: space.xs, alignSelf: "stretch" },
+  status: { ...type.body, textAlign: "center" },
+  fix: { textAlign: "center" },
   scroll: { flex: 1 },
-  scrollBody: { paddingHorizontal: 16, paddingBottom: 40, gap: 10 },
-  card: { backgroundColor: C.panel, borderRadius: 14, padding: 12, gap: 10 },
-  cardTitle: { color: C.text, fontWeight: "700", fontSize: 15 },
-  button: { backgroundColor: C.blue, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  buttonOff: { opacity: 0.4 },
-  buttonText: { color: "#fff", fontWeight: "700" },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 4 },
-  step: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  stepMark: { color: C.muted, fontSize: 16, width: 18, textAlign: "center", fontWeight: "800" },
-  stepText: { color: C.text, fontSize: 14 },
-  ok: { color: C.ok },
-  bad: { color: C.bad },
-  link: { color: C.blue, fontWeight: "600" },
-  entry: { backgroundColor: C.panel, borderRadius: 12, padding: 10, gap: 4 },
-  entryError: { borderWidth: 1, borderColor: C.bad },
-  entryHead: { color: C.muted, fontSize: 12, fontVariant: ["tabular-nums"] },
-  entryText: { color: C.text, fontSize: 15 },
-  entryOutcome: { color: C.text, fontWeight: "600" },
-  entryQuestion: { color: C.warn, fontWeight: "600" },
-  entryTimings: { color: C.muted, fontSize: 11 },
-  choice: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.panel2, borderRadius: 10, padding: 10 },
-  choiceN: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.warn, color: "#1b1b1b", fontWeight: "800", textAlign: "center", lineHeight: 26, overflow: "hidden" },
-  choiceName: { color: C.text, fontWeight: "600" },
+  scrollBody: { width: "100%", maxWidth: 560, alignSelf: "center", paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.xxl + space.lg, gap: space.lg },
 });

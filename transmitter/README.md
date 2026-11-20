@@ -16,6 +16,29 @@ after it does.
 | Microphone | Hold the button, speak, release. | built |
 | Open microphone | Listens continuously and cuts at pauses. | later |
 
+## The screen
+
+The main screen is only for reporting. Top to bottom:
+
+- **Who and where:** the call sign, the area, and the coordinator with a dot (green when it
+  answers, red when it does not). Tapping it, or the gear, opens Setup.
+- **A notice**, only when the next report would fail: the coordinator is not answering, or
+  speech-to-text is set to the phone and its model is not downloaded.
+- **The talk button** and, under it, what happened last and the last known position. While
+  recording it turns red, counts the seconds, and a bar shows how much of the 15 seconds is used.
+- **A question card**, when the coordinator asks back. It sits directly under the talk button,
+  with the choices and "None of these".
+- **Two tabs:** Scenarios (pick one, play it all, or tap one report) and Sent (every report
+  from this phone with the coordinator's answer and timings).
+
+**Setup** is a sheet: call sign and area, which coordinator, where speech becomes text and the
+model download, sound, and scenario timing.
+
+The UI lives in `src/ui/`: `theme.ts` (colours, type and spacing, shared with the web app's
+palette), `controls.tsx` (segmented control, grouped rows, buttons), and one file each for the
+talk button, the scenario list, the sent list with the question card, and the Setup sheet.
+`App.tsx` holds the logic and composes them.
+
 ## Run it
 
 ```bash
@@ -31,17 +54,20 @@ Android: `npx expo run:android`. This is a native build, so Expo Go cannot run i
 
 A development build loads its code from the computer running the dev server, so it knows that
 computer's address. It sends reports to the coordinator on that same computer, port 3117
-(`npm run dev -- -p 3117` in the folder above). The "Coordinator" row switches between
-"This Mac" and "Live site" (`https://edth-hackathon.vercel.app`), and a light shows whether the
-coordinator answers. `EXPO_PUBLIC_SERVER_URL` overrides the default.
+(`npm run dev -- -p 3117` in the folder above). Setup switches between "This Mac" and
+"Live site" (`https://edth-hackathon.vercel.app`), and the dot beside the call sign shows whether
+the coordinator answers (re-checked every 15 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
 For a phone, open the app with the computer's network name, not a numeric address:
 
 ```bash
 xcrun devicectl device process launch --device <phone id> --terminate-existing \
-  --payload-url "exp+transmitter://expo-development-client/?url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081" \
+  --payload-url "exp+transmitter://?__expo_url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081&__expo_disable_fab=1&__expo_disable_onboarding=1" \
   dev.voicetomap.transmitter
 ```
+
+`__expo_disable_fab=1` hides Expo's floating developer button, which otherwise sits over the
+top right of the screen; leave it off when you want the developer menu.
 
 The name keeps working when addresses change, and it works over the USB cable alone, with no
 shared Wi-Fi. A numeric address does not: over the cable the Mac's address changes every time
@@ -57,7 +83,7 @@ On-phone speech-to-text has not been run on a real phone yet.
 
 ## Speech-to-text: on the server or on the phone
 
-The row under the header chooses where speech becomes text (`src/stt.ts`).
+Setup chooses where speech becomes text (`src/stt.ts`).
 
 | Mode | What happens | Needs |
 |---|---|---|
@@ -94,9 +120,9 @@ now: Whisper needs uncompressed audio, which Android's recorder cannot write.
 ## What you hear
 
 A scenario sends its clips as data, so by default nothing is played: that is what makes it
-usable in a quiet room. The phone speaks only the coordinator's question ("Speak"), and only
-when the coordinator asks one. "Play each clip aloud before sending it" plays the clip through
-the phone's speaker first, for an audience. Sound comes out even with the ring switch on silent.
+usable in a quiet room. The phone speaks only the coordinator's question ("Speak questions"
+in Setup), and only when the coordinator asks one. "Play scenario clips aloud" plays each clip
+through the phone's speaker before it is sent, for an audience. Sound comes out even with the ring switch on silent.
 
 ## Scenarios
 
