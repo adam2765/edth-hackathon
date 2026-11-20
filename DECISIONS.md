@@ -43,3 +43,4 @@ One line each, numbered, newest last.
 39. Interface text (buttons, status lines, choice subtitles) stays English in stage 1; only the question and the place names are in the speaker's language.
 40. Questions name the kind of an "other" place from its OpenStreetMap subtype ("Золоті ворота (театр)"), instead of a generic "(place)".
 41. Bias-term order is now stations, castle, town halls, bridges, major streets, churches, parks, police, hospitals, other places (replaces the order in decision 10): street names are what speech-to-text most often gets wrong.
+42. Removed the ElevenLabs speech-to-text fallback: it was never exercised, and ElevenLabs is a Delaware corporation whose default endpoint is not EU-resident, which does not fit an all-European pipeline. Speech-to-text now needs `MISTRAL_API_KEY`.

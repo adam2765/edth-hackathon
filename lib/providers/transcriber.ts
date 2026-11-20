@@ -1,6 +1,6 @@
 /**
- * Speech-to-text seam. Picked by which key is in the environment:
- * MISTRAL_API_KEY, else ELEVENLABS_API_KEY, else GRADIUM_API_KEY.
+ * Speech-to-text seam. Mistral, with MISTRAL_API_KEY.
+ * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  * A local model can be added later behind the same interface.
  */
 export interface TranscribeResult {
@@ -51,33 +51,12 @@ class MistralTranscriber implements Transcriber {
   }
 }
 
-/** Stage-1 fallback, not exercised: endpoint and fields from ElevenLabs docs, unverified here. */
-class ElevenLabsTranscriber implements Transcriber {
-  name = "elevenlabs:scribe_v1";
-  constructor(private apiKey: string) {}
-  async transcribe(audio: Blob, mime: string): Promise<TranscribeResult> {
-    const form = new FormData();
-    form.append("file", new File([audio], `clip.${extFor(mime)}`, { type: mime.split(";")[0] }));
-    form.append("model_id", "scribe_v1");
-    const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
-      method: "POST",
-      headers: { "xi-api-key": this.apiKey },
-      body: form,
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`ElevenLabs STT ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const j = (await res.json()) as { text?: string; language_code?: string };
-    return { text: (j.text ?? "").trim(), language: j.language_code?.slice(0, 2) ?? null };
-  }
-}
-
 let cached: Transcriber | null = null;
 
 export function getTranscriber(): Transcriber {
   if (cached) return cached;
   if (process.env.MISTRAL_API_KEY) cached = new MistralTranscriber(process.env.MISTRAL_API_KEY);
-  else if (process.env.ELEVENLABS_API_KEY) cached = new ElevenLabsTranscriber(process.env.ELEVENLABS_API_KEY);
   else if (process.env.GRADIUM_API_KEY) throw new Error("GRADIUM_API_KEY is set but the Gradium transcriber is not built in stage 1");
-  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY (or ELEVENLABS_API_KEY)");
+  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY");
   return cached;
 }

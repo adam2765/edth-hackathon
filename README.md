@@ -73,14 +73,14 @@ npm test             # resolver unit tests
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes or kyiv)
 ```
 
-Environment: `MISTRAL_API_KEY` (preferred). Fallbacks behind the same interfaces: `ELEVENLABS_API_KEY` for speech-to-text, `FEATHERLESS_API_KEY` for extraction. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
+Environment: `MISTRAL_API_KEY` (required for speech-to-text). Extraction falls back to `FEATHERLESS_API_KEY` behind the same interface if it is absent. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
 
 ## Layout
 
 ```
 app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk button, ask-back card, log
 app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs
-lib/providers/transcriber.ts               Transcriber interface + Mistral (ElevenLabs fallback)
+lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text
 lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms
