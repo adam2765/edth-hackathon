@@ -30,8 +30,8 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
   }
   form.append("area", ctx.area);
   form.append("clientTs", String(u.endedAt));
-  // The coordinator ignores these three until it stores reports by session; they are sent
-  // from the start so the transmitter does not have to change when it does.
+  // The coordinator saves the report under this session and call sign for the receiver;
+  // `seq` with the client time lets it drop a report sent twice.
   form.append("session", ctx.session);
   form.append("callsign", u.callsign);
   form.append("seq", String(u.seq));
@@ -49,6 +49,30 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
     const reply = (await res.json()) as ReportReply;
     if (!res.ok || reply.error) throw new Error(reply.error ?? `Coordinator answered ${res.status}`);
     return { reply, roundTripMs: Date.now() - t0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Tells the coordinator which choice the speaker tapped (a candidate id, or null for "none of
+ * these"), so the receiver's question closes and the marker moves there too. The phone has already
+ * applied the choice itself, so a failure is reported, not retried.
+ */
+export async function sendAnswer(serverUrl: string, session: string, reportId: string, choice: string | null): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${serverUrl.replace(/\/+$/, "")}/api/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session, report: reportId, choice }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `Coordinator answered ${res.status}`);
+    }
   } finally {
     clearTimeout(timer);
   }

@@ -27,7 +27,9 @@ The main screen is only for reporting. Top to bottom:
 - **The talk button** and, under it, what happened last and the last known position. While
   recording it turns red, counts the seconds, and a bar shows how much of the 15 seconds is used.
 - **A question card**, when the coordinator asks back. It sits directly under the talk button,
-  with the choices and "None of these".
+  with the choices and "None of these". The choice tapped is sent to the coordinator
+  (`POST /api/answer`), so the receiver's question closes too. Every report goes to session `demo`;
+  the receiver shows it at `/receiver?session=demo` on the same coordinator.
 - **Two tabs:** Scenarios (pick one, play it all, or tap one report) and Sent (every report
   from this phone with the coordinator's answer and timings).
 

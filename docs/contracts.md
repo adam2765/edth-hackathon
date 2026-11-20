@@ -14,11 +14,22 @@ The types live in `lib/geo/types.ts`. The transmitter imports them as types only
 | `area` | `vincennes` (default) or `kyiv` |
 | `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. |
 | `clientTs` | Client time, epoch ms |
-| `session`, `callsign`, `seq` | Sent by the transmitter. The server ignores them until it stores reports [63]. |
+| `session` | Session code: lower-case letters, digits, `-` and `_`, up to 40. With one, the report is saved to that session's log for the receiver; without one (the web page), it is not saved [99]. |
+| `callsign`, `seq` | Who sent it, and the transmitter's own counter. With `clientTs`, `seq` lets the server save a report sent twice only once [102]. |
 
-Reply: `{ transcript, language, intent, resolution, timings_ms: { stt, extract, resolve, total } }`.
+Reply: `{ transcript, language, intent, resolution, timings_ms: { stt, extract, resolve, total }, report_id? }`. `report_id` is there when the report was saved; send it back with the answer to a question.
 
 Limits: 1 MB per clip (about 15 s), 500 characters of text, 30 requests a minute per IP per server instance [24]. No auth.
+
+## Answer endpoint
+
+`POST /api/answer`, JSON `{ session, report, choice }`: `report` is the `report_id`, `choice` the candidate id tapped, or `null` for "none of these". The phone has already moved its own marker; this closes the question on the receiver and moves the marker there [100]. Reply `{ answer_id }`. The first answer to a question stands. Errors: 400 for a choice that was not offered, 404 for an unknown report, 501 when the coordinator keeps no record.
+
+## Session log
+
+`GET /api/sessions/<code>?after=<n>` returns `{ session, stored, total, entries }`: the entries after the first `n`, and how many there are in all. The receiver polls it every second with `after` set to what it already has. `stored` is false when the coordinator keeps no record (the live site, for now) [101].
+
+Each entry is a `report` (the report endpoint's reply plus `id`, `session`, `callsign`, `seq`, server time `ts`, `clientTs`, `area`, the `lastPosition` sent, and `position`: where it leaves the speaker, or null) or an `answer` (`report_id`, `choice`, `position`). Types in `lib/reports/types.ts`. The log is append-only; nothing is edited or deleted.
 
 ## Intent (what the model returns)
 

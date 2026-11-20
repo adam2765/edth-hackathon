@@ -57,3 +57,6 @@ next-env.d.ts
 /transmitter/.expo
 /transmitter/ios
 /transmitter/android
+
+# shared record of reports (lib/reports/store.ts)
+/.data/

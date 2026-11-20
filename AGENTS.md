@@ -15,7 +15,10 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 ## Layout
 
 ```
-app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs)
+app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs, session, callsign, seq)
+app/api/answer, app/api/sessions/[code]   the tapped choice in; a session's log out, for the receiver
+lib/reports/                the session log: entry types (a contract with the receiver), store, position rule, foldLog
+components/Receiver.tsx     the receiver at /receiver: shared map, units, feed, replay
 lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract

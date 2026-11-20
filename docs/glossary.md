@@ -11,7 +11,8 @@
 | Estimate (≈) | A position worked out from a movement, not from a named place; shown with ≈ |
 | Gazetteer | Our local list of named places from OpenStreetMap, one file per area ([gazetteer.md](gazetteer.md)) |
 | Local mode | Running the whole pipeline on a laptop with no internet ([plan.md](plan.md#local-mode)) |
-| Receiver | The shared map with every call sign and a replay (to build) |
+| Receiver | The shared map with every call sign and a replay, at `/receiver?session=<code>` |
+| Session | A shared log of reports that the receiver shows; transmitters send to it by code (`demo` for now) |
 | Town | The admin area inside which street names are unique (the commune in France, the city for Kyiv); it tells two same-name streets apart |
 | Transmitter | Anything that sends a spoken report: the web page, the native app, a scenario clip |
 | Wrong-pin rate | Share of reports placed confidently in the wrong place; the headline quality figure |

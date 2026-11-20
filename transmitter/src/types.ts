@@ -57,6 +57,8 @@ export interface ReportReply {
   intent: Intent | null;
   resolution: Resolution;
   timings_ms: { stt: number; extract: number; resolve: number; total: number };
+  /** Set when the coordinator saved the report for the receiver; send it back with the answer to a question. */
+  report_id?: string;
   error?: string;
 }
 

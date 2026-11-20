@@ -4,7 +4,9 @@ import { getExtractor } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { resolve } from "@/lib/geo/resolver";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
-import type { GazetteerFeature, LastPosition } from "@/lib/geo/types";
+import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
+import { recordReport, type ReportInput } from "@/lib/reports/record";
+import { callsignOf, sessionCode } from "@/lib/reports/types";
 
 export const maxDuration = 30;
 
@@ -48,6 +50,21 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
   return null;
 }
 
+/**
+ * Saves the report when the transmitter named a session, and returns its id for the reply. A
+ * failure to save is logged and does not cost the speaker their answer.
+ */
+async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string }> {
+  if (!session) return {};
+  try {
+    const id = await recordReport({ session, ...input });
+    return id ? { report_id: id } : {};
+  } catch (err) {
+    console.error("saving the report failed", err);
+    return {};
+  }
+}
+
 export async function POST(req: Request) {
   const t0 = performance.now();
   const now = Date.now();
@@ -68,6 +85,12 @@ export async function POST(req: Request) {
   const areaIn = form.get("area");
   const area = AREAS[isAreaId(areaIn) ? areaIn : DEFAULT_AREA];
   const { gazetteer, bias } = AREA_DATA[area.id];
+  // Who sent it and where it belongs; reports without a session (the web page) are not saved.
+  const session = sessionCode(form.get("session"));
+  const callsign = callsignOf(form.get("callsign"));
+  const seqIn = Number(form.get("seq"));
+  const seq = Number.isInteger(seqIn) && seqIn > 0 ? seqIn : null;
+  const meta = { callsign, seq, clientTs, area: area.id, lastPosition };
 
   const timings = { stt: 0, extract: 0, resolve: 0, total: 0 };
   let transcript = "";
@@ -89,19 +112,14 @@ export async function POST(req: Request) {
 
     if (!transcript) {
       timings.total = Math.round(performance.now() - t0);
-      return NextResponse.json({
-        transcript: "",
-        language: sttLanguage,
-        intent: null,
-        resolution: {
-          status: "unresolved",
-          candidates: [],
-          question: NO_WORDS[sttLanguage === "ru" ? "uk" : (sttLanguage ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
-          evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
-        },
-        timings_ms: timings,
-        clientTs,
-      });
+      const resolution: Resolution = {
+        status: "unresolved",
+        candidates: [],
+        question: NO_WORDS[sttLanguage === "ru" ? "uk" : (sttLanguage ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
+        evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
+      };
+      const saved = await save(session, { ...meta, transcript: "", language: sttLanguage, intent: null, resolution, timings_ms: timings });
+      return NextResponse.json({ transcript: "", language: sttLanguage, intent: null, resolution, timings_ms: timings, clientTs, ...saved });
     }
 
     const e = performance.now();
@@ -113,7 +131,9 @@ export async function POST(req: Request) {
     timings.resolve = Math.round(performance.now() - r0);
     timings.total = Math.round(performance.now() - t0);
 
-    return NextResponse.json({ transcript, language: sttLanguage ?? intent.language, intent, resolution, timings_ms: timings, clientTs, area: area.id });
+    const language = sttLanguage ?? intent.language;
+    const saved = await save(session, { ...meta, transcript, language, intent, resolution, timings_ms: timings });
+    return NextResponse.json({ transcript, language, intent, resolution, timings_ms: timings, clientTs, area: area.id, ...saved });
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
     if (err instanceof NoLocalTranscriberError) {

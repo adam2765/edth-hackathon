@@ -28,6 +28,15 @@ Design choices:
 
 It splits three ways: storage and endpoint, receiver map and feed, replay.
 
+**Status, Friday evening:** built [98 to 103]. Open it at `/receiver?session=demo` on the coordinator the phones send to. Every item in scope above is done except the speaker side: the transmitter always sends to session `demo`, and the call sign is typed on its screen. Also done: tapped choices now reach the server, which the plan had missed [100], and the local file store from track E below [101].
+
+Still to do:
+
+- **Run it with phones.** Two or three phones sending to the Mac, the receiver on a second screen or projector. So far it is checked only with typed reports.
+- **Hosted store.** The live site keeps no record, so its receiver stays empty. Supabase in its Paris region is the brief's suggestion; it needs a new project (Alex's call).
+- **Remove the phone web page** at `/` and make the receiver the home page, once Alex says so [98]. That also drops the Ukrainian Piper voice, which only the web page uses; the native app speaks with the phone's own voice.
+- **Session by link**, if more than one demo runs at once.
+
 ## Local mode
 
 The uplink-off demo. Mandatory for Demo Day; target Saturday midday. About 1.5 to 2 person-days; the riskiest part is the network and HTTPS, not the models.

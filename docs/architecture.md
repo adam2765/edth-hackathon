@@ -1,24 +1,27 @@
 # Architecture
 
-One speaker's path works end to end on the live site, in two areas and three languages. The shared receiver, local mode and the evaluation harness are not built yet. Status as of Friday 20 November, evening.
+One speaker's path works end to end on the live site, in two areas and three languages. The shared receiver works on a coordinator that runs on a computer; the live site does not keep reports yet. Local mode and the evaluation harness are not finished. Status as of Friday 20 November, evening.
 
 ## The parts
 
 - **Transmitter**: anything that captures a spoken report. Today that is the phone web page and a native app in `transmitter/`. Lysk's real users may well use radios; the coordinator does not care where a report comes from [58].
-- **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It stores nothing today.
-- **Receiver**: the shared map a person at a command post watches, with every call sign and a replay. Not built yet.
+- **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It saves each report that names a session to that session's log [99].
+- **Receiver**: the shared map a person at a command post watches, with every call sign and a replay. `/receiver?session=demo`; view only [98].
 - **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`).
 
 ```
-transmitters                 coordinator (Next.js, Vercel cdg1)                     receiver (to build)
-────────────                 ──────────────────────────────────                     ───────────────────
+transmitters                 coordinator (Next.js, Vercel cdg1 or the Mac)           receiver (/receiver)
+────────────                 ─────────────────────────────────────────────           ────────────────────
 phone web page ──┐           POST /api/report
 native app ──────┼─ audio ──►  1. speech-to-text   Mistral voxtral-mini-transcribe-3,
 scenario clip ───┘  or text      (skipped for text)  place names sent as context_bias
                     + area     2. extraction       Mistral mistral-small-latest, strict JSON schema
                     + last     3. resolver         pure code + data/gazetteer.<area>.json
-                    position  ◄─ { transcript, language, intent, resolution, timings_ms }
-                                                                  ── report log ──►  shared map, replay
+                    position   4. save             session log, one file per session
+                    + session ◄─ { transcript, language, intent, resolution, timings_ms, report_id }
+native app ── POST /api/answer (tapped choice) ──►  saved to the same log
+                                                   GET /api/sessions/<code> ──►  shared map, feed, replay
+                                                                                 (polls every second)
 ```
 
 ## Where each step runs
@@ -31,7 +34,8 @@ scenario clip ───┘  or text      (skipped for text)  place names sent as
 | Resolving the place | Our server; plain code, no AI, no outside calls |
 | Map | On the phone; tiles, fonts and icons from OpenFreeMap |
 | Speaking the question | The browser's voice for English and French; for Ukrainian, a Piper voice that runs in the browser [49] |
-| State (position history) | On the phone only; the last position is sent with each report |
+| State (position history) | On the phone, which sends its last position with each report; and in the session log on the coordinator, which the receiver reads [99] |
+| Shared map and replay | The receiver page, rebuilt from the session log in the browser [98] |
 
 ## What is built
 
@@ -47,7 +51,7 @@ scenario clip ───┘  or text      (skipped for text)  place names sent as
 | Native transmitter (Expo 58, React Native) | `transmitter/` | Runs in the iPhone simulator and, since 20 Nov, on an iPhone 13 mini through the coordinator on a Mac: Kyiv scenario 10 of 10 steps, round trip 1.2 to 1.9 s [79]. Not yet on Android. |
 | On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices |
-| Shared map, call signs, replay | | Not started |
+| Shared map, call signs, replay | `app/receiver/page.tsx`, `components/Receiver.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. Not yet run with phones sending, or on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 

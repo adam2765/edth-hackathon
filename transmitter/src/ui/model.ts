@@ -17,6 +17,8 @@ export interface Entry {
   candidates?: Candidate[];
   /** True while a question is waiting for a choice. */
   pending?: boolean;
+  /** The coordinator's id for the saved report, sent back with the answer to its question. */
+  reportId?: string;
 }
 
 export type StepResult = { state: "running" | "pass" | "fail"; note: string };

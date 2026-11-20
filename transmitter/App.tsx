@@ -10,7 +10,7 @@ import { SCENARIOS } from "./scenarios";
 import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
 import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
-import { describePlacement, positionAfter, sendUtterance } from "./src/transport";
+import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button, Segmented } from "./src/ui/controls";
 import { LogList, QuestionCard } from "./src/ui/LogList";
@@ -36,6 +36,8 @@ function coordinatorOnThisComputer(): string | null {
 
 const LOCAL_COORDINATOR = coordinatorOnThisComputer();
 const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? LIVE_SITE;
+/** The session every report goes to; the receiver shows it at /receiver?session=demo. */
+const SESSION = "demo";
 const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
@@ -94,6 +96,8 @@ function Transmitter() {
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
 
   const positionRef = useRef<Position | null>(null);
+  /** The coordinator's report id for each question asked, by log entry, to send back with the answer. */
+  const reportIdsRef = useRef(new Map<string, string>());
   const seqRef = useRef(0);
   const busyRef = useRef<Busy>("idle");
   const recordStartRef = useRef(0);
@@ -161,7 +165,7 @@ function Transmitter() {
     async (u: Utterance, opts: { area: AreaId; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
-        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, session: "demo", lastPosition: positionRef.current });
+        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, session: SESSION, lastPosition: positionRef.current });
         const res = reply.resolution;
         const lang = langOf(reply, opts.area);
         const t = reply.timings_ms;
@@ -175,7 +179,8 @@ function Transmitter() {
           setEntries((es) => [{ ...base, outcome, status: "resolved" }, ...es]);
           setStatus(outcome);
         } else if (res.status === "ambiguous") {
-          setEntries((es) => [{ ...base, outcome: "Asked back", status: "ambiguous", question: res.question, candidates: res.candidates, pending: true }, ...es]);
+          if (reply.report_id) reportIdsRef.current.set(entryId, reply.report_id);
+          setEntries((es) => [{ ...base, outcome: "Asked back", status: "ambiguous", question: res.question, candidates: res.candidates, pending: true, reportId: reply.report_id }, ...es]);
           setStatus(res.question ?? "Which one did you mean?");
           if (res.question && !opts.quiet) await speak(res.question, lang);
         } else {
@@ -196,14 +201,31 @@ function Transmitter() {
     [serverUrl],
   );
 
-  const choose = useCallback((entryId: string, c: Candidate) => {
-    stopSpeaking();
-    const outcome = describePlacement(c.placement, c.name, positionRef.current);
-    setPositionBoth(positionAfter(positionRef.current, c.placement, c.name, Date.now()));
-    // For a position the place is the whole story; for a movement, say where it leaves the unit.
-    patchEntry(entryId, { pending: false, outcome: c.placement.heading_to ? `Chose ${c.name}. ${outcome}` : `Chose ${c.name} (±${c.placement.radius_m ?? 80} m)` });
-    setStatus(outcome);
-  }, []);
+  /** Tells the receiver which choice was tapped. The phone has already applied it, so this only logs a failure. */
+  const reportAnswer = useCallback(
+    (entryId: string, choice: string | null) => {
+      const reportId = reportIdsRef.current.get(entryId);
+      if (!reportId) return; // the coordinator did not save the report (for example, the live site)
+      reportIdsRef.current.delete(entryId);
+      sendAnswer(serverUrl, SESSION, reportId, choice).catch((e: unknown) => {
+        console.log("[answer-error]", JSON.stringify({ coordinator: serverUrl, error: e instanceof Error ? e.message : String(e) }));
+      });
+    },
+    [serverUrl],
+  );
+
+  const choose = useCallback(
+    (entryId: string, c: Candidate) => {
+      stopSpeaking();
+      const outcome = describePlacement(c.placement, c.name, positionRef.current);
+      setPositionBoth(positionAfter(positionRef.current, c.placement, c.name, Date.now()));
+      // For a position the place is the whole story; for a movement, say where it leaves the unit.
+      patchEntry(entryId, { pending: false, outcome: c.placement.heading_to ? `Chose ${c.name}. ${outcome}` : `Chose ${c.name} (±${c.placement.radius_m ?? 80} m)` });
+      setStatus(outcome);
+      reportAnswer(entryId, c.id);
+    },
+    [reportAnswer],
+  );
 
   // ---------- source: scenario clips ----------
   const runStep = useCallback(
@@ -383,16 +405,21 @@ function Transmitter() {
   }, [stopAndSend]);
 
   /** None of the offered places was right: close the question and ask for a clearer report. */
-  const noneOfThese = useCallback((entryId: string) => {
-    stopSpeaking();
-    patchEntry(entryId, { pending: false, outcome: "None of the choices was right." });
-    setStatus("Say it again with a street or place name.");
-  }, []);
+  const noneOfThese = useCallback(
+    (entryId: string) => {
+      stopSpeaking();
+      patchEntry(entryId, { pending: false, outcome: "None of the choices was right." });
+      setStatus("Say it again with a street or place name.");
+      reportAnswer(entryId, null);
+    },
+    [reportAnswer],
+  );
 
   const reset = () => {
     stopSpeaking();
     cancelScenarioRef.current = true;
     setEntries([]);
+    reportIdsRef.current.clear();
     setStepResults({});
     setPositionBoth(null);
     seqRef.current = 0;

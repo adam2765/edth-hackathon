@@ -124,13 +124,23 @@ Both local models miss "I'm at the Golden Gate." (8B leaves the name out, 3B tra
 
 Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. Not yet run on a real phone or on Android.
 
+## Receiver
+
+The shared map for the command post: open `http://localhost:3117/receiver?session=demo` on the computer that runs the coordinator, ideally on a big screen. Every report the transmitter sends shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
+
+The coordinator keeps each session in `.data/sessions/<code>.jsonl` (one line per report or answer, never edited). Delete the file to start a session over. The live site keeps no record yet, so its receiver stays empty [101].
+
 ## Layout
 
 ```
 transmitter/                               native transmitter app (own package.json and tooling)
 scenarios/, scripts/build-scenarios.mjs    scripted reports and the clip generator
 app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk button, ask-back card, log
-app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs
+app/receiver/, components/Receiver.tsx     the receiver: shared map, units, feed, replay
+app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs, session
+app/api/answer/route.ts                    POST the choice tapped for a question
+app/api/sessions/[code]/route.ts           GET a session's log for the receiver
+lib/reports/                               the session log: entry types, store, position rule, foldLog
 lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text
