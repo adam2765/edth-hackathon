@@ -202,7 +202,7 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 ## 6. Transmitter on Android
 
-Not yet tried by us. It needs Android Studio, an Android SDK and a JDK; follow Expo's Android setup for SDK 58. Then `cd transmitter && npx expo run:android`. On Android the phone modes transcribe scenario clips, but the microphone still goes through the coordinator [75], so a microphone report needs hosted mode.
+Not yet tried by us. It needs Android Studio, an Android SDK and a JDK; follow Expo's Android setup for SDK 58. Then `cd transmitter && npx expo run:android`. On Android the phone modes transcribe scenario clips, but the microphone still goes through the coordinator [75], so a microphone report needs hosted mode for now. That is not a reason to get a key: the fix, recording on the phone in a form Whisper can read, is written up in [handoff-android-microphone.md](handoff-android-microphone.md).
 
 ## 7. Daily start
 
