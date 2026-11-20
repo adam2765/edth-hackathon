@@ -2,7 +2,7 @@
 
 One line each, numbered, newest last.
 
-1. Repo lives in `~/Code/Apps/edth-hackathon` (Alex, section 10). Local git only so far; the private GitHub remote (`beverage/edth-hackathon`) waits for Alex's go-ahead.
+1. Repo lives in `~/Code/Apps/edth-hackathon` (Alex, section 10), pushed to the private GitHub repo `beverage/edth-hackathon` on Alex's go-ahead.
 2. No Vercel team called `edth-hackathon` exists on the account, so the project `edth-hackathon` is deployed under the only team, "Beverage" (`beverage2`). Move it when a team exists.
 3. Next.js 16.4.6 from `create-next-app`, App Router, TypeScript, no Tailwind (plain CSS keeps the page small), npm.
 4. Removed `cacheComponents` and `partialPrefetching` from the scaffolded `next.config.ts`; the app is one client page plus one dynamic POST route and needs neither.
