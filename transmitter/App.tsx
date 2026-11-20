@@ -1,7 +1,8 @@
 import { requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
+import Constants from "expo-constants";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
@@ -11,7 +12,22 @@ import { PHONE_MODELS, STT_MODES, downloadModel, hasModel, hintPrompt, transcrib
 import { describePlacement, positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? "https://edth-hackathon.vercel.app";
+const LIVE_SITE = "https://edth-hackathon.vercel.app";
+/** The port the coordinator (the web app in the folder above) runs on with `npm run dev -- -p 3117`. */
+const COORDINATOR_PORT = 3117;
+
+/**
+ * The coordinator on the computer this app was loaded from. A development build fetches its code
+ * from that computer's dev server, so its address is known, and the coordinator runs beside it.
+ * In the simulator this is localhost; on a phone it is the computer's address on the shared network.
+ */
+function coordinatorOnThisComputer(): string | null {
+  const host = Constants.expoConfig?.hostUri?.split(":")[0];
+  return host ? `http://${host}:${COORDINATOR_PORT}` : null;
+}
+
+const LOCAL_COORDINATOR = coordinatorOnThisComputer();
+const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? LIVE_SITE;
 const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
@@ -74,6 +90,7 @@ function Transmitter() {
   const [callsign, setCallsign] = useState("ALPHA 1");
   const [area, setArea] = useState<AreaId>("vincennes");
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
+  const [reach, setReach] = useState<"checking" | "ok" | "unreachable">("checking");
   const [busy, setBusy] = useState<Busy>("idle");
   const [status, setStatus] = useState("Hold the button and say where you are, or play a scenario.");
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -94,7 +111,33 @@ function Transmitter() {
   const releasedRef = useRef(false);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelScenarioRef = useRef(false);
+  /** Phone speech-to-text times of the current scenario run, for the summary line. */
+  const phoneTimesRef = useRef<number[]>([]);
   const recorder = useAudioRecorder(SPEECH_RECORDING);
+
+  // Is the coordinator answering at this address? Any HTTP answer counts; only silence does not.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setReach("checking");
+      const giveUp = setTimeout(() => controller.abort(), 4000);
+      try {
+        await fetch(`${serverUrl.replace(/\/+$/, "")}/api/report`, { method: "GET", signal: controller.signal });
+        if (!cancelled) setReach("ok");
+      } catch {
+        if (!cancelled) setReach("unreachable");
+      } finally {
+        clearTimeout(giveUp);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [serverUrl]);
 
   const setBusyBoth = (b: Busy) => {
     busyRef.current = b;
@@ -169,6 +212,7 @@ function Transmitter() {
         // Speech-to-text on the phone: only the words travel.
         const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined });
         phoneMs = heard.ms;
+        phoneTimesRef.current.push(heard.ms);
         if (!heard.text) {
           console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
           setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "the phone heard nothing" } }));
@@ -206,6 +250,7 @@ function Transmitter() {
     setPositionBoth(null); // a scenario starts from a clean slate, like a fresh page
     setStepResults((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith(`${sc.id}/`))));
     const started = Date.now();
+    phoneTimesRef.current = [];
     let passed = 0;
     for (const step of sc.steps) {
       if (cancelScenarioRef.current) break;
@@ -216,7 +261,10 @@ function Transmitter() {
       setStatus(`${sc.title}: ${step.id} “${step.text}”`);
       if (await runStep(sc, step)) passed++;
     }
-    setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.`);
+    // Shown on screen so the figure can be read off a phone that is not attached to a computer.
+    const times = [...phoneTimesRef.current].sort((a, b) => a - b);
+    const speed = times.length ? ` Phone speech-to-text: median ${times[Math.floor(times.length / 2)]} ms, slowest ${times[times.length - 1]} ms.` : "";
+    setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.${speed}`);
     setBusyBoth("idle");
   }, [scenarioId, realTime, runStep]);
 
@@ -361,16 +409,30 @@ function Transmitter() {
               <Text style={[styles.chipText, area === a.id && styles.chipTextOn]}>{a.label}</Text>
             </Pressable>
           ))}
-          <TextInput
-            style={styles.server}
-            value={serverUrl}
-            onChangeText={setServerUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            accessibilityLabel="Coordinator address"
-          />
         </View>
+        <View style={styles.row}>
+          <Text style={styles.muted}>Coordinator</Text>
+          {LOCAL_COORDINATOR && (
+            <Pressable onPress={() => busy === "idle" && setServerUrl(LOCAL_COORDINATOR)} style={[styles.chipSmall, serverUrl === LOCAL_COORDINATOR && styles.chipOn]} accessibilityLabel="Coordinator on this computer">
+              <Text style={[styles.chipSmallText, serverUrl === LOCAL_COORDINATOR && styles.chipTextOn]}>This Mac</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => busy === "idle" && setServerUrl(LIVE_SITE)} style={[styles.chipSmall, serverUrl === LIVE_SITE && styles.chipOn]} accessibilityLabel="Coordinator on the live site">
+            <Text style={[styles.chipSmallText, serverUrl === LIVE_SITE && styles.chipTextOn]}>Live site</Text>
+          </Pressable>
+          <Text style={[styles.muted, reach === "ok" && styles.ok, reach === "unreachable" && styles.bad]} accessibilityLabel={`Coordinator ${reach}`}>
+            {reach === "ok" ? "● reachable" : reach === "unreachable" ? "● not reachable" : "● checking"}
+          </Text>
+        </View>
+        <TextInput
+          style={styles.server}
+          value={serverUrl}
+          onChangeText={setServerUrl}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          accessibilityLabel="Coordinator address"
+        />
       </View>
 
       <View style={styles.sttRow}>
@@ -505,7 +567,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { color: C.text, fontSize: 20, fontWeight: "700", flex: 1 },
   callsign: { color: C.text, backgroundColor: C.panel2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, fontWeight: "700", minWidth: 120, textAlign: "center" },
-  server: { flex: 1, color: C.muted, backgroundColor: C.panel, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12 },
+  server: { color: C.muted, backgroundColor: C.panel, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12 },
   chip: { backgroundColor: C.panel2, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   chipOn: { backgroundColor: C.accent },
   chipText: { color: C.muted, fontWeight: "600" },
