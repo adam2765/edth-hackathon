@@ -25,6 +25,7 @@ New to the project? Read these in order:
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
+| [handoff-android-microphone.md](handoff-android-microphone.md) | Handoff: the Android microphone transcribed on the phone, so it needs no key | Delete it when the work is done |
 
 Elsewhere in the repo:
 
