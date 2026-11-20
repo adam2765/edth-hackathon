@@ -2,11 +2,12 @@ import { requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder }
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
-import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, scenarioClipUri } from "./src/sources";
+import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
+import { PHONE_MODELS, STT_MODES, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 
@@ -81,6 +82,10 @@ function Transmitter() {
   const [stepResults, setStepResults] = useState<Record<string, StepResult>>({});
   const [realTime, setRealTime] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
+  const [sttMode, setSttMode] = useState<SttMode>("server");
+  const [useHints, setUseHints] = useState(true);
+  const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
+  const [downloadPct, setDownloadPct] = useState<number | null>(null);
 
   const positionRef = useRef<Position | null>(null);
   const seqRef = useRef(0);
@@ -106,14 +111,14 @@ function Transmitter() {
    * apply the reply, speak a question back. Returns the reply and the log entry id.
    */
   const handleUtterance = useCallback(
-    async (u: Utterance, opts: { area: AreaId; scripted?: string; quiet?: boolean }): Promise<{ reply: ReportReply; entryId: string } | null> => {
+    async (u: Utterance, opts: { area: AreaId; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
         const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, session: "demo", lastPosition: positionRef.current });
         const res = reply.resolution;
         const lang = langOf(reply, opts.area);
         const t = reply.timings_ms;
-        const timings = `${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms`;
+        const timings = `${opts.phoneMs != null ? `phone STT ${opts.phoneMs} · ` : ""}${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms`;
         const base = { id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: reply.transcript || "(no words heard)", timings };
         if (res.status === "resolved") {
           const name = res.candidates.find((c) => c.id === res.evidence.feature_id)?.name ?? "position";
@@ -131,7 +136,7 @@ function Transmitter() {
           setStatus(res.question ?? "Could not place that.");
           if (res.question && !opts.quiet) await speak(res.question, lang);
         }
-        return { reply, entryId };
+        return { reply, entryId, roundTripMs };
       } catch (e) {
         const msg = e instanceof Error ? (e.name === "AbortError" ? "The coordinator did not answer in time." : e.message) : "Sending failed.";
         setEntries((es) => [{ id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: "", outcome: msg, status: "error" }, ...es]);
@@ -154,10 +159,24 @@ function Transmitter() {
   const runStep = useCallback(
     async (sc: Scenario, step: ScenarioStep, manual = false): Promise<boolean> => {
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "running", note: "sending" } }));
-      const audioUri = await scenarioClipUri(step);
       const now = Date.now();
-      const u: Utterance = { seq: ++seqRef.current, callsign: step.callsign, source: "scenario", audioUri, mime: "audio/mp4", startedAt: now, endedAt: now, scenarioStepId: step.id };
-      const out = await handleUtterance(u, { area: sc.area, scripted: step.text, quiet: !speakReplies });
+      const base = { seq: ++seqRef.current, callsign: step.callsign, source: "scenario" as const, startedAt: now, endedAt: now, scenarioStepId: step.id };
+      let u: Utterance;
+      let phoneMs: number | undefined;
+      if (sttMode === "server") {
+        u = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
+      } else {
+        // Speech-to-text on the phone: only the words travel.
+        const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined });
+        phoneMs = heard.ms;
+        if (!heard.text) {
+          console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
+          setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "the phone heard nothing" } }));
+          return false;
+        }
+        u = { ...base, text: heard.text, endedAt: Date.now() };
+      }
+      const out = await handleUtterance(u, { area: sc.area, scripted: step.text, quiet: !speakReplies, phoneMs });
       if (!out) {
         setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "no answer from the coordinator" } }));
         return false;
@@ -170,10 +189,12 @@ function Transmitter() {
       }
       const verdict = evaluate(step, out.reply, chosen);
       if (manual && verdict.pass && chosen) verdict.note = "asked: answer below";
+      // One line per step in the dev-server log, so runs in different modes can be compared.
+      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: sttMode === "server" ? null : useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
       return verdict.pass;
     },
-    [handleUtterance, choose, speakReplies],
+    [handleUtterance, choose, speakReplies, sttMode, useHints],
   );
 
   const playScenario = useCallback(async () => {
@@ -212,6 +233,28 @@ function Transmitter() {
     [runStep],
   );
 
+  // ---------- speech-to-text on the phone ----------
+  const modelMissing = sttMode !== "server" && !modelReady[sttMode];
+  // Whisper needs uncompressed audio. iOS can record it directly; on Android the microphone
+  // still goes through the server for now (scenario clips work in every mode on both).
+  const phoneStt = sttMode !== "server" && Platform.OS === "ios";
+
+  const fetchModel = useCallback(async () => {
+    if (sttMode === "server" || downloadPct !== null) return;
+    const mode = sttMode;
+    setDownloadPct(0);
+    setStatus(`Downloading ${PHONE_MODELS[mode].file} (${PHONE_MODELS[mode].mb} MB)…`);
+    try {
+      await downloadModel(mode, (f) => setDownloadPct(Math.round(f * 100)));
+      setModelReady((m) => ({ ...m, [mode]: hasModel(mode) }));
+      setStatus(hasModel(mode) ? "Model ready. Speech-to-text now runs on the phone." : "The download did not complete. Try again.");
+    } catch (e) {
+      setStatus(e instanceof Error ? `Download failed: ${e.message}` : "Download failed.");
+    } finally {
+      setDownloadPct(null);
+    }
+  }, [sttMode, downloadPct]);
+
   // ---------- source: microphone, hold to talk ----------
   const stopAndSend = useCallback(async () => {
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
@@ -227,15 +270,26 @@ function Transmitter() {
         setStatus("Too short. Hold the button while you speak.");
         return;
       }
-      setStatus("Sending…");
-      const u: Utterance = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic", audioUri: uri, mime: "audio/mp4", startedAt: recordStartRef.current, endedAt };
-      await handleUtterance(u, { area, quiet: !speakReplies });
+      const base = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic" as const, startedAt: recordStartRef.current, endedAt };
+      if (phoneStt) {
+        setStatus("Transcribing on the phone…");
+        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(area) : undefined });
+        if (!heard.text) {
+          setStatus("The phone heard nothing. Try again.");
+          return;
+        }
+        setStatus("Sending…");
+        await handleUtterance({ ...base, text: heard.text }, { area, quiet: !speakReplies, phoneMs: heard.ms });
+      } else {
+        setStatus("Sending…");
+        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area, quiet: !speakReplies });
+      }
     } catch (e) {
       setStatus(e instanceof Error ? `Recording failed: ${e.message}` : "Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, area, handleUtterance, speakReplies]);
+  }, [recorder, callsign, area, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -250,7 +304,7 @@ function Transmitter() {
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
+      await recorder.prepareToRecordAsync(phoneStt ? SPEECH_RECORDING_WAV : SPEECH_RECORDING);
       recorder.record();
       recordStartRef.current = Date.now();
       setBusyBoth("recording");
@@ -264,7 +318,7 @@ function Transmitter() {
       setStatus(e instanceof Error ? `Could not open the microphone: ${e.message}` : "Could not open the microphone.");
       setBusyBoth("idle");
     }
-  }, [recorder, stopAndSend]);
+  }, [recorder, stopAndSend, phoneStt]);
 
   const onPressOut = useCallback(() => {
     releasedRef.current = true;
@@ -319,12 +373,36 @@ function Transmitter() {
         </View>
       </View>
 
+      <View style={styles.sttRow}>
+        <Text style={styles.muted}>Speech-to-text</Text>
+        {STT_MODES.map((m) => (
+          <Pressable key={m.id} onPress={() => busy === "idle" && downloadPct === null && setSttMode(m.id)} style={[styles.chipSmall, sttMode === m.id && styles.chipOn]} accessibilityLabel={`Speech-to-text ${m.label}`}>
+            <Text style={[styles.chipSmallText, sttMode === m.id && styles.chipTextOn]}>{m.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {sttMode !== "server" && (
+        <View style={styles.sttRow}>
+          {modelMissing ? (
+            <Pressable onPress={fetchModel} style={styles.button} accessibilityLabel="Download model">
+              <Text style={styles.buttonText}>{downloadPct === null ? `Download model (${PHONE_MODELS[sttMode].mb} MB)` : `Downloading… ${downloadPct}%`}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.muted}>{PHONE_MODELS[sttMode].file} is on this phone.</Text>
+          )}
+          <View style={styles.toggle}>
+            <Switch value={useHints} onValueChange={setUseHints} />
+            <Text style={styles.muted}>Place-name hints</Text>
+          </View>
+        </View>
+      )}
+
       <View style={styles.talkRow}>
         <Pressable
           onPressIn={onPressIn}
           onPressOut={onPressOut}
-          disabled={busy === "sending" || busy === "scenario"}
-          style={[styles.talk, busy === "recording" && styles.talkRec, (busy === "sending" || busy === "scenario" || busy === "starting") && styles.talkBusy]}
+          disabled={busy === "sending" || busy === "scenario" || modelMissing}
+          style={[styles.talk, busy === "recording" && styles.talkRec, (busy === "sending" || busy === "scenario" || busy === "starting" || modelMissing) && styles.talkBusy]}
           accessibilityLabel={talkLabel}
         >
           <Text style={styles.talkIcon}>{busy === "recording" ? "●" : "🎙"}</Text>
@@ -349,7 +427,7 @@ function Transmitter() {
             ))}
           </View>
           <View style={styles.row}>
-            <Pressable onPress={busy === "scenario" ? () => (cancelScenarioRef.current = true) : playScenario} disabled={busy !== "idle" && busy !== "scenario"} style={[styles.button, busy !== "idle" && busy !== "scenario" && styles.buttonOff]} accessibilityLabel="Play scenario">
+            <Pressable onPress={busy === "scenario" ? () => (cancelScenarioRef.current = true) : playScenario} disabled={(busy !== "idle" && busy !== "scenario") || modelMissing} style={[styles.button, ((busy !== "idle" && busy !== "scenario") || modelMissing) && styles.buttonOff]} accessibilityLabel="Play scenario">
               <Text style={styles.buttonText}>{busy === "scenario" ? "Stop" : "Play scenario"}</Text>
             </Pressable>
             <View style={styles.toggle}>
@@ -364,7 +442,7 @@ function Transmitter() {
           {scenario?.steps.map((step) => {
             const r = stepResults[`${scenario.id}/${step.id}`];
             return (
-              <Pressable key={step.id} style={styles.step} onPress={() => sendOneStep(scenario, step)} accessibilityLabel={`Send step ${step.id}`}>
+              <Pressable key={step.id} style={styles.step} onPress={() => !modelMissing && sendOneStep(scenario, step)} accessibilityLabel={`Send step ${step.id}`}>
                 <Text style={[styles.stepMark, r?.state === "pass" && styles.ok, r?.state === "fail" && styles.bad]}>{r?.state === "pass" ? "✓" : r?.state === "fail" ? "✗" : r?.state === "running" ? "…" : "▶"}</Text>
                 <View style={styles.flex}>
                   <Text style={styles.stepText}>
@@ -432,6 +510,9 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: C.accent },
   chipText: { color: C.muted, fontWeight: "600" },
   chipTextOn: { color: "#fff" },
+  sttRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 8, flexWrap: "wrap" },
+  chipSmall: { backgroundColor: C.panel2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  chipSmallText: { color: C.muted, fontWeight: "600", fontSize: 12 },
   talkRow: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16 },
   talk: { width: 116, height: 116, borderRadius: 58, backgroundColor: C.accent, alignItems: "center", justifyContent: "center", gap: 2 },
   talkRec: { backgroundColor: C.bad },

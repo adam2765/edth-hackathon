@@ -19,6 +19,8 @@ export interface ScenarioStep {
   choose?: string;
   /** Bundled clip (a Metro asset id). */
   audio: number;
+  /** The same clip as 16 kHz mono PCM, for speech-to-text on the phone. */
+  wav: number;
 }
 
 export interface Scenario {

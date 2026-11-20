@@ -4,13 +4,12 @@
 //   open mic       later: continuous listening that cuts at pauses
 import { Asset } from "expo-asset";
 import { AudioQuality, IOSOutputFormat, type RecordingOptions } from "expo-audio";
-import type { ScenarioStep } from "./types";
 
-/** Local file URI of a scenario step's bundled clip. */
-export async function scenarioClipUri(step: ScenarioStep): Promise<string> {
-  const asset = Asset.fromModule(step.audio);
+/** Local file URI of a bundled clip (a Metro asset id). */
+export async function clipUri(assetId: number): Promise<string> {
+  const asset = Asset.fromModule(assetId);
   if (!asset.localUri) await asset.downloadAsync();
-  if (!asset.localUri) throw new Error(`Clip for step ${step.id} is not available`);
+  if (!asset.localUri) throw new Error("A bundled clip is not available");
   return asset.localUri;
 }
 
@@ -23,6 +22,17 @@ export const SPEECH_RECORDING: RecordingOptions = {
   android: { outputFormat: "mpeg4", audioEncoder: "aac" },
   ios: { outputFormat: IOSOutputFormat.MPEG4AAC, audioQuality: AudioQuality.MEDIUM, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
   web: { mimeType: "audio/webm", bitsPerSecond: 32000 },
+};
+
+/**
+ * Uncompressed 16 kHz mono recording, for speech-to-text on the phone. iOS only: Android's
+ * recorder cannot write uncompressed audio, so there the open-microphone stream will be used.
+ */
+export const SPEECH_RECORDING_WAV: RecordingOptions = {
+  ...SPEECH_RECORDING,
+  extension: ".wav",
+  bitRate: 256000,
+  ios: { outputFormat: IOSOutputFormat.LINEARPCM, audioQuality: AudioQuality.HIGH, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
 };
 
 export const MAX_CLIP_MS = 15_000;

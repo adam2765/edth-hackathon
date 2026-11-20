@@ -1,5 +1,6 @@
 // Turns scenarios/*.json into audio clips and the bundle the transmitter app loads.
 //   transmitter/scenarios/audio/<scenario>/<step>.m4a   one clip per step, synthetic voice
+//   transmitter/scenarios/audio/<scenario>/<step>.wav   the same clip uncompressed, for speech-to-text on the phone
 //   transmitter/scenarios/index.ts                      generated; do not edit by hand
 // Run: npm run scenarios   (macOS only: uses `say` and `afconvert`)
 import { execFileSync } from "node:child_process";
@@ -36,14 +37,17 @@ for (const sc of scenarios) {
     if (!voice) throw new Error(`${sc.id}/${step.id}: no voice for lang "${step.lang}"`);
     const rel = `audio/${sc.id}/${step.id}.m4a`;
     const file = join(OUT, rel);
+    const wav = file.replace(/\.m4a$/, ".wav");
     const key = createHash("sha256").update(`${voice}\n${step.text}`).digest("hex").slice(0, 16);
     next[rel] = key;
-    if (manifest[rel] === key && existsSync(file)) continue;
+    if (manifest[rel] === key && existsSync(file) && existsSync(wav)) continue;
     mkdirSync(join(OUT, "audio", sc.id), { recursive: true });
     const aiff = join(tmpdir(), `scenario-${sc.id}-${step.id}.aiff`);
     execFileSync("say", ["-v", voice, "-o", aiff, step.text]);
     // 16 kHz mono AAC: what a phone records for speech, and small enough to commit.
     execFileSync("afconvert", ["-f", "m4af", "-d", "aac", "-c", "1", "-r", "127", "--src-complexity", "bats", "-b", "32000", aiff, file]);
+    // 16 kHz mono 16-bit PCM: Whisper on the phone reads only uncompressed audio.
+    execFileSync("afconvert", ["-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff, wav]);
     rmSync(aiff, { force: true });
     made++;
     console.log(`made ${rel}  (${voice}) ${step.text}`);
@@ -76,6 +80,7 @@ for (const sc of scenarios) {
       `expect: ${JSON.stringify(expect)}`,
       ...(choose ? [`choose: ${JSON.stringify(choose)}`] : []),
       `audio: require("./audio/${sc.id}/${id}.m4a")`,
+      `wav: require("./audio/${sc.id}/${id}.wav")`,
     ];
     lines.push(`      { ${fields.join(", ")} },`);
   }

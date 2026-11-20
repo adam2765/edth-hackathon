@@ -38,7 +38,7 @@ Our own differentiators (asking back, Ukrainian, no invented coordinates) come o
 | When (Paris) | What |
 |---|---|
 | Fri, before 18:00 | Prior work: the stage-1 web app. The tag `prior-work-fri-1800` marks it; leave the tag where it is. The jury counts only work done during the event. |
-| Fri evening | Shared map and replay (section 8.1). On-device speech-to-text in the transmitter (in progress). |
+| Fri evening | Shared map and replay (section 8.1). On-device speech-to-text in the transmitter (built; measured in the simulator, not yet on a phone). |
 | Sat morning | Two new teammates join. Local mode starts and needs at least two people. |
 | Sat midday | Local mode working and tested in the hall |
 | Sat afternoon | Field walk for an error figure; show Lysk's mentors a working version |
@@ -92,7 +92,7 @@ Where each step runs today:
 | Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |
 | Stated distances, eight compass points, dead reckoning | resolver and extractor | On `main`, **not deployed** |
 | Native transmitter (Expo 58, React Native) | `transmitter/` | Runs in the iPhone simulator. The Vincennes scenario scored 4 of 4 and Kyiv 5 of 5 against the live site. Not yet on a real phone or Android. |
-| On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/` | In progress, uncommitted |
+| On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices |
 | Shared map, call signs, replay | | Not started |
 | Local (uplink-off) mode | | Specified, not started |
@@ -226,7 +226,7 @@ Open calls for Alex: whose phones (ours only, or any phone); travel router or th
 
 ### 8.3 Transmitter
 
-- **Now, in progress:** on-device speech-to-text with Whisper (`whisper.rn`), comparing `ggml-base-q5_1` (about 56 MB) and `ggml-small-q5_1` (about 181 MB) against Mistral on the scenario set. The phone then sends text, and the server skips its own speech-to-text.
+- **Built:** on-device speech-to-text with Whisper (`whisper.rn`), switchable on screen between the server, `ggml-base-q5_1` (56 MB) and `ggml-small-q5_1` (181 MB). The phone then sends text, and the server skips its own speech-to-text. Results are in [transmitter/README.md](../transmitter/README.md) and `scenarios/results/`. Still to do: measure speed on a real phone, record uncompressed audio on Android (the microphone there still goes through the server), and try pinning the language.
 - **Later, about one day:** an open microphone with no button, cutting at pauses. Tuning against hall noise is the risk. The microphone is muted while the app speaks a question, and the coordinator learns to drop non-reports and duplicates. Screen-off listening is another half day and not planned.
 - **Stress scenarios** to build as data files: eight to ten call signs at once; late, out-of-order and duplicate reports; several open questions at once; implausible jumps (3 km in 20 s); units that go silent; radio-style audio with static and clipping; mixed languages; a spoken call sign that does not match the device. A laptop script can play many units at once with no phones.
 - **Installing:** iPhones by cable from a Mac with Xcode, with a free Apple ID; each phone needs Developer Mode and the install expires after 7 days. Android by install file. Expo Go cannot run it, because on-device speech-to-text and an open microphone need native modules [59].

@@ -31,6 +31,42 @@ The app talks to `https://edth-hackathon.vercel.app` unless `EXPO_PUBLIC_SERVER_
 the address is changed on screen. A plain `http://` address on the local network is allowed,
 for the no-internet demo.
 
+## Speech-to-text: on the server or on the phone
+
+The row under the header chooses where speech becomes text (`src/stt.ts`).
+
+| Mode | What happens | Needs |
+|---|---|---|
+| Server | The clip is uploaded and the coordinator transcribes it (Mistral). | A connection good enough for audio |
+| Phone: base | Whisper `ggml-base-q5_1` runs on the phone; only the words are sent. | A one-time 56 MB download |
+| Phone: small | Whisper `ggml-small-q5_1`, slower and more accurate. | A one-time 181 MB download |
+
+Models come from `ggerganov/whisper.cpp` on Hugging Face and are kept in the app's documents.
+"Place-name hints" gives Whisper a short list of the area's place names (`src/hints.generated.json`,
+the head of the list the server sends Mistral).
+
+Measured on 20 Nov in the iPhone simulator, on the 9 scenario steps (synthetic voices, clean audio).
+A step counts when the coordinator's answer is the expected one.
+
+| Mode | Vincennes (4) | Kyiv (5) | Total |
+|---|---|---|---|
+| Server (Mistral) | 4 | 5 | 9 of 9 |
+| Phone: small, with hints | 3 | 5 | 8 of 9 |
+| Phone: small, no hints | 3 | 5 | 8 of 9 |
+| Phone: base, with hints | 3 | 5 | 8 of 9 |
+| Phone: base, no hints | 0 | 4 | 4 of 9 |
+
+- Every miss was a question back or "could not place that"; none put a pin in the wrong place.
+- The one step no phone mode got: "Bérault" was heard as "Bayreauld" or "Beiraud".
+- Phone transcripts are rough ("Ruchaj z do Sofijskiego Soboru" for «Рухаюсь до Софійського собору»)
+  and still resolve, because extraction and name matching tolerate the errors.
+- Time per clip in the simulator was about 4 s (base) and 15 s (small). The simulator has no GPU, so
+  this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
+- The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
+
+Phone modes transcribe scenario clips on both platforms. The microphone uses them on iOS only for
+now: Whisper needs uncompressed audio, which Android's recorder cannot write.
+
 ## Scenarios
 
 `../scenarios/*.json` describe scripted reports and what the coordinator should answer.
