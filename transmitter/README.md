@@ -22,15 +22,22 @@ The main screen is only for reporting. Top to bottom:
 
 - **Who and where:** the call sign, the area, the language, and the coordinator with a dot
   (green when it answers, red when it does not). Tapping it, or the gear, opens Setup.
+- **The mission**, once joined, with Leave. Before that, a **Join a mission** card lists the
+  coordinator's open missions (picked when there is only one) with the call sign, and the talk
+  button says "Join first". On joining, the unit starts around the mission's start point (≈) and
+  the phone asks for a check-in: "say where you are". The phone keeps its own id and the mission
+  in `transmitter.json` in its documents and rejoins on start. When the base ends the mission,
+  the phone says so within 5 seconds and offers the open ones. A coordinator that keeps no
+  record (the live site) has no missions: the phone reports without one, as before [114].
 - **A notice**, only when the next report would fail: the coordinator is not answering, or
   speech-to-text is set to the phone and its model is not downloaded.
 - **The talk button** and, under it, what happened last and the last known position. While
   recording it turns red, counts the seconds, and a bar shows how much of the 15 seconds is used.
 - **A question card**, when the coordinator asks back. It sits directly under the talk button,
   with the choices and "None of these". The choice tapped is sent to the coordinator
-  (`POST /api/answer`), so the receiver's question closes too. Every report goes to session `demo`;
-  the receiver shows it at `/receiver?session=demo` on the same coordinator.
-- **Two tabs:** Scenarios (pick one, play it all, or tap one report) and Sent (every report
+  (`POST /api/answer`), so the receiver's question closes too. Reports go to the mission joined;
+  the receiver at `/receiver` on the same coordinator shows it.
+- **Two tabs:** Scenarios (those for the mission's area: pick one, play it all, or tap one report) and Sent (every report
   from this phone with the coordinator's answer and timings).
 
 **Setup** is a sheet: call sign, area and language, which coordinator, where speech becomes text
@@ -40,7 +47,8 @@ in it. Scenarios use each report's own language instead ([decision 106](../DECIS
 
 The UI lives in `src/ui/`: `theme.ts` (colours, type and spacing, shared with the web app's
 palette), `controls.tsx` (segmented control, grouped rows, buttons), and one file each for the
-talk button, the scenario list, the sent list with the question card, and the Setup sheet.
+talk button, the scenario list, the sent list with the question card, the join card, and the
+Setup sheet. `src/mission.ts` lists and joins missions and keeps what the phone remembers.
 `App.tsx` holds the logic and composes them.
 
 ## Run it

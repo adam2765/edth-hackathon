@@ -194,6 +194,10 @@ xcrun devicectl device process launch --device "<phone>" --terminate-existing \
 
 Check: the app opens, and the dot beside the call sign turns green. The app sends reports to the coordinator on this Mac, port 3117 [78].
 
+(person) Open `http://localhost:3117/receiver` on the Mac and open a mission from its Missions menu (Vincennes, any name; a start point is optional). In the app, the mission appears under "Join a mission"; tap Join.
+
+Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the receiver lists the call sign. Reports need a mission on this coordinator [114].
+
 (person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
 
 ## 6. Transmitter on Android

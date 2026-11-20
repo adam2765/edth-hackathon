@@ -5,8 +5,9 @@ One speaker's path works end to end on the live site, in two areas and three lan
 ## The parts
 
 - **Transmitter**: anything that captures a spoken report. Today that is the phone web page and a native app in `transmitter/`. Lysk's real users may well use radios; the coordinator does not care where a report comes from [58].
-- **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It saves each report that names a session to that session's log [99].
-- **Receiver**: the shared map a person at a command post watches, with every call sign and a replay. `/receiver?session=demo`; view only [98].
+- **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It keeps missions: each report in a mission goes to that mission's log, and the unit's last position comes from that log [99, 107, 108].
+- **Receiver**: the shared map at the base station, with every call sign and a replay. `/receiver`; it opens and ends missions and otherwise only shows [98, 113].
+- **Mission**: one run, with a code, an area and an optional start point. Phones join it before they report [107, 114].
 - **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`).
 
 ```
@@ -34,7 +35,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Resolving the place | Our server; plain code, no AI, no outside calls |
 | Map | On the phone; tiles, fonts and icons from OpenFreeMap |
 | Speaking the question | In the language the phone is set to [106]. The browser's voice for English and French; for Ukrainian, a Piper voice that runs in the browser [49] |
-| State (position history) | On the phone, which sends its last position with each report; and in the session log on the coordinator, which the receiver reads [99] |
+| State (position history) | In a mission, in the mission's log on the coordinator, which the resolver and the receiver both read [108]. With no mission, on the phone, which sends its last position with each report |
 | Shared map and replay | The receiver page, rebuilt from the session log in the browser [98] |
 
 ## What is built
@@ -52,6 +53,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices |
 | Shared map, call signs, replay | `app/receiver/page.tsx`, `components/Receiver.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. Not yet run with phones sending, or on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
+| Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/JoinCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. |
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 

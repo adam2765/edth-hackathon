@@ -186,6 +186,7 @@ describe("session codes and call signs", () => {
 
   it("tidies call signs", () => {
     expect(callsignOf("  ALPHA   1 ")).toBe("ALPHA 1");
+    expect(callsignOf("alpha 1")).toBe("ALPHA 1");
     expect(callsignOf("")).toBe("UNKNOWN");
     expect(callsignOf(undefined)).toBe("UNKNOWN");
   });

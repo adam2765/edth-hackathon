@@ -1,10 +1,12 @@
 /**
- * The shared record: every report a session receives, and every answer to a question, as one
- * append-only log per session. The coordinator writes it; the receiver reads it and rebuilds the
- * map from it, live or up to any moment for a replay. Safe to import on the client.
+ * The shared record: a mission's opening, every unit that joins, every report and every answer to
+ * a question, and the mission's end, as one append-only log per session. The coordinator writes
+ * it; the receiver reads it and rebuilds the map from it, live or up to any moment for a replay.
+ * A mission is what the code calls a session: one code, one log. Safe to import on the client.
  */
-import type { AreaId } from "@/lib/geo/areas";
-import type { HeadingTo, Intent, LastPosition, Resolution } from "@/lib/geo/types";
+// Relative, not "@/", so the transmitter can import these types too (decision 67).
+import type { AreaId } from "../geo/areas";
+import type { HeadingTo, Intent, LastPosition, Resolution } from "../geo/types";
 
 export type Timings = { stt: number; extract: number; resolve: number; total: number };
 
@@ -56,7 +58,92 @@ export interface AnswerEntry {
   position: UnitPosition | null;
 }
 
-export type LogEntry = ReportEntry | AnswerEntry;
+/** A place from the gazetteer where units are assumed to be when they join. Picked at the base, never by the model. */
+export interface StartPoint {
+  /** The gazetteer feature's id. */
+  id: string;
+  name: string;
+  category: string;
+  lat: number;
+  lon: number;
+  /** 300 m, or the place's own size if larger. */
+  radius_m: number;
+}
+
+/** The first line of a mission's log. */
+export interface MissionEntry {
+  kind: "mission";
+  id: string;
+  session: string;
+  ts: number;
+  area: AreaId;
+  name: string;
+  start: StartPoint | null;
+}
+
+/** A call sign joins the mission. */
+export interface JoinEntry {
+  kind: "join";
+  id: string;
+  session: string;
+  callsign: string;
+  ts: number;
+  /** The phone's own id, kept on the phone. Null when the call sign joined with its first report. */
+  device: string | null;
+  /** Where the unit starts: the start point as an estimate, or null (not placed yet). */
+  position: UnitPosition | null;
+}
+
+/** The mission is ended: no more joins, reports or answers. The log stays for replay. */
+export interface EndEntry {
+  kind: "end";
+  id: string;
+  session: string;
+  ts: number;
+}
+
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry;
+
+/** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
+export interface MissionSummary {
+  code: string;
+  name: string;
+  area: AreaId;
+  start: StartPoint | null;
+  opened: number;
+  /** When it was ended; null while open. */
+  ended: number | null;
+  /** Call signs that joined or reported. */
+  units: number;
+  reports: number;
+  /** Time of the latest entry. */
+  last: number;
+}
+
+/** `GET /api/sessions` */
+export interface MissionListReply {
+  /** False when this coordinator keeps no record (for now, the hosted site): there are no missions to join. */
+  stored: boolean;
+  /** Open missions first, newest first; then ended ones, newest first. */
+  missions: MissionSummary[];
+}
+
+/** `GET /api/places?area=&q=`: places to pick a start point from, each as the start point it would make. */
+export interface PlacesReply {
+  places: StartPoint[];
+}
+
+/** `POST /api/sessions/<code>/join` */
+export interface JoinReply {
+  mission: MissionSummary;
+  callsign: string;
+  /** Where the coordinator has this unit now: the start point (≈) on a first join, or its latest fix on a rejoin. */
+  position: UnitPosition | null;
+  /** When that position was given, epoch ms. */
+  positionTs: number | null;
+  /** True when this device already held the call sign. */
+  rejoined: boolean;
+}
 
 /** `GET /api/sessions/<code>?after=<n>` */
 export interface SessionLogReply {
@@ -77,9 +164,9 @@ export function sessionCode(v: unknown): string | null {
   return SESSION_RE.test(s) ? s : null;
 }
 
-/** A call sign as stored: trimmed, single spaces, up to 24 characters. */
+/** A call sign as stored: capitals, trimmed, single spaces, up to 24 characters, so "alpha 1" is ALPHA 1. */
 export function callsignOf(v: unknown): string {
   if (typeof v !== "string") return "UNKNOWN";
-  const s = v.replace(/\s+/g, " ").trim().slice(0, 24);
+  const s = v.replace(/\s+/g, " ").trim().toUpperCase().slice(0, 24);
   return s || "UNKNOWN";
 }

@@ -1,8 +1,10 @@
 // The coordinator's reply types are shared with the server. These are type-only imports,
 // so nothing outside this folder ends up in the app bundle.
 import type { Candidate, Intent, Placement, Resolution } from "../../lib/geo/types";
+import type { JoinReply, MissionListReply, MissionSummary, UnitPosition } from "../../lib/reports/types";
 
 export type { Candidate, Intent, Placement, Resolution };
+export type { JoinReply, MissionListReply, MissionSummary, UnitPosition };
 
 export type AreaId = "vincennes" | "kyiv";
 export type Lang = "en" | "fr" | "uk";
@@ -60,6 +62,8 @@ export interface ReportReply {
   /** Set when the coordinator saved the report for the receiver; send it back with the answer to a question. */
   report_id?: string;
   error?: string;
+  /** With an error: the mission has ended, so the phone should join another. */
+  ended?: boolean;
 }
 
 /** Where this unit was last placed. `estimated` marks a position derived from a movement report. */

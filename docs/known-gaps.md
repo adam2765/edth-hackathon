@@ -11,6 +11,7 @@ The largest untested risks are real Ukrainian speech and mixed-language clips; t
 - **No retry on Mistral rate limits;** a refused call fails the report. Most calls take under a second, but one took 8.3 s against a 10 s timeout.
 - **Interface text is English only;** only the question and place names follow the speaker's language [39].
 - **The Ukrainian voice downloads 77 MB** the first time with nothing on screen to show it.
-- **No auth;** the rate limit is per server instance and is not a security control.
+- **No auth;** the rate limit is per server instance and is not a security control. Anyone who can reach the coordinator can open, end or delete a mission, or join one under any free call sign.
+- **A phone that switches coordinator while in a mission** is told its mission has ended, and has to join one on the new coordinator.
 - **The live site lags `main`** until someone deploys.
 - **The native app's choice list does not show the town** of two same-name streets; the spoken question does ([gazetteer.md](gazetteer.md#same-name-streets)).

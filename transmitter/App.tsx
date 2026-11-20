@@ -9,10 +9,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
 import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
+import { CoordinatorError, callsignKey, fetchMissions, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
 import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
-import type { AreaId, Candidate, Lang, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
+import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button, Segmented } from "./src/ui/controls";
+import { JoinCard } from "./src/ui/JoinCard";
 import { LogList, QuestionCard } from "./src/ui/LogList";
 import { fmtTime, type Entry, type Reach, type StepResult } from "./src/ui/model";
 import { ScenarioCard } from "./src/ui/ScenarioCard";
@@ -36,8 +38,12 @@ function coordinatorOnThisComputer(): string | null {
 
 const LOCAL_COORDINATOR = coordinatorOnThisComputer();
 const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? LIVE_SITE;
-/** The session every report goes to; the receiver shows it at /receiver?session=demo. */
-const SESSION = "demo";
+/** Said on joining a mission: the first report that names a place replaces the start point. */
+const CHECK_IN: Record<Lang, string> = {
+  en: "Check in: say where you are.",
+  fr: "Dites où vous êtes.",
+  uk: "Скажіть, де ви зараз.",
+};
 const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
@@ -81,7 +87,9 @@ export default function App() {
 
 function Transmitter() {
   useKeepAwake();
-  const [callsign, setCallsign] = useState("ALPHA 1");
+  // The phone's own id and the mission it joined, kept between launches.
+  const [saved, setSaved] = useState<Saved>(() => loadSaved());
+  const [callsign, setCallsign] = useState(() => saved.joined?.callsign ?? "ALPHA 1");
   const [area, setArea] = useState<AreaId>("vincennes");
   const [language, setLanguage] = useState<Lang>("en");
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
@@ -102,8 +110,25 @@ function Transmitter() {
   const [useHints, setUseHints] = useState(true);
   const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
+  /** The coordinator's missions; null when it has none to offer (an older deployment). */
+  const [missionList, setMissionList] = useState<MissionListReply | null>(null);
+  const [joined, setJoined] = useState<{ code: string; name: string; area: AreaId; callsign: string } | null>(null);
+  const [pickedMission, setPickedMission] = useState<string | null>(null);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  /** In a mission as the call sign shown. A changed call sign has to join again. */
+  const joinedNow = joined && joined.callsign === callsignKey(callsign) ? joined : null;
+  /** A coordinator that keeps missions takes reports only from a phone that joined one. */
+  const needsJoin = reach === "ok" && !!missionList?.stored && !joinedNow;
+  /** In a mission, its area; the coordinator uses it whatever the phone sends. */
+  const effectiveArea: AreaId = joinedNow?.area ?? area;
+  const scenarios = joinedNow ? SCENARIOS.filter((s) => s.area === joinedNow.area) : SCENARIOS;
+  const effectiveScenarioId = scenarios.some((s) => s.id === scenarioId) ? scenarioId : (scenarios[0]?.id ?? "");
 
   const positionRef = useRef<Position | null>(null);
+  /** The mission's code, for the send path; null with no mission. */
+  const sessionRef = useRef<string | null>(null);
+  const triedRejoinRef = useRef(false);
   /** The coordinator's report id for each question asked, by log entry, to send back with the answer. */
   const reportIdsRef = useRef(new Map<string, string>());
   const seqRef = useRef(0);
@@ -116,20 +141,19 @@ function Transmitter() {
   const phoneTimesRef = useRef<number[]>([]);
   const recorder = useAudioRecorder(SPEECH_RECORDING);
 
-  // Is the coordinator answering at this address? Any HTTP answer counts; only silence does not.
-  // Checked when the address changes and then every 15 seconds, so the light follows the network.
+  // Is the coordinator answering at this address, and which missions are open? Any HTTP answer
+  // counts as answering; only silence does not. Checked when the address changes and then every
+  // 5 seconds, so the light follows the network and a newly opened or ended mission shows up.
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
-      const controller = new AbortController();
-      const giveUp = setTimeout(() => controller.abort(), 4000);
       try {
-        await fetch(`${serverUrl.replace(/\/+$/, "")}/api/report`, { method: "GET", signal: controller.signal });
-        if (!cancelled) setReach("ok");
+        const list = await fetchMissions(serverUrl);
+        if (cancelled) return;
+        setReach("ok");
+        setMissionList(list);
       } catch {
         if (!cancelled) setReach("unreachable");
-      } finally {
-        clearTimeout(giveUp);
       }
     };
     const first = setTimeout(() => {
@@ -137,7 +161,7 @@ function Transmitter() {
       setReach("checking");
       check();
     }, 500);
-    const again = setInterval(check, 15_000);
+    const again = setInterval(check, 5_000);
     return () => {
       cancelled = true;
       clearTimeout(first);
@@ -165,6 +189,71 @@ function Transmitter() {
   };
   const patchEntry = (id: string, patch: Partial<Entry>) => setEntries((es) => es.map((e) => (e.id === id ? { ...e, ...patch } : e)));
 
+  // ---------- missions ----------
+  const setJoinedBoth = (j: typeof joined) => {
+    sessionRef.current = j?.code ?? null;
+    setJoined(j);
+  };
+
+  /** Out of the mission: it ended, or the person left. The phone forgets it and offers the open ones. */
+  const leaveMission = useCallback((why: string) => {
+    sessionRef.current = null;
+    setJoined(null);
+    setPositionBoth(null);
+    setSaved((s) => {
+      const next = { device: s.device };
+      writeSaved(next);
+      return next;
+    });
+    setStatus(why);
+  }, []);
+
+  const join = useCallback(
+    async (code: string, cs: string, rejoining = false) => {
+      setJoinBusy(true);
+      setJoinError(null);
+      try {
+        const r = await joinMission(serverUrl, code, callsignKey(cs), saved.device);
+        setJoinedBoth({ code, name: r.mission.name, area: r.mission.area, callsign: r.callsign });
+        setArea(r.mission.area);
+        setCallsign(r.callsign);
+        setPositionBoth(positionFromJoin(r));
+        const next = { device: saved.device, joined: { server: serverUrl, code, callsign: r.callsign } };
+        setSaved(next);
+        writeSaved(next);
+        if (r.rejoined) {
+          setStatus(`Back in ${r.mission.name}.`);
+        } else {
+          setStatus(`Joined ${r.mission.name}. ${CHECK_IN[language]}`);
+          if (speakReplies) await speak(CHECK_IN[language], language);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? (e.name === "AbortError" ? "The coordinator did not answer in time." : e.message) : "Joining failed.";
+        if (rejoining && e instanceof CoordinatorError && e.ended) leaveMission("Your last mission has ended. Join another one.");
+        else setJoinError(msg);
+      } finally {
+        setJoinBusy(false);
+      }
+    },
+    [serverUrl, saved.device, language, speakReplies, leaveMission],
+  );
+
+  // On start, rejoin the mission this phone was in; while in one, notice when it ends.
+  useEffect(() => {
+    if (!missionList?.stored) return;
+    const open = missionList.missions.filter((m) => m.ended == null);
+    if (joined) {
+      if (!open.some((m) => m.code === joined.code)) leaveMission(`${joined.name} has ended. Join another mission.`);
+      return;
+    }
+    const last = saved.joined;
+    if (!triedRejoinRef.current && last && last.server === serverUrl) {
+      triedRejoinRef.current = true;
+      if (open.some((m) => m.code === last.code)) join(last.code, last.callsign, true);
+      else leaveMission("Your last mission has ended. Join another one.");
+    }
+  }, [missionList, joined, saved.joined, serverUrl, join, leaveMission]);
+
   /**
    * The one path every utterance takes, whatever produced it: send to the coordinator,
    * apply the reply, speak a question back. Returns the reply and the log entry id.
@@ -173,7 +262,7 @@ function Transmitter() {
     async (u: Utterance, opts: { area: AreaId; language: Lang; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
-        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, language: opts.language, session: SESSION, lastPosition: positionRef.current });
+        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, language: opts.language, session: sessionRef.current, lastPosition: positionRef.current });
         const res = reply.resolution;
         const lang = langOf(reply, opts.language);
         const t = reply.timings_ms;
@@ -201,21 +290,24 @@ function Transmitter() {
         const msg = e instanceof Error ? (e.name === "AbortError" ? "The coordinator did not answer in time." : e.message) : "Sending failed.";
         // In the dev-server log too, so a failure on a phone can be diagnosed from the computer.
         console.log("[send-error]", JSON.stringify({ coordinator: serverUrl, error: msg }));
+        // The mission ended (or was deleted) under us: offer the open ones.
+        if (e instanceof CoordinatorError && sessionRef.current && (e.ended || e.status === 404)) leaveMission("The mission has ended. Join another one.");
         setEntries((es) => [{ id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: "", outcome: msg, status: "error" }, ...es]);
         setStatus(msg);
         return null;
       }
     },
-    [serverUrl],
+    [serverUrl, leaveMission],
   );
 
   /** Tells the receiver which choice was tapped. The phone has already applied it, so this only logs a failure. */
   const reportAnswer = useCallback(
     (entryId: string, choice: string | null) => {
       const reportId = reportIdsRef.current.get(entryId);
-      if (!reportId) return; // the coordinator did not save the report (for example, the live site)
+      const session = sessionRef.current;
+      if (!reportId || !session) return; // the coordinator did not save the report (for example, the live site)
       reportIdsRef.current.delete(entryId);
-      sendAnswer(serverUrl, SESSION, reportId, choice).catch((e: unknown) => {
+      sendAnswer(serverUrl, session, reportId, choice).catch((e: unknown) => {
         console.log("[answer-error]", JSON.stringify({ coordinator: serverUrl, error: e instanceof Error ? e.message : String(e) }));
       });
     },
@@ -281,7 +373,7 @@ function Transmitter() {
   );
 
   const playScenario = useCallback(async () => {
-    const sc = SCENARIOS.find((s) => s.id === scenarioId);
+    const sc = SCENARIOS.find((s) => s.id === effectiveScenarioId);
     if (!sc || busyRef.current !== "idle") return;
     setBusyBoth("scenario");
     cancelScenarioRef.current = false;
@@ -305,7 +397,7 @@ function Transmitter() {
     const speed = times.length ? ` Phone speech-to-text: median ${times[Math.floor(times.length / 2)]} ms, slowest ${times[times.length - 1]} ms.` : "";
     setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.${speed}`);
     setBusyBoth("idle");
-  }, [scenarioId, realTime, runStep]);
+  }, [effectiveScenarioId, realTime, runStep]);
 
   /** Sends one step on its own, from wherever the unit is now, and leaves any question open. */
   const sendOneStep = useCallback(
@@ -360,23 +452,23 @@ function Transmitter() {
       const base = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic" as const, startedAt: recordStartRef.current, endedAt };
       if (phoneStt) {
         setStatus("Transcribing on the phone…");
-        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(area) : undefined, language });
+        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
         if (!heard.text) {
           setStatus("The phone heard nothing. Try again.");
           return;
         }
         setStatus("Sending…");
-        await handleUtterance({ ...base, text: heard.text }, { area, language, quiet: !speakReplies, phoneMs: heard.ms });
+        await handleUtterance({ ...base, text: heard.text }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
       } else {
         setStatus("Sending…");
-        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area, language, quiet: !speakReplies });
+        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language, quiet: !speakReplies });
       }
     } catch (e) {
       setStatus(e instanceof Error ? `Recording failed: ${e.message}` : "Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, area, language, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
+  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -446,6 +538,10 @@ function Transmitter() {
     if (askingId) scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, [askingId]);
 
+  const openMissions = missionList?.missions.filter((m) => m.ended == null) ?? [];
+  // The one picked, or the only one open.
+  const selectedMission = openMissions.find((m) => m.code === pickedMission)?.code ?? (openMissions.length === 1 ? openMissions[0].code : null);
+
   // At most one notice, for the thing that would make the next report fail.
   const notice =
     reach === "unreachable" ? (
@@ -454,6 +550,20 @@ function Transmitter() {
         <Text style={styles.noticeText}>Can’t reach the coordinator ({coordinatorName}). Reports will not go through.</Text>
         <Button label="Setup" kind="quiet" onPress={openSetup} />
       </View>
+    ) : needsJoin ? (
+      <JoinCard
+        missions={openMissions}
+        selected={selectedMission}
+        onSelect={setPickedMission}
+        callsign={callsign}
+        onCallsign={setCallsign}
+        onJoin={() => {
+          if (selectedMission) join(selectedMission, callsign);
+        }}
+        busy={joinBusy}
+        error={joinError}
+        receiverUrl={`${serverUrl.replace(/\/+$/, "")}/receiver`}
+      />
     ) : modelMissing ? (
       <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
         <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
@@ -492,10 +602,22 @@ function Transmitter() {
           </Pressable>
         </View>
 
+        {joinedNow ? (
+          <View style={styles.missionBar}>
+            <Ionicons name="flag" size={16} color={color.ok} />
+            <Text style={[type.footnote, styles.missionName]} numberOfLines={1} accessibilityLabel={`In mission ${joinedNow.name}`}>
+              {joinedNow.name}
+            </Text>
+            <Button label="Leave" kind="quiet" muted onPress={() => leaveMission(`Left ${joinedNow.name}.`)} />
+          </View>
+        ) : reach === "ok" && !missionList?.stored ? (
+          <Text style={[type.footnote, styles.noRecord]}>This coordinator keeps no record, so there are no missions: reports are placed, but no receiver shows them.</Text>
+        ) : null}
+
         {notice}
 
         <View style={styles.talk}>
-          <TalkButton state={busy} blocked={modelMissing ? "Model needed" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <TalkButton state={busy} blocked={modelMissing ? "Model needed" : needsJoin ? "Join first" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
           <View style={styles.readout}>
             <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
               {asking ? "The coordinator needs an answer." : status}
@@ -520,12 +642,12 @@ function Transmitter() {
         />
         {tab === "scenarios" ? (
           <ScenarioCard
-            scenarios={SCENARIOS}
-            scenarioId={scenarioId}
+            scenarios={scenarios}
+            scenarioId={effectiveScenarioId}
             onSelect={setScenarioId}
             results={stepResults}
             running={busy === "scenario"}
-            blocked={modelMissing || (busy !== "idle" && busy !== "scenario")}
+            blocked={modelMissing || needsJoin || (busy !== "idle" && busy !== "scenario")}
             onPlay={playScenario}
             onStop={() => (cancelScenarioRef.current = true)}
             onSendStep={sendOneStep}
@@ -586,6 +708,9 @@ const styles = StyleSheet.create({
   noticeBad: { backgroundColor: color.badWash },
   noticeWarn: { backgroundColor: color.warnWash },
   noticeText: { ...type.footnote, color: color.text, flex: 1, paddingVertical: space.sm },
+  missionBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginTop: space.sm, paddingLeft: space.md, paddingRight: space.xs, minHeight: TOUCH, borderRadius: radius.control, backgroundColor: color.surface },
+  missionName: { flex: 1, color: color.text },
+  noRecord: { marginHorizontal: space.lg, marginTop: space.sm },
   talk: { alignItems: "center", gap: space.sm, paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.lg },
   readout: { alignItems: "center", gap: space.xs, alignSelf: "stretch" },
   status: { ...type.body, textAlign: "center" },

@@ -5,7 +5,7 @@ import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { resolve } from "@/lib/geo/resolver";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
-import { recordReport, type ReportInput } from "@/lib/reports/record";
+import { recordReport, reportContext, type ReportInput } from "@/lib/reports/record";
 import { callsignOf, sessionCode } from "@/lib/reports/types";
 
 export const maxDuration = 30;
@@ -80,11 +80,10 @@ export async function POST(req: Request) {
 
   const audio = form.get("audio");
   const textIn = form.get("text");
-  const lastPosition = parseLastPosition(form.get("lastPosition"));
+  let lastPosition = parseLastPosition(form.get("lastPosition"));
   const clientTs = Number(form.get("clientTs")) || null;
   const areaIn = form.get("area");
-  const area = AREAS[isAreaId(areaIn) ? areaIn : DEFAULT_AREA];
-  const { gazetteer, bias } = AREA_DATA[area.id];
+  let areaId: AreaId = isAreaId(areaIn) ? areaIn : DEFAULT_AREA;
   // Who sent it and where it belongs; reports without a session (the web page) are not saved.
   const session = sessionCode(form.get("session"));
   const callsign = callsignOf(form.get("callsign"));
@@ -92,6 +91,20 @@ export async function POST(req: Request) {
   const seq = Number.isInteger(seqIn) && seqIn > 0 ? seqIn : null;
   // The language the device is set to. It decides the question's language; without it, it is guessed.
   const pinned = pinnedLanguage(form.get("language"));
+  if (session) {
+    // In a mission, the mission sets the area and the log gives the last position, not the phone.
+    try {
+      const c = await reportContext(session, callsign, { area: areaId, lastPosition }, now);
+      if (!c.ok) return NextResponse.json({ error: c.error, ended: c.ended }, { status: c.status });
+      areaId = c.area;
+      lastPosition = c.lastPosition;
+    } catch (err) {
+      console.error("reading the mission failed", err);
+      return NextResponse.json({ error: "Reading the mission failed." }, { status: 500 });
+    }
+  }
+  const area = AREAS[areaId];
+  const { gazetteer, bias } = AREA_DATA[area.id];
   const meta = { callsign, seq, clientTs, area: area.id, lastPosition };
 
   const timings = { stt: 0, extract: 0, resolve: 0, total: 0 };
@@ -122,7 +135,7 @@ export async function POST(req: Request) {
         evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
       };
       const saved = await save(session, { ...meta, transcript: "", language: heard, intent: null, resolution, timings_ms: timings });
-      return NextResponse.json({ transcript: "", language: heard, intent: null, resolution, timings_ms: timings, clientTs, ...saved });
+      return NextResponse.json({ transcript: "", language: heard, intent: null, resolution, timings_ms: timings, clientTs, area: area.id, ...saved });
     }
 
     const e = performance.now();

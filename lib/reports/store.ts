@@ -3,19 +3,26 @@
  * the file without touching the endpoints. Server only.
  *
  * - `file`: one JSON-lines file per session on this computer (default outside Vercel). The demo's
- *   coordinator runs on the Mac, so this is the store the demo uses, online or not.
+ *   coordinator runs on the Mac, so this is the store the demo uses, online or not. A deleted
+ *   mission's file moves to `deleted/` beside them.
  * - `none`: keeps nothing (default on Vercel, where files are neither kept nor shared between
  *   instances). Reports still get their answer; the receiver says the site keeps no record.
  */
-import { appendFile, mkdir, open, stat } from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { LogEntry } from "./types";
+import type { LogEntry, MissionEntry } from "./types";
 
 export interface ReportStore {
   readonly kind: "file" | "none";
   append(entry: LogEntry): Promise<void>;
   /** Entries after the first `after`, and how many there are in all. */
   list(session: string, after?: number): Promise<{ total: number; entries: LogEntry[] }>;
+  /** Starts a new log with its mission line. False if the code is taken. */
+  create(entry: MissionEntry): Promise<boolean>;
+  /** Every session code kept, and every code ever used (deleted ones too), so none is reused. */
+  sessions(): Promise<{ kept: string[]; used: string[] }>;
+  /** Moves a session's log out of the list, into `deleted/`. False if there was none. */
+  remove(session: string): Promise<boolean>;
 }
 
 class NoStore implements ReportStore {
@@ -24,7 +31,18 @@ class NoStore implements ReportStore {
   async list(): Promise<{ total: number; entries: LogEntry[] }> {
     return { total: 0, entries: [] };
   }
+  async create(): Promise<boolean> {
+    return false;
+  }
+  async sessions(): Promise<{ kept: string[]; used: string[] }> {
+    return { kept: [], used: [] };
+  }
+  async remove(): Promise<boolean> {
+    return false;
+  }
 }
+
+const SESSION_FILE = /^([a-z0-9][a-z0-9_-]*)\.jsonl$/;
 
 /**
  * The file is the record; each instance keeps what it has parsed and reads only the bytes added
@@ -48,6 +66,47 @@ export class FileStore implements ReportStore {
     await this.ready;
     // One write per line, opened for appending, so two reports at once cannot interleave.
     await appendFile(this.file(entry.session), `${JSON.stringify(entry)}\n`, "utf8");
+  }
+
+  async create(entry: MissionEntry): Promise<boolean> {
+    this.ready ??= mkdir(this.dir, { recursive: true });
+    await this.ready;
+    try {
+      // "wx" fails if the file exists, so two missions opened at once cannot take the same code.
+      await writeFile(this.file(entry.session), `${JSON.stringify(entry)}\n`, { encoding: "utf8", flag: "wx" });
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+      throw err;
+    }
+  }
+
+  async sessions(): Promise<{ kept: string[]; used: string[] }> {
+    const codes = async (dir: string) => {
+      try {
+        return (await readdir(dir)).map((f) => SESSION_FILE.exec(f)?.[1]).filter((c): c is string => !!c);
+      } catch {
+        return [];
+      }
+    };
+    const kept = await codes(this.dir);
+    // Deleted logs are named <code>.jsonl or <code>~<time>.jsonl; the code is the part before ~.
+    const gone = (await readdir(path.join(this.dir, "deleted")).catch(() => [] as string[])).map((f) => f.split(/[~.]/)[0]);
+    return { kept, used: [...new Set([...kept, ...gone])] };
+  }
+
+  async remove(session: string): Promise<boolean> {
+    const from = this.file(session);
+    const bin = path.join(this.dir, "deleted");
+    await mkdir(bin, { recursive: true });
+    try {
+      await rename(from, path.join(bin, `${session}~${Date.now()}.jsonl`));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw err;
+    }
+    this.cache.delete(session);
+    return true;
   }
 
   async list(session: string, after = 0): Promise<{ total: number; entries: LogEntry[] }> {
@@ -101,6 +160,24 @@ export function getStore(): ReportStore {
   const kind = process.env.REPORT_STORE ?? (process.env.VERCEL ? "none" : "file");
   store = kind === "file" ? new FileStore(path.resolve(process.env.REPORT_STORE_DIR ?? ".data/sessions")) : new NoStore();
   return store;
+}
+
+const queues = new Map<string, Promise<unknown>>();
+
+/**
+ * Runs `fn` after any earlier call for the same session has finished, so a check and the write it
+ * leads to (is the call sign free? was this report saved already?) cannot interleave with another.
+ * One coordinator process; enough for the demo's Mac.
+ */
+export function withSessionLock<T>(session: string, fn: () => Promise<T>): Promise<T> {
+  const prev = queues.get(session) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  queues.set(session, tail);
+  void tail.then(() => {
+    if (queues.get(session) === tail) queues.delete(session);
+  });
+  return run;
 }
 
 /** A short id that sorts by time: base-36 milliseconds plus a random tail. */

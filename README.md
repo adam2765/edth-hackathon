@@ -126,9 +126,13 @@ Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes s
 
 ## Receiver
 
-The shared map for the command post: open `http://localhost:3117/receiver?session=demo` on the computer that runs the coordinator, ideally on a big screen. Every report the transmitter sends shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
+The shared map for the base station: open `http://localhost:3117/receiver` on the computer that runs the coordinator, ideally on a big screen.
 
-The coordinator keeps each session in `.data/sessions/<code>.jsonl` (one line per report or answer, never edited). Delete the file to start a session over. The live site keeps no record yet, so its receiver stays empty [101].
+A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
+
+Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
+
+The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its receiver stays empty [101].
 
 ## Layout
 
@@ -136,11 +140,12 @@ The coordinator keeps each session in `.data/sessions/<code>.jsonl` (one line pe
 transmitter/                               native transmitter app (own package.json and tooling)
 scenarios/, scripts/build-scenarios.mjs    scripted reports and the clip generator
 app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk button, ask-back card, log
-app/receiver/, components/Receiver.tsx     the receiver: shared map, units, feed, replay
+app/receiver/, components/Receiver.tsx     the receiver: shared map, units, feed, replay; MissionPanel.tsx opens missions
 app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs, session
 app/api/answer/route.ts                    POST the choice tapped for a question
-app/api/sessions/[code]/route.ts           GET a session's log for the receiver
-lib/reports/                               the session log: entry types, store, position rule, foldLog
+app/api/sessions/                          list and open missions; [code]: the log, join, end, delete
+app/api/places/route.ts                    GET places by name, to pick a start point
+lib/reports/                               missions and their logs: entry types, store, record, position rule, foldLog
 lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text

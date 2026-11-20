@@ -1,4 +1,5 @@
 import { File } from "expo-file-system";
+import { CoordinatorError } from "./mission";
 import type { AreaId, Lang, Placement, Position, ReportReply, Utterance } from "./types";
 
 export interface SendContext {
@@ -7,7 +8,9 @@ export interface SendContext {
   area: AreaId;
   /** The language the speaker uses; the question comes back in it (decision 106). */
   language: Lang;
-  session: string;
+  /** The mission joined; null when the coordinator keeps no record (then nothing is saved for a receiver). */
+  session: string | null;
+  /** Used only with no mission: in a mission the coordinator keeps each unit's last position itself. */
   lastPosition: Position | null;
 }
 
@@ -35,7 +38,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
   form.append("clientTs", String(u.endedAt));
   // The coordinator saves the report under this session and call sign for the receiver;
   // `seq` with the client time lets it drop a report sent twice.
-  form.append("session", ctx.session);
+  if (ctx.session) form.append("session", ctx.session);
   form.append("callsign", u.callsign);
   form.append("seq", String(u.seq));
   const p = ctx.lastPosition;
@@ -50,7 +53,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
   try {
     const res = await fetch(`${ctx.serverUrl.replace(/\/+$/, "")}/api/report`, { method: "POST", body: form, signal: controller.signal });
     const reply = (await res.json()) as ReportReply;
-    if (!res.ok || reply.error) throw new Error(reply.error ?? `Coordinator answered ${res.status}`);
+    if (!res.ok || reply.error) throw new CoordinatorError(reply.error ?? `Coordinator answered ${res.status}`, res.status, !!reply.ended);
     return { reply, roundTripMs: Date.now() - t0 };
   } finally {
     clearTimeout(timer);

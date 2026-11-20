@@ -28,7 +28,7 @@ Design choices:
 
 It splits three ways: storage and endpoint, receiver map and feed, replay.
 
-**Status, Friday evening:** built [98 to 103]. Open it at `/receiver?session=demo` on the coordinator the phones send to. Every item in scope above is done except the speaker side: the transmitter always sends to session `demo`, and the call sign is typed on its screen. Also done: tapped choices now reach the server, which the plan had missed [100], and the local file store from track E below [101].
+**Status, Friday evening:** built [98 to 103]. Open it at `/receiver` on the coordinator the phones send to. The speaker side followed with missions, below [107 to 114]. Also done: tapped choices now reach the server, which the plan had missed [100], and the local file store from track E below [101].
 
 Still to do:
 
@@ -39,9 +39,9 @@ Still to do:
 
 ## Missions: start, join, check in, end
 
-**Status:** proposed on Friday 20 November, evening; not started. Four choices wait for Alex ([below](#choices-to-confirm)). About a day of work.
+**Status:** built on Friday 20 November, evening, with the four choices as proposed [107 to 114]. Checked with curl, in a desktop browser and in the iPhone simulator; not yet with two phones at once, and rejoining after the app restarts is not tried yet ([architecture.md](architecture.md#what-is-built)).
 
-Today every report goes to session `demo`, the call sign is typed on the phone, and nothing starts or ends a run. To rehearse and to demo, the base station has to open a mission, see who joins, and end it. Every unit also needs a first position, and the app never reads GPS.
+Before this, every report went to session `demo`, the call sign was typed on the phone, and nothing started or ended a run. To rehearse and to demo, the base station has to open a mission, see who joins, and end it. Every unit also needs a first position, and the app never reads GPS.
 
 A mission is what the code already calls a session: one code, one log. The screens say "mission"; the code and the endpoints keep "session", so nothing is renamed.
 
@@ -228,7 +228,7 @@ No QR code for now: scanning needs a camera module, which means rebuilding the a
 
 ### Choices to confirm
 
-Alex to confirm; the proposal is the first option each time.
+Confirmed by Alex on 20 Nov: the first option each time [107].
 
 1. **First position:** a start point set at the base plus a spoken check-in, or a check-in only.
 2. **Last position:** the coordinator keeps it for reports in a mission, or the phone keeps it as today.

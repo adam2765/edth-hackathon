@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   }
   try {
     const r = await recordAnswer(session, report, choice);
-    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+    if (!r.ok) return NextResponse.json({ error: r.error, ended: r.ended }, { status: r.status });
     return NextResponse.json({ answer_id: r.entry.id });
   } catch (err) {
     console.error("saving the answer failed", err);

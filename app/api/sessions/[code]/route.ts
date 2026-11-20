@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { deleteMission } from "@/lib/reports/record";
 import { getStore } from "@/lib/reports/store";
 import { sessionCode, type SessionLogReply } from "@/lib/reports/types";
 
@@ -20,5 +21,19 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/sessions/[co
   } catch (err) {
     console.error("reading the session log failed", err);
     return NextResponse.json({ error: "Reading the log failed." }, { status: 500 });
+  }
+}
+
+/** Deletes an ended mission: `DELETE /api/sessions/<code>`. The file moves to `deleted/`; an open mission gets 409. */
+export async function DELETE(_req: NextRequest, ctx: RouteContext<"/api/sessions/[code]">) {
+  const session = sessionCode((await ctx.params).code);
+  if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
+  try {
+    const r = await deleteMission(session);
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+    return NextResponse.json({ deleted: session });
+  } catch (err) {
+    console.error("deleting a mission failed", err);
+    return NextResponse.json({ error: "Deleting the mission failed." }, { status: 500 });
   }
 }
