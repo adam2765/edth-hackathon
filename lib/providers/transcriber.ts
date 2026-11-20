@@ -1,8 +1,10 @@
 /**
  * Speech-to-text seam. Mistral, with MISTRAL_API_KEY.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
- * A local model can be added later behind the same interface.
+ * A local model can be added later behind the same interface; until then PROVIDER_MODE=local takes text only.
  */
+import { providerMode } from "./mode";
+
 export interface TranscribeResult {
   text: string;
   /** ISO 639-1 if the provider reports it */
@@ -53,8 +55,18 @@ class MistralTranscriber implements Transcriber {
 
 let cached: Transcriber | null = null;
 
+/** Thrown in local mode when audio arrives: there is no speech-to-text on this computer yet. */
+export class NoLocalTranscriberError extends Error {
+  constructor() {
+    super("PROVIDER_MODE=local has no speech-to-text on this computer yet");
+    this.name = "NoLocalTranscriberError";
+  }
+}
+
 export function getTranscriber(): Transcriber {
   if (cached) return cached;
+  // Local mode never sends audio to Mistral, even with a key set.
+  if (providerMode() === "local") throw new NoLocalTranscriberError();
   if (process.env.MISTRAL_API_KEY) cached = new MistralTranscriber(process.env.MISTRAL_API_KEY);
   else if (process.env.GRADIUM_API_KEY) throw new Error("GRADIUM_API_KEY is set but the Gradium transcriber is not built in stage 1");
   else throw new Error("No speech-to-text key: set MISTRAL_API_KEY");

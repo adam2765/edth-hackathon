@@ -1,16 +1,23 @@
 /**
  * Intent extraction seam. The model reads the transcript and fills the intent schema.
  * It never produces coordinates; the resolver does that from the gazetteer.
- * Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
+ * PROVIDER_MODE=local: a model on this computer through Ollama, with the same prompt and schema.
+ * Otherwise Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
  */
 import type { Category, Direction, Intent, Relation } from "../geo/types";
+import { ollamaUrl, providerMode } from "./mode";
 
 export interface ExtractOptions {
   /** Language reported by speech-to-text, if any. */
   languageHint?: string | null;
   /** Where the speakers are, e.g. "central Kyiv, Ukraine". Context only; never used for coordinates. */
   place?: string;
+  /** Overrides the extractor's own time limit, for example while a local model loads. */
+  timeoutMs?: number;
 }
+
+/** Local extraction model (decision 84): as accurate as the 8B on the scenarios, and about 2 s instead of 5. */
+export const LOCAL_EXTRACT_MODEL = "ministral-3:3b";
 
 export interface IntentExtractor {
   name: string;
@@ -123,6 +130,7 @@ class ChatJsonExtractor implements IntentExtractor {
     private model: string,
     private provider: string,
     private useJsonSchema: boolean,
+    private timeoutMs = 10_000,
   ) {
     this.name = `${provider}:${model}`;
   }
@@ -144,7 +152,7 @@ class ChatJsonExtractor implements IntentExtractor {
         ],
         response_format,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
     });
     if (!res.ok) throw new Error(`${this.provider} extract ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
@@ -164,7 +172,11 @@ let cached: IntentExtractor | null = null;
 
 export function getExtractor(): IntentExtractor {
   if (cached) return cached;
-  if (process.env.MISTRAL_API_KEY) {
+  if (providerMode() === "local") {
+    // Ollama ignores the key. 25 s instead of 10: the first report after a start or an area change
+    // is slower, and the route allows 30 s.
+    cached = new ChatJsonExtractor(`${ollamaUrl()}/v1`, "ollama", process.env.LOCAL_EXTRACT_MODEL || LOCAL_EXTRACT_MODEL, "ollama", true, 25_000);
+  } else if (process.env.MISTRAL_API_KEY) {
     cached = new ChatJsonExtractor("https://api.mistral.ai/v1", process.env.MISTRAL_API_KEY, process.env.MISTRAL_EXTRACT_MODEL || "mistral-small-latest", "mistral", true);
   } else if (process.env.FEATHERLESS_API_KEY) {
     cached = new ChatJsonExtractor(
@@ -176,4 +188,21 @@ export function getExtractor(): IntentExtractor {
     );
   } else throw new Error("No extraction key: set MISTRAL_API_KEY (or FEATHERLESS_API_KEY)");
   return cached;
+}
+
+/**
+ * Loads the local model and each place's prompt before the first report, so no speaker waits for that.
+ * Measured on the MacBook: 9 s to load the 3B model, 6 s for the first report in a new area.
+ */
+export async function warmUpExtractor(places: string[]): Promise<void> {
+  const extractor = getExtractor();
+  for (const place of places) {
+    const t0 = performance.now();
+    try {
+      await extractor.extract("I'm at the town hall.", { place, timeoutMs: 120_000 });
+      console.log(`[extractor] ${extractor.name} ready for ${place} in ${Math.round(performance.now() - t0)} ms`);
+    } catch (err) {
+      console.warn(`[extractor] ${extractor.name} warm-up for ${place} failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 }

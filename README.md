@@ -89,6 +89,29 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 
 Environment: `MISTRAL_API_KEY` (required for speech-to-text). Extraction falls back to `FEATHERLESS_API_KEY` behind the same interface if it is absent. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
 
+### Offline: models on this computer
+
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter's phone modes, or typed. Audio gets a clear error.
+
+```bash
+brew install ollama                                   # 0.40 or newer; 0.8 cannot run Ministral 3
+OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 ollama serve   # its own terminal; no cloud models, keep the model loaded
+ollama pull ministral-3:3b                            # 3 GB, once
+PROVIDER_MODE=local npm run dev -- -p 3117
+```
+
+`LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server loads the model and each area's prompt in the background, which takes about 10 s.
+
+Measured on 20 Nov on the MacBook (M1 Pro, 32 GB), the 9 scenario texts through extraction and the resolver:
+
+| Extraction | As expected | Median | Slowest |
+|---|---|---|---|
+| Mistral Small (hosted) | 9 of 9 | 0.8 s | 1.8 s |
+| Ministral 3 8B (local) | 8 of 9 | 5.1 s | 16 s |
+| Ministral 3 3B (local, default) | 8 of 9 | 2.0 s | 6.3 s |
+
+Both local models miss "I'm at the Golden Gate." (8B leaves the name out, 3B translates it and calls it a bridge); the app asks back or says it could not place it, never a wrong pin. The time is spent writing the answer (75 to 95 tokens), not reading the prompt.
+
 ## Transmitter app and scenarios
 
 `transmitter/` is a small native app (Expo) that stands in for a field radio. It sends spoken reports to the same `/api/report` and shows and speaks the answer. A report comes from the microphone (hold to talk) or from a prepared clip, and both go down the same path, so the whole pipeline can be driven silently in a simulator. See [transmitter/README.md](transmitter/README.md) for how to build and run it.

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTranscriber } from "@/lib/providers/transcriber";
+import { NoLocalTranscriberError, getTranscriber } from "@/lib/providers/transcriber";
 import { getExtractor } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { resolve } from "@/lib/geo/resolver";
@@ -115,8 +115,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ transcript, language: sttLanguage ?? intent.language, intent, resolution, timings_ms: timings, clientTs, area: area.id });
   } catch (err) {
-    console.error("report failed", err);
     timings.total = Math.round(performance.now() - t0);
+    if (err instanceof NoLocalTranscriberError) {
+      const error = "This coordinator runs offline and cannot turn speech into text yet. Use speech-to-text on the phone, or type the report.";
+      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 501 });
+    }
+    console.error("report failed", err);
     return NextResponse.json({ error: "Processing failed. Try again or type the report.", transcript, timings_ms: timings }, { status: 502 });
   }
 }
