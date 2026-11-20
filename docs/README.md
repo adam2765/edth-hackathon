@@ -19,7 +19,7 @@ New to the project? Read these in order:
 | [overview.md](overview.md) | The challenge, judged items, our approach, timeline | Scope or schedule changes |
 | [architecture.md](architecture.md) | The parts, where each step runs, what is built, the resolver in brief | A part is built, moved or deployed |
 | [contracts.md](contracts.md) | Report endpoint, intent, resolution, utterance, scenario and gazetteer files, provider interfaces | A contract changes, on purpose, with a decision line |
-| [plan.md](plan.md) | Receiver, local mode, transmitter, evaluation, demo | Work starts, finishes or changes scope |
+| [plan.md](plan.md) | Receiver, missions (start, join, check in, end), local mode, transmitter, evaluation, demo | Work starts, finishes or changes scope |
 | [gazetteer.md](gazetteer.md) | How place data is built, same-name streets, adding an area, scaling | The build or the data changes |
 | [open-questions.md](open-questions.md) | Questions for the team and for Lysk | A question is asked, answered or dropped |
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |

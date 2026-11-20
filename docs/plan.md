@@ -35,7 +35,211 @@ Still to do:
 - **Run it with phones.** Two or three phones sending to the Mac, the receiver on a second screen or projector. So far it is checked only with typed reports.
 - **Hosted store.** The live site keeps no record, so its receiver stays empty. Supabase in its Paris region is the brief's suggestion; it needs a new project (Alex's call).
 - **Remove the phone web page** at `/` and make the receiver the home page, once Alex says so [98]. That also drops the Ukrainian Piper voice, which only the web page uses; the native app speaks with the phone's own voice.
-- **Session by link**, if more than one demo runs at once.
+- **Starting, joining and ending a session:** see [Missions](#missions-start-join-check-in-end) below.
+
+## Missions: start, join, check in, end
+
+**Status:** proposed on Friday 20 November, evening; not started. Four choices wait for Alex ([below](#choices-to-confirm)). About a day of work.
+
+Today every report goes to session `demo`, the call sign is typed on the phone, and nothing starts or ends a run. To rehearse and to demo, the base station has to open a mission, see who joins, and end it. Every unit also needs a first position, and the app never reads GPS.
+
+A mission is what the code already calls a session: one code, one log. The screens say "mission"; the code and the endpoints keep "session", so nothing is renamed.
+
+| Term | Meaning |
+|---|---|
+| Base station | The computer that runs the coordinator, with the receiver on its screen or a projector |
+| Mission | A code, an area, a name, an optional start point, and whether it is open or ended. One log. |
+| Start point | A place from the gazetteer where units are assumed to be when they join. The operator picks it. |
+| Check-in | A unit's first spoken report that names a place. It replaces the start point. |
+
+### The flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Op as Operator at the base
+    participant R as Receiver page
+    participant C as Coordinator (the Mac)
+    actor A as Phone, ALPHA 1
+
+    Op->>R: New mission: area, name, start point (optional)
+    R->>C: POST /api/sessions
+    C-->>R: code, for example "vincennes-1"
+    Note over C: Log: mission entry
+
+    A->>C: GET /api/sessions (open missions)
+    C-->>A: vincennes-1 (the only one, so it is picked)
+    A->>C: POST /api/sessions/vincennes-1/join, call sign ALPHA 1, device id
+    C-->>A: joined, start point Château de Vincennes (≈ 300 m)
+    Note over C: Log: join entry
+    R->>C: GET /api/sessions/vincennes-1 (every second)
+    C-->>R: ALPHA 1 at the start point, shown with ≈
+
+    A->>A: Prompt: "Check in: say where you are"
+    A->>C: POST /api/report, session vincennes-1, "I'm at Bérault metro"
+    Note over C: Last position comes from the log, not the phone
+    C-->>A: placed at Bérault ±30 m
+    Note over C: Log: report entry
+    C-->>R: ALPHA 1 at Bérault
+
+    Note over A,C: Reports, questions and answers as today
+
+    Op->>R: End mission
+    R->>C: POST /api/sessions/vincennes-1/end
+    Note over C: Log: end entry. No more reports.
+    A->>C: POST /api/report
+    C-->>A: 409 "This mission has ended"
+    R->>R: Switches to the replay of vincennes-1
+```
+
+### A mission's life
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Open: operator opens a new mission
+    Open --> Ended: operator ends it
+    Ended --> [*]: deleted, only on purpose
+    note right of Ended
+        Kept for replay and listed under past missions.
+        "Reset" means end this one and open a new one.
+    end note
+```
+
+- **Open:** phones can join and send reports. Several missions can be open at once, for example one per area.
+- **Ended:** the log is closed. A report to it gets "this mission has ended", and the phone offers the open missions. The receiver can still replay it.
+- **Reset** is ending a mission and opening a new one. The old log stays, because the log is never edited [99]. Deleting a mission is a separate button with a confirmation, for rehearsals.
+
+### A unit's life
+
+```mermaid
+stateDiagram-v2
+    state "At the start point (≈)" as AtStart
+    state "Not placed" as NotPlaced
+    state "Placed" as Placed
+    state "Estimate (≈)" as Estimate
+    state "Awaiting answer" as Asking
+    state "Silent (faded)" as Silent
+
+    [*] --> AtStart: joins, mission has a start point
+    [*] --> NotPlaced: joins, no start point
+    AtStart --> Placed: check-in names a place
+    NotPlaced --> Placed: check-in names a place
+    Placed --> Estimate: moves towards a place, or by distance and direction
+    Estimate --> Placed: names a place again
+    Placed --> Asking: report could mean several places
+    Estimate --> Asking: report could mean several places
+    Asking --> Placed: taps a choice
+    Placed --> Silent: nothing for 3 minutes
+    Silent --> Placed: reports again
+    Placed --> [*]: mission ends
+```
+
+"None of these" closes the question and leaves the unit where it was. Any unit fades after 3 minutes of silence, and every unit leaves when the mission ends; the diagram shows those from "Placed" only.
+
+A unit with no start point can still report. The resolver already copes with no last position: a named place is searched from the area's centre, "the church" looks within 1.5 km of the centre, and a movement asks "where did you start?" ([resolver rules](../README.md#resolver-rules)). It asks more questions, which is the safe side.
+
+### Where the first position comes from
+
+| Way | Use it? | Why |
+|---|---|---|
+| GPS on the phone | No | The app never reads GPS (a project rule): jamming must not matter. |
+| A start point the base sets | Yes, optional | Missions start somewhere known: the base, a meeting point, a vehicle drop-off. The operator picks a place from the gazetteer by name, or by clicking a place on the map, so no coordinates are typed and the model makes none. Every unit that joins starts there as an estimate: ≈, a circle of 300 m or the place's own size if larger. Because it is an estimate, it does not settle a choice between nearby places on its own [47]. |
+| A spoken check-in | Yes, always | The phone asks for one on joining. The first report that names a place replaces the start point. |
+| The operator drags a unit on the receiver | Later | Useful for corrections, but it makes the receiver more than view-only. |
+
+### Who keeps the last position
+
+Today the phone keeps each unit's last position and sends it with every report. With missions, the coordinator already has it in the log (`foldLog`). Proposed: for a report in a mission, the resolver uses the position from the log and ignores the one the phone sent. Reports with no mission keep using the phone's.
+
+```mermaid
+flowchart LR
+    R[Report arrives] --> M{In a mission?}
+    M -- yes --> L["Last position from the log:<br/>start point, check-in, or the latest fix"]
+    M -- no --> P["lastPosition the phone sent<br/>(as today)"]
+    L --> X[Resolver]
+    P --> X
+```
+
+Why:
+
+- A start point set at the base reaches the resolver without the phone having to learn it.
+- A phone that restarts, or a second phone that takes over a call sign, does not lose the position.
+- The receiver and the resolver always agree on where a unit is.
+
+This changes the contract with the transmitter: `lastPosition` becomes a fallback. It gets a decision line when it is built.
+
+### What the log gains
+
+Three new kinds of entry, in the same append-only log as reports and answers, so a replay shows units joining and the mission ending with no extra code:
+
+| Entry | Holds |
+|---|---|
+| `mission` | The first line: area, name, start point (a gazetteer id), when it was opened |
+| `join` | Call sign, device id, the position given on joining (the start point, or none) |
+| `end` | When the mission was ended |
+
+`foldLog` handles them: a join adds the unit at the start point; an end closes the mission.
+
+### Rules
+
+- **One device per call sign.** A second device asking for a call sign already in use gets 409 and picks another. The same device joining again gets its unit back.
+- **Only open missions take reports.** A report to an ended mission gets 409; to an unknown code, 404. Reports with no session still work, as the web page sends them.
+- **The phone remembers its mission** and the coordinator's address, and rejoins on start if the mission is still open.
+- **No logins.** Anyone on the base station's network can end a mission. Fine for the demo; listed as a known gap.
+
+### Screens
+
+Receiver:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ ● Voice-to-Map  Mission: Vincennes walk  code vincennes-1   [End mission] [▾]  │
+├──────────────────────────────────────────────────────┬─────────────────────────┤
+│                                                      │ UNITS 3                 │
+│                    map                               │ ● ALPHA 1  Bérault ±30 m│
+│                                                      │ ● BRAVO 2  ≈ start point│
+│                                                      │ ● CHARLIE 3 not placed  │
+│                                                      ├─────────────────────────┤
+│ [Live] [▶] ───────────●────────── 19:42:10  1× 10× 30│ REPORTS                 │
+└──────────────────────────────────────────────────────┴─────────────────────────┘
+  [▾] opens: New mission (area, name, start point) · open missions · past missions
+```
+
+Transmitter, before the talk button can be used:
+
+```
+Coordinator: This Mac ●            (as today)
+Mission:     Vincennes walk ▾      (open missions on that coordinator; picked if only one)
+Call sign:   ALPHA 1               [Join]
+→ joined: "Check in: say where you are"
+```
+
+No QR code for now: scanning needs a camera module, which means rebuilding the app on every phone. A list of open missions needs only JavaScript.
+
+### Work
+
+| Piece | Size |
+|---|---|
+| Coordinator: mission, join and end entries; open, list, join and end endpoints; the resolver takes the last position from the log; ended missions refuse reports; tests | 3 h |
+| Receiver: new mission with area, name and start point; end mission; open and past missions; units that joined but are not placed | 2 h |
+| Transmitter: join step, check-in prompt, "mission ended" notice; plain JavaScript, no rebuild | 2 h |
+| Docs, contracts and decision lines | 0.5 h |
+
+### Choices to confirm
+
+Alex to confirm; the proposal is the first option each time.
+
+1. **First position:** a start point set at the base plus a spoken check-in, or a check-in only.
+2. **Last position:** the coordinator keeps it for reports in a mission, or the phone keeps it as today.
+3. **Reset:** end the mission and keep it for replay, or wipe it.
+4. **Joining:** pick from a list of open missions, or scan a QR code.
+
+### Not covered
+
+- **A shared radio channel.** If Lysk's audio is one radio channel heard at the base (open question 1 for Lysk), devices never join. Call signs then come from the words ("Alpha 2, I'm south of the church"), and this flow applies only to our own demo phones.
+- **More than one base station** sharing a mission.
+- **Logins and roles.**
 
 ## Local mode
 
