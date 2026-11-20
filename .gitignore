@@ -45,5 +45,8 @@ next-env.d.ts
 /public/ort/
 /public/tts/
 
+# local copy of the voice model (see scripts/prepare-tts.mjs)
+/models/
+
 # local tooling
 .claude/settings.local.json
