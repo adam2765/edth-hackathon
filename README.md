@@ -14,8 +14,8 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
                          ◄─ { transcript, language, intent, resolution, timings_ms }
 ```
 
-- The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, language.
-- `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`.
+- The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, a stated distance in metres, a compass direction of travel, language.
+- `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`, or from the last position moved by a distance and compass direction the speaker stated. The phone's GPS is never used.
 - The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`. Ukrainian questions use an on-device voice instead when it is loaded (`lib/tts/`, test page at `/tts-lab`).
 
 ### Resolver rules
@@ -30,10 +30,22 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
+| No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
+| The same with no last position | `unresolved`: "I don't know where you started", asks for a place |
+| No place, and only a distance or only a direction ("heading north") | `unresolved`: asks for a distance and a compass direction, or a landmark |
 
-Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
+Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations (eight points) offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
+
+A stated distance replaces those defaults. "200 metres south of X" pins 200 m out from X's edge, with a circle of 0.4 × the distance (50 m at least): a compass word is one of eight, so it is good to ±22.5°. "200 metres from X", with no side given, keeps the pin on X and widens the circle to X's extent plus 1.25 × the distance. The model only copies a distance that was said; "five minutes north" has none.
 
 Movement ("moving towards X", "I moved towards X") gives a direction, not a distance. The marker moves to the middle of the leg from the last position to X, its circle spans the whole leg, an arrow points at X, and the time is shown at the marker with a ≈. The next report can still use that estimate, but "nearest wins" must hold even if the estimate is off by its full radius.
+
+Movement with a distance is dead reckoning from the last position, and is also shown with a ≈:
+
+- "Moved 300 metres north": 300 m on that bearing. The circle is the last position's own circle plus 0.4 × the distance, so it grows with every leg until a report names a place again.
+- "Moved 200 metres towards X": 200 m along the leg, never past X. The circle is the last position's circle plus a quarter of the distance (50 m at least).
+- "Moved 300 metres east on rue X": the reckoned point is moved onto that street.
+- A place that cannot be found does not stop a move that states its distance and direction; the log says the place was ignored.
 
 ## Demo script
 

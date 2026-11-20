@@ -70,9 +70,11 @@ export function bboxHalfDiagonalM(b: [number, number, number, number]): number {
   return distanceM({ lat: b[1], lon: b[0] }, { lat: b[3], lon: b[2] }) / 2;
 }
 
-/** Half the extent of a box along a compass bearing (N/S uses height, E/W uses width), metres. */
+/** From the centre of a box to its edge along a compass bearing, metres (N/S is half the height, E/W half the width). */
 export function bboxHalfExtentM(b: [number, number, number, number], bearing: number): number {
   const h = distanceM({ lat: b[1], lon: b[0] }, { lat: b[3], lon: b[0] }) / 2;
   const w = distanceM({ lat: b[1], lon: b[0] }, { lat: b[1], lon: b[2] }) / 2;
-  return bearing === 0 || bearing === 180 ? h : w;
+  const c = Math.abs(Math.cos(bearing * toRad));
+  const s = Math.abs(Math.sin(bearing * toRad));
+  return Math.min(c > 1e-9 ? h / c : Infinity, s > 1e-9 ? w / s : Infinity);
 }

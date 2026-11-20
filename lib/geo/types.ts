@@ -21,8 +21,15 @@ export type Relation =
   | "south_of"
   | "east_of"
   | "west_of"
+  | "north_east_of"
+  | "south_east_of"
+  | "south_west_of"
+  | "north_west_of"
   | "towards"
   | "between";
+
+/** Compass direction of travel, eight points. */
+export type Direction = "north" | "north_east" | "east" | "south_east" | "south" | "south_west" | "west" | "north_west";
 
 export interface GazetteerFeature {
   id: string;
@@ -51,6 +58,13 @@ export interface Intent {
   landmark_name_lemma?: string | null;
   landmark_category: Category | null;
   relation: Relation | null;
+  /**
+   * A distance the speaker stated, in metres. From the landmark when there is one ("200 metres
+   * south of the church"), otherwise the distance moved ("moved 300 metres north").
+   */
+  distance_m?: number | null;
+  /** The compass direction the speaker moved in, when said ("moved 300 metres north"). */
+  direction?: Direction | null;
   language: "en" | "fr" | "uk";
   confidence: number;
 }
@@ -62,6 +76,8 @@ export interface LastPosition {
   ts: number;
   /** Set when this position is an estimate from a movement report: how far off it may be, metres. */
   uncertainty_m?: number;
+  /** The circle shown around this position, metres. A position worked out from it starts that unsure. */
+  radius_m?: number;
 }
 
 export interface HeadingTo {
@@ -80,6 +96,8 @@ export interface Placement {
   pin?: { lat: number; lon: number };
   radius_m?: number;
   heading_to?: HeadingTo;
+  /** Set when the pin is worked out from the last position and a stated movement, not from a place. */
+  estimated?: boolean;
 }
 
 export interface Candidate {
@@ -100,6 +118,8 @@ export interface Resolution {
   pin?: { lat: number; lon: number };
   radius_m?: number;
   heading_to?: HeadingTo;
+  /** As in Placement: the pin is an estimate from the last position. */
+  estimated?: boolean;
   candidates: Candidate[];
   /** Ask-back question (ambiguous) or prompt (unresolved). */
   question?: string;

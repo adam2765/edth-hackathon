@@ -48,7 +48,7 @@ type ApiResponse = {
   timings_ms: Timings;
   error?: string;
 };
-/** `estimated`: placed from a movement report (middle of the leg), not from a stated position. */
+/** `estimated`: worked out from the last position and a movement report, not from a stated position. */
 type Position = { lat: number; lon: number; ts: number; radius_m: number; label: string; estimated?: boolean };
 type Arrow = { from?: { lat: number; lon: number }; to: HeadingTo };
 type Report = {
@@ -404,13 +404,13 @@ export default function VoiceMapApp() {
           : `Heading to ${pl.heading_to.name} (no starting position yet)`;
       }
       if (pl.pin) {
-        const next: Position = { lat: pl.pin.lat, lon: pl.pin.lon, ts: Date.now(), radius_m: pl.radius_m ?? 80, label };
+        const next: Position = { lat: pl.pin.lat, lon: pl.pin.lon, ts: Date.now(), radius_m: pl.radius_m ?? 80, label, ...(pl.estimated ? { estimated: true } : {}) };
         if (prev) setTrail((t) => [...t, prev].slice(-30));
         setPosition(next);
         positionRef.current = next;
         setArrow(null);
         moveCamera((m) => m.easeTo({ center: [next.lon, next.lat], zoom: Math.max(m.getZoom(), 16), duration: 700 }));
-        return `Placed at ${label} (±${next.radius_m} m)`;
+        return pl.estimated ? `Estimated: ${label} (±${next.radius_m} m)` : `Placed at ${label} (±${next.radius_m} m)`;
       }
       return "Nothing to place";
     },
@@ -430,8 +430,11 @@ export default function VoiceMapApp() {
       let outcome = "";
       if (res.status === "resolved") {
         const target = res.candidates.find((c) => c.id === res.evidence.feature_id);
-        const label = target?.name ?? "position";
-        outcome = applyPlacement({ pin: res.pin, radius_m: res.radius_m, heading_to: res.heading_to }, label);
+        const i = data.intent;
+        // A move with no place named: say what it was worked out from.
+        const moved = res.estimated && !target && i?.distance_m ? `${i.distance_m} m ${(i.direction ?? i.relation?.replace(/_of$/, "") ?? "").replace("_", "-")} of the last position` : null;
+        const label = target?.name ?? moved ?? "position";
+        outcome = applyPlacement({ pin: res.pin, radius_m: res.radius_m, heading_to: res.heading_to, estimated: res.estimated }, label);
         setPending(null);
         setStatus(outcome);
       } else if (res.status === "ambiguous") {
@@ -506,7 +509,8 @@ export default function VoiceMapApp() {
       if (payload.text) fd.append("text", payload.text);
       const p = positionRef.current;
       // An estimate from a movement report carries its uncertainty, so "nearest wins" stays honest.
-      if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts, ...(p.estimated ? { uncertainty_m: p.radius_m } : {}) }));
+      // The circle goes too: a position reckoned from this one starts out that unsure.
+      if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts, radius_m: p.radius_m, ...(p.estimated ? { uncertainty_m: p.radius_m } : {}) }));
       fd.append("clientTs", String(Date.now()));
       fd.append("area", areaStore.get());
       const t0 = performance.now();

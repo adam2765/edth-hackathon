@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "../lib/geo/resolver";
 import { biasTerms, loadGazetteer, nameScore, searchByName } from "../lib/geo/gazetteer";
-import { distanceM } from "../lib/geo/geo";
+import { bearingDeg, distanceM, nearestPointOnLines } from "../lib/geo/geo";
+import { sanitizeIntent } from "../lib/providers/extractor";
 import type { Intent, LastPosition } from "../lib/geo/types";
 
 const gaz = loadGazetteer();
@@ -195,6 +196,131 @@ describe("resolver", () => {
     expect(r.pin!.lat).toBeGreaterThan(BERAULT.lat);
     expect(distanceM(r.pin!, BERAULT)).toBeGreaterThan(95);
     expect(r.radius_m).toBe(100);
+  });
+});
+
+describe("stated distances and compass directions", () => {
+  const FONTENAY = byName("Rue de Fontenay", "street");
+  /** A stated position at the château metro, drawn with a 30 m circle. */
+  const start: LastPosition = { ...at(CHATEAU_METRO, 1), radius_m: 30 };
+  const move = (p: Partial<Intent>): Intent => intent({ kind: "movement", relation: null, ...p });
+  const run = (i: Intent, transcript: string, lastPosition?: LastPosition) => resolve({ intent: i, transcript, lastPosition, now: NOW, gazetteer: gaz });
+
+  it("a stated distance replaces the fixed 100 m offset, and the circle grows with it", () => {
+    const r = run(intent({ landmark_name: "Bérault", relation: "north_of", distance_m: 300 }), "300 metres north of Bérault");
+    expect(r.status).toBe("resolved");
+    expect(r.pin!.lat).toBeGreaterThan(BERAULT.lat);
+    expect(Math.abs(distanceM(r.pin!, BERAULT) - 300)).toBeLessThan(3);
+    expect(r.radius_m).toBe(120);
+    // a place and a distance from it: stated, not an estimate from the last position
+    expect(r.estimated).toBeUndefined();
+  });
+
+  it("north-east of a place is offset on 45°", () => {
+    const r = run(intent({ landmark_name: "Bérault", relation: "north_east_of" }), "north-east of Bérault");
+    expect(r.status).toBe("resolved");
+    expect(Math.abs(bearingDeg(BERAULT, r.pin!) - 45)).toBeLessThan(2);
+    expect(Math.abs(distanceM(r.pin!, BERAULT) - 100)).toBeLessThan(3);
+  });
+
+  it("a distance from a place with no side given keeps the pin and widens the circle to take in the ring", () => {
+    const r = run(intent({ landmark_name: "Bérault", relation: "near", distance_m: 200 }), "about 200 metres from Bérault");
+    expect(r.status).toBe("resolved");
+    expect(distanceM(r.pin!, BERAULT)).toBeLessThan(1);
+    // 200 m and a quarter more, plus the size of Place Bérault, the square of the same name folded in.
+    expect(r.radius_m).toBeGreaterThanOrEqual(250);
+    expect(r.radius_m).toBeLessThanOrEqual(300);
+  });
+
+  it("a distance and a direction with no place are reckoned from the last position", () => {
+    const r = run(move({ distance_m: 300, direction: "north" }), "Moved 300 metres north", start);
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.rule).toBe("dead_reckoned");
+    expect(r.estimated).toBe(true);
+    expect(r.candidates).toEqual([]);
+    expect(Math.abs(distanceM(r.pin!, start) - 300)).toBeLessThan(2);
+    expect(bearingDeg(start, r.pin!)).toBeLessThan(1);
+    // the start's own 30 m plus 0.4 × 300 m for the move
+    expect(r.radius_m).toBe(150);
+  });
+
+  it("each reckoned leg adds to the circle", () => {
+    const first = run(move({ distance_m: 300, direction: "north" }), "Moved 300 metres north", start);
+    const from: LastPosition = { ...first.pin!, ts: NOW, radius_m: first.radius_m, uncertainty_m: first.radius_m };
+    const second = run(move({ distance_m: 200, direction: "east" }), "Moved 200 metres east", from);
+    expect(second.evidence.rule).toBe("dead_reckoned");
+    expect(Math.abs(bearingDeg(from, second.pin!) - 90)).toBeLessThan(1);
+    expect(second.radius_m).toBe(150 + 80);
+  });
+
+  it("«300 metres north of my last position» is the same move", () => {
+    const said = run(intent({ relation: "north_of", distance_m: 300 }), "I'm 300 metres north of my last position", start);
+    const moved = run(move({ distance_m: 300, direction: "north" }), "Moved 300 metres north", start);
+    expect(said.evidence.rule).toBe("dead_reckoned");
+    expect(said.pin).toEqual(moved.pin);
+  });
+
+  it("a move with no last position asks for a place instead of guessing a start", () => {
+    const r = run(move({ distance_m: 300, direction: "north" }), "Moved 300 metres north");
+    expect(r.status).toBe("unresolved");
+    expect(r.pin).toBeUndefined();
+    expect(r.evidence.rule).toBe("dead_reckoning_no_start");
+    expect(r.question).toMatch(/where you started/);
+    const uk = run(move({ distance_m: 300, direction: "north", language: "uk" }), "Пройшов триста метрів на північ");
+    expect(uk.question).toMatch(/звідки/);
+  });
+
+  it("a direction with no distance, or a distance with no direction, asks for both", () => {
+    for (const i of [move({ direction: "north" }), move({ distance_m: 300 })]) {
+      const r = run(i, "Heading north", start);
+      expect(r.status).toBe("unresolved");
+      expect(r.evidence.rule).toBe("move_incomplete");
+      expect(r.question).toMatch(/distance and a compass direction/);
+    }
+  });
+
+  it("a distance towards a place is that far along the leg, and never past the place", () => {
+    const r = run(move({ landmark_name: "Bérault", relation: "towards", distance_m: 200 }), "Moved 200 metres towards Bérault", start);
+    expect(r.status).toBe("resolved");
+    expect(r.heading_to?.id).toBe(BERAULT.id);
+    expect(r.estimated).toBe(true);
+    expect(Math.abs(distanceM(r.pin!, start) - 200)).toBeLessThan(2);
+    expect(Math.abs(bearingDeg(start, r.pin!) - bearingDeg(start, BERAULT))).toBeLessThan(1);
+    // the start's 30 m plus the 50 m minimum for a move (a quarter of 200 m is exactly that)
+    expect(r.radius_m).toBe(80);
+
+    const far = run(move({ landmark_name: "Bérault", relation: "towards", distance_m: 5000 }), "Moved 5 kilometres towards Bérault", start);
+    expect(distanceM(far.pin!, BERAULT)).toBeLessThan(2);
+  });
+
+  it("a move along a named street lands on that street", () => {
+    expect(FONTENAY).toBeDefined();
+    // A point on rue de Fontenay, which runs east from here and drifts a little south.
+    const onStreet: LastPosition = { lat: 48.84856, lon: 2.43249, ts: NOW - 60_000, radius_m: 40 };
+    const r = run(move({ landmark_name: "rue de Fontenay", relation: "at", distance_m: 300, direction: "east" }), "Moved 300 metres east on rue de Fontenay", onStreet);
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(FONTENAY.id);
+    expect(r.estimated).toBe(true);
+    expect(distanceM(r.pin!, nearestPointOnLines(r.pin!, FONTENAY.lines!))).toBeLessThan(1);
+    expect(r.pin!.lon).toBeGreaterThan(onStreet.lon);
+    expect(Math.abs(distanceM(r.pin!, onStreet) - 300)).toBeLessThan(15);
+    expect(r.radius_m).toBe(40 + 120);
+  });
+
+  it("a place that cannot be found does not stop a move that states its distance and direction", () => {
+    const r = run(move({ landmark_name: "Gare du Nord", distance_m: 300, direction: "north" }), "Moved 300 metres north past Gare du Nord", start);
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.rule).toBe("dead_reckoned");
+    expect(r.evidence.detail).toMatch(/named_none/);
+    // "north of" a place that cannot be found is not a move from the last position: still unresolved
+    const of = run(intent({ landmark_name: "Gare du Nord", relation: "north_of", distance_m: 300 }), "300 metres north of Gare du Nord", start);
+    expect(of.status).toBe("unresolved");
+  });
+
+  it("intent clean-up keeps a sane distance and a compass direction, and drops anything else", () => {
+    expect(sanitizeIntent({ kind: "movement", distance_m: 300.4, direction: "north_east" })).toMatchObject({ distance_m: 300, direction: "north_east" });
+    for (const distance_m of [-5, 0, 1e9, "300", null]) expect(sanitizeIntent({ distance_m }).distance_m).toBeNull();
+    expect(sanitizeIntent({ direction: "left" }).direction).toBeNull();
   });
 });
 

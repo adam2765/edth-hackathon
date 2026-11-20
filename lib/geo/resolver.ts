@@ -1,9 +1,10 @@
 /**
  * Deterministic resolver: intent + last position + gazetteer → pin, or a question.
  * Pure function. The language model never produces coordinates; every coordinate here
- * comes from the gazetteer or from geometry applied to a gazetteer feature.
+ * comes from the gazetteer, from geometry applied to a gazetteer feature, or from the last
+ * position moved by a distance and compass direction the speaker stated.
  */
-import type { Candidate, Category, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
+import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
 import { categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 
@@ -31,13 +32,39 @@ const REL_RADIUS: Record<Relation, number> = {
   south_of: 100,
   east_of: 100,
   west_of: 100,
+  north_east_of: 100,
+  south_east_of: 100,
+  south_west_of: 100,
+  north_west_of: 100,
   towards: 0,
 };
-const COMPASS: Partial<Record<Relation, number>> = { north_of: 0, east_of: 90, south_of: 180, west_of: 270 };
+const COMPASS: Partial<Record<Relation, number>> = {
+  north_of: 0,
+  north_east_of: 45,
+  east_of: 90,
+  south_east_of: 135,
+  south_of: 180,
+  south_west_of: 225,
+  west_of: 270,
+  north_west_of: 315,
+};
+const DIRECTION_DEG: Record<Direction, number> = { north: 0, north_east: 45, east: 90, south_east: 135, south: 180, south_west: 225, west: 270, north_west: 315 };
 const COMPASS_OFFSET_M = 100;
 const MAX_EXTENT_RADIUS_M = 500;
 /** Smallest circle for a position estimated from a movement report. */
 const MOVE_MIN_RADIUS_M = 50;
+/**
+ * A compass word is one of eight, so "north" is anything within 22.5° of north: up to 0.38 of the
+ * distance sideways. The circle for "d metres north" is this share of d.
+ */
+export const COMPASS_SPREAD = 0.4;
+/** A distance said aloud is paced or judged by eye; it is taken as good to a quarter. */
+export const DISTANCE_SLACK = 0.25;
+
+/** Circle for a point a stated distance away on a compass bearing. */
+const compassRadius = (d: number) => Math.max(MOVE_MIN_RADIUS_M, Math.round(COMPASS_SPREAD * d));
+/** How unsure the last position itself is: a position worked out from it starts with that much. */
+const startRadius = (last: LastPosition) => Math.round(last.radius_m ?? last.uncertainty_m ?? 0);
 
 export interface ResolveInput {
   intent: Intent;
@@ -53,9 +80,22 @@ export interface ResolveInput {
 type Lang = "en" | "fr" | "uk";
 const DEFAULT_CENTRE: LatLon = { lat: 48.8455, lon: 2.435 };
 
+/** The parts of a report that place the speaker once the landmark is known. */
+type Said = Pick<Intent, "relation" | "kind" | "distance_m" | "direction">;
+
 /** Where the speaker is if `f` is the landmark they meant. */
-export function placementFor(f: GazetteerFeature, relation: Relation | null, kind: Intent["kind"], last: LastPosition | null | undefined): Placement {
-  const rel: Relation = relation ?? (kind === "movement" ? "towards" : "near");
+export function placementFor(f: GazetteerFeature, said: Said, last: LastPosition | null | undefined): Placement {
+  const rel: Relation = said.relation ?? (said.kind === "movement" ? "towards" : "near");
+  const d = said.distance_m ?? null;
+  const travel = said.direction ? DIRECTION_DEG[said.direction] : null;
+
+  // "Moved 300 m north on rue X": the distance and direction place the point from the last
+  // position, and the street says which line it is on. The circle still reaches the unsnapped point.
+  if (said.kind === "movement" && last && d != null && travel != null && f.lines?.length && said.relation !== "towards" && COMPASS[rel] === undefined) {
+    const reckoned = destination(last, travel, d);
+    const pin = nearestPointOnLines(reckoned, f.lines);
+    return { pin, radius_m: Math.max(startRadius(last) + compassRadius(d), Math.round(distanceM(reckoned, pin))), estimated: true };
+  }
 
   // The landmark's reference point: for a street, the point on it nearest the speaker's last position.
   const anchor: LatLon = f.lines?.length && last ? nearestPointOnLines(last, f.lines) : { lat: f.lat, lon: f.lon };
@@ -64,11 +104,15 @@ export function placementFor(f: GazetteerFeature, relation: Relation | null, kin
     const heading_to = { lat: anchor.lat, lon: anchor.lon, id: f.id, name: f.name };
     // With no starting point there is nothing to move: the client shows only the target.
     if (!last) return { heading_to };
+    const leg = distanceM(last, anchor);
+    const along = (m: number) => (leg < 1 ? { lat: last.lat, lon: last.lon } : destination(last, bearingDeg(last, anchor), m));
+    // "Moved 200 m towards X": that far along the leg, and not past X.
+    if (d != null) {
+      return { pin: along(Math.min(d, leg)), radius_m: startRadius(last) + Math.max(MOVE_MIN_RADIUS_M, Math.round(DISTANCE_SLACK * d)), heading_to, estimated: true };
+    }
     // "I moved towards X" gives a direction, not a distance. The marker moves to the middle of the
     // leg and the circle spans all of it, from where they were to X: that is what we actually know.
-    const leg = distanceM(last, anchor);
-    const mid = leg < 1 ? { lat: last.lat, lon: last.lon } : destination(last, bearingDeg(last, anchor), leg / 2);
-    return { pin: mid, radius_m: Math.max(MOVE_MIN_RADIUS_M, Math.round(leg / 2)), heading_to };
+    return { pin: along(leg / 2), radius_m: Math.max(MOVE_MIN_RADIUS_M, Math.round(leg / 2)), heading_to, estimated: true };
   }
 
   // Size of the feature itself is uncertainty too: "at the park" is anywhere in the park.
@@ -78,11 +122,18 @@ export function placementFor(f: GazetteerFeature, relation: Relation | null, kin
 
   const bearing = COMPASS[rel];
   if (bearing !== undefined) {
-    const off = (f.bbox && f.category !== "street" ? Math.min(MAX_EXTENT_RADIUS_M, bboxHalfExtentM(f.bbox, bearing)) : 0) + COMPASS_OFFSET_M;
-    return { pin: destination(anchor, bearing, off), radius_m: REL_RADIUS[rel] };
+    const edge = f.bbox && f.category !== "street" ? Math.min(MAX_EXTENT_RADIUS_M, bboxHalfExtentM(f.bbox, bearing)) : 0;
+    // With a distance said, the pin is that far out and the circle grows with it; without one, about 100 m out.
+    return d != null
+      ? { pin: destination(anchor, bearing, edge + d), radius_m: compassRadius(d) }
+      : { pin: destination(anchor, bearing, edge + COMPASS_OFFSET_M), radius_m: REL_RADIUS[rel] };
   }
 
-  return { pin: { lat: anchor.lat, lon: anchor.lon }, radius_m: Math.round(Math.max(REL_RADIUS[rel], extent)) };
+  // "200 metres from the church": the distance is known, the side is not, so the circle takes in
+  // the whole ring. A direction of travel in the same report means the distance was how far they
+  // moved, not how far they are from this place.
+  const reach = d != null && travel == null ? extent + d * (1 + DISTANCE_SLACK) : extent;
+  return { pin: { lat: anchor.lat, lon: anchor.lon }, radius_m: Math.round(Math.max(REL_RADIUS[rel], reach)) };
 }
 
 function toCandidate(f: GazetteerFeature, ref: LatLon, intent: Intent, last: LastPosition | null | undefined, score?: number): Candidate {
@@ -95,7 +146,7 @@ function toCandidate(f: GazetteerFeature, ref: LatLon, intent: Intent, last: Las
     lon: f.lon,
     distance_m: Math.round(distanceM(ref, f.lines?.length ? nearestPointOnLines(ref, f.lines) : f)),
     score,
-    placement: placementFor(f, intent.relation, intent.kind, last),
+    placement: placementFor(f, intent, last),
   };
 }
 
@@ -164,7 +215,20 @@ function askQuestion(cands: Candidate[], lang: Lang, category: Category | null, 
   return `${lead}Which ${cat ? cat.en : "one"}: ${labels}?`;
 }
 
-function unresolvedPrompt(lang: Lang): string {
+/** `no_start`: a move with nowhere to start from. `incomplete`: a move with its distance or its direction missing. */
+type Prompt = "place" | "no_start" | "incomplete";
+
+function unresolvedPrompt(lang: Lang, prompt: Prompt = "place"): string {
+  if (prompt === "no_start") {
+    if (lang === "fr") return "Je ne sais pas d'où vous partez. Donnez le nom d'une rue ou d'un lieu.";
+    if (lang === "uk") return "Не знаю, звідки ви вирушили. Назвіть вулицю або орієнтир.";
+    return "I don't know where you started. Name a street or a landmark.";
+  }
+  if (prompt === "incomplete") {
+    if (lang === "fr") return "Il me faut une distance et une direction, ou un lieu.";
+    if (lang === "uk") return "Потрібні відстань і напрямок або орієнтир.";
+    return "I need a distance and a compass direction, or a landmark.";
+  }
   if (lang === "fr") return "Je n'ai pas pu vous placer. Donnez le nom d'une rue ou d'un lieu.";
   if (lang === "uk") return "Не вдалося визначити місце. Назвіть вулицю або орієнтир.";
   return "I couldn't place that. Name a street or a landmark.";
@@ -173,14 +237,35 @@ function unresolvedPrompt(lang: Lang): string {
 export function resolve(input: ResolveInput): Resolution {
   const { intent, transcript, lastPosition: last, now, gazetteer } = input;
   const lang: Lang = intent.language === "fr" || intent.language === "uk" ? intent.language : "en";
-  const unresolved = (rule: string, detail: string): Resolution => ({
+  const d = intent.distance_m ?? null;
+  const plain = (rule: string, detail: string, prompt?: Prompt): Resolution => ({
     status: "unresolved",
     candidates: [],
-    question: unresolvedPrompt(lang),
+    question: unresolvedPrompt(lang, prompt),
     evidence: { rule, detail },
   });
 
-  if (intent.kind === "other") return unresolved("no_position_in_report", "the report did not state a position or movement");
+  // Dead reckoning: no place to go by, only "d metres on this bearing" from the last position.
+  // The circle is the last position's own circle plus the spread of the move, so it grows with each leg.
+  const reckon = (from: LastPosition, bearing: number, dist: number, why: string): Resolution => {
+    const start = startRadius(from);
+    const age = Math.max(0, Math.round((now - from.ts) / 60_000));
+    return {
+      status: "resolved",
+      pin: destination(from, bearing, dist),
+      radius_m: start + compassRadius(dist),
+      estimated: true,
+      candidates: [],
+      evidence: {
+        rule: "dead_reckoned",
+        detail: `${why}; ${dist} m on bearing ${bearing}° from the last position (${age} min old); circle ${start} m at the start + ${compassRadius(dist)} m for the move`,
+      },
+    };
+  };
+
+  // A place that cannot be found does not stop a move that states its own distance and direction.
+  const unresolved = (rule: string, detail: string): Resolution =>
+    last && d != null && intent.direction ? reckon(last, DIRECTION_DEG[intent.direction], d, `${rule} (${detail}), so placed from the stated move`) : plain(rule, detail);
 
   let name = intent.landmark_name?.trim() || null;
   // Dictionary form of an inflected name ("мостом Патона" → "міст Патона"); same as the name in English and French.
@@ -196,7 +281,21 @@ export function resolve(input: ResolveInput): Resolution {
       category = category ?? generic;
     }
   }
-  if (!name && !category) return unresolved("no_landmark", "no landmark name or category in the report");
+  if (!name && !category) {
+    // "300 metres north of my last position" says the same as "moved 300 metres north".
+    const bearing = intent.direction ? DIRECTION_DEG[intent.direction] : intent.relation ? COMPASS[intent.relation] : undefined;
+    if (bearing === undefined && d == null) {
+      return intent.kind === "other"
+        ? plain("no_position_in_report", "the report did not state a position or movement")
+        : plain("no_landmark", "no landmark name or category in the report");
+    }
+    if (bearing === undefined || d == null) {
+      return plain("move_incomplete", `no place named, and ${d == null ? "a direction with no distance" : "a distance with no compass direction"}`, "incomplete");
+    }
+    if (!last) return plain("dead_reckoning_no_start", `${d} m on bearing ${bearing}° but no last position to start from`, "no_start");
+    return reckon(last, bearing, d, "no place named");
+  }
+  if (intent.kind === "other") return plain("no_position_in_report", "the report did not state a position or movement");
 
   const ref: LatLon = last ?? input.areaCentre ?? DEFAULT_CENTRE;
   const fresh = !!last && now - last.ts < FRESH_MS;
@@ -271,8 +370,8 @@ export function resolve(input: ResolveInput): Resolution {
         const c = toCandidate(match.feature, ref, intent, last, match.score);
         // The folded places widen the circle: "on Maidan" is the whole square, not just the station entrance.
         // Not for a movement: there the circle is the length of the leg, not the size of the place.
-        for (const f of c.placement.heading_to ? [] : folded) {
-          const r = placementFor(f.feature, intent.relation, intent.kind, last).radius_m;
+        for (const f of c.placement.heading_to || c.placement.estimated ? [] : folded) {
+          const r = placementFor(f.feature, intent, last).radius_m;
           if (c.placement.radius_m != null && r != null) c.placement.radius_m = Math.max(c.placement.radius_m, r);
         }
         return c;
@@ -336,6 +435,7 @@ function resolvedFrom(c: Candidate, cands: Candidate[], rule: string, detail: st
     pin: c.placement.pin,
     radius_m: c.placement.radius_m,
     heading_to: c.placement.heading_to,
+    estimated: c.placement.estimated,
     candidates: cands,
     evidence: { rule, feature_id: c.id, detail: `${detail}; → ${c.name}` },
   };
