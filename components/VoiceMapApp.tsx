@@ -5,6 +5,7 @@ import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
+import { ukrainianVoice } from "@/lib/tts/ukrainianVoice";
 
 type Lang = "en" | "fr" | "uk";
 const SPEECH_LANG: Record<Lang, string> = { en: "en-GB", fr: "fr-FR", uk: "uk-UA" };
@@ -123,7 +124,10 @@ function fmtTimings(t?: Timings, rt?: number): string {
 
 let speechUnlocked = false;
 function unlockSpeech() {
-  if (speechUnlocked || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined") return;
+  // The on-device Ukrainian voice plays through its own audio element, which also needs a tap.
+  if (areaStore.get() === "kyiv" || ukrainianVoice.ready) ukrainianVoice.unlock();
+  if (speechUnlocked || !("speechSynthesis" in window)) return;
   speechUnlocked = true;
   try {
     const u = new SpeechSynthesisUtterance(" ");
@@ -132,8 +136,35 @@ function unlockSpeech() {
   } catch {}
 }
 
+/** Starts fetching the on-device Ukrainian voice. Without it, questions use the system voice. */
+function preloadUkrainianVoice() {
+  ukrainianVoice.load().catch(() => {});
+}
+
+function stopSpeaking() {
+  ukrainianVoice.stop();
+  window.speechSynthesis?.cancel();
+}
+
 function speak(text: string, lang: Lang) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined") return;
+  if (lang === "uk") {
+    if (ukrainianVoice.canSpeak(text)) {
+      window.speechSynthesis?.cancel();
+      // False means the voice could not play this after all, so the system voice takes over.
+      void ukrainianVoice.speak(text).then((spoken) => {
+        if (!spoken) speakWithSystemVoice(text, lang);
+      });
+      return;
+    }
+    if (!ukrainianVoice.ready) preloadUkrainianVoice(); // ready for the next question
+  }
+  ukrainianVoice.stop();
+  speakWithSystemVoice(text, lang);
+}
+
+function speakWithSystemVoice(text: string, lang: Lang) {
+  if (!("speechSynthesis" in window)) return;
   try {
     const synth = window.speechSynthesis;
     synth.cancel();
@@ -154,6 +185,11 @@ export default function VoiceMapApp() {
   const candMarkers = useRef<Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
+
+  // Kyiv questions are in Ukrainian, so fetch the on-device voice as soon as Kyiv is chosen.
+  useEffect(() => {
+    if (area === "kyiv") preloadUkrainianVoice();
+  }, [area]);
 
   const [position, setPosition] = useState<Position | null>(null);
   const [trail, setTrail] = useState<Position[]>([]);
@@ -431,7 +467,7 @@ export default function VoiceMapApp() {
       if (!pending) return;
       const c = pending.candidates[i];
       if (!c) return;
-      window.speechSynthesis?.cancel();
+      stopSpeaking();
       const out = applyPlacement(c.placement, c.name);
       updateReport(pending.reportId, { outcome: `Chose ${i + 1}: ${c.name}. ${out}`, evidence: `user_choice [${c.id}]` });
       setStatus(out);
@@ -445,7 +481,7 @@ export default function VoiceMapApp() {
 
   const rejectAll = () => {
     if (!pending) return;
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     updateReport(pending.reportId, { outcome: "Rejected all choices" });
     setPending(null);
     setStatus(
@@ -519,7 +555,7 @@ export default function VoiceMapApp() {
   const startRecording = useCallback(async () => {
     if (recStateRef.current !== "idle") return;
     setMicError(null);
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setMicError("This browser cannot record audio here. Use the text box, or open the page over HTTPS in Safari or Chrome.");
       return;
@@ -623,7 +659,7 @@ export default function VoiceMapApp() {
   };
 
   const resetAll = (areaId: AreaId = areaStore.get()) => {
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     setPosition(null);
     positionRef.current = null;
     setTrail([]);

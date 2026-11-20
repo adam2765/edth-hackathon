@@ -48,6 +48,14 @@ const HF_FALLBACK = process.env.NEXT_PUBLIC_TTS_HF_FALLBACK === "1";
 const SENTENCE_GAP_S = 0.3;
 const PEAK = 0.95;
 
+/** Lets the page draw what is pending (the question on screen) before a long model run. */
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+    setTimeout(resolve, 100); // a hidden page gets no animation frames
+  });
+}
+
 function hex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -132,6 +140,8 @@ class UkrainianVoice {
     if (!this.canSpeak(text)) return false;
     const turn = ++this.turn;
     this.audio?.pause();
+    await afterPaint();
+    if (turn !== this.turn) return true;
     let result: Synthesis;
     try {
       result = await this.synthesize(text, opts);

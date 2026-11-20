@@ -16,7 +16,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 
 - The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, language.
 - `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`.
-- The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`.
+- The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`. Ukrainian questions use an on-device voice instead when it is loaded (`lib/tts/`, test page at `/tts-lab`).
 
 ### Resolver rules
 
