@@ -42,3 +42,6 @@ next-env.d.ts
 
 # generated at build
 /public/maplibre-gl-worker.mjs
+
+# local tooling
+.claude/settings.local.json
