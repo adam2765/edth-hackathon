@@ -3,7 +3,8 @@ import { getTranscriber } from "@/lib/providers/transcriber";
 import { getExtractor } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { resolve } from "@/lib/geo/resolver";
-import type { LastPosition } from "@/lib/geo/types";
+import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
+import type { GazetteerFeature, LastPosition } from "@/lib/geo/types";
 
 export const maxDuration = 30;
 
@@ -12,8 +13,18 @@ const MAX_TEXT_CHARS = 500;
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 30;
 
-const gazetteer = loadGazetteer();
-const BIAS = biasTerms(gazetteer, 100);
+const AREA_DATA = Object.fromEntries(
+  (Object.keys(AREAS) as AreaId[]).map((id) => {
+    const gazetteer = loadGazetteer(id);
+    return [id, { gazetteer, bias: biasTerms(gazetteer, 100) }];
+  }),
+) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
+
+const NO_WORDS: Record<string, string> = {
+  uk: "Не розчув. Повторіть, будь ласка.",
+  fr: "Je n'ai pas compris. Répétez, s'il vous plaît.",
+  en: "I didn't catch that. Try again.",
+};
 
 // Per-instance, best effort. Enough to stop a runaway loop in stage 1.
 const hits = new Map<string, number[]>();
@@ -51,6 +62,9 @@ export async function POST(req: Request) {
   const textIn = form.get("text");
   const lastPosition = parseLastPosition(form.get("lastPosition"));
   const clientTs = Number(form.get("clientTs")) || null;
+  const areaIn = form.get("area");
+  const area = AREAS[isAreaId(areaIn) ? areaIn : DEFAULT_AREA];
+  const { gazetteer, bias } = AREA_DATA[area.id];
 
   const timings = { stt: 0, extract: 0, resolve: 0, total: 0 };
   let transcript = "";
@@ -60,7 +74,7 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", BIAS);
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias);
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -76,22 +90,27 @@ export async function POST(req: Request) {
         transcript: "",
         language: sttLanguage,
         intent: null,
-        resolution: { status: "unresolved", candidates: [], question: "I didn't catch that. Try again.", evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" } },
+        resolution: {
+          status: "unresolved",
+          candidates: [],
+          question: NO_WORDS[sttLanguage === "ru" ? "uk" : (sttLanguage ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
+          evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
+        },
         timings_ms: timings,
         clientTs,
       });
     }
 
     const e = performance.now();
-    const intent = await getExtractor().extract(transcript, sttLanguage);
+    const intent = await getExtractor().extract(transcript, { languageHint: sttLanguage, place: area.place });
     timings.extract = Math.round(performance.now() - e);
 
     const r0 = performance.now();
-    const resolution = resolve({ intent, transcript, lastPosition, now, gazetteer });
+    const resolution = resolve({ intent, transcript, lastPosition, now, gazetteer, areaCentre: area.centre });
     timings.resolve = Math.round(performance.now() - r0);
     timings.total = Math.round(performance.now() - t0);
 
-    return NextResponse.json({ transcript, language: sttLanguage ?? intent.language, intent, resolution, timings_ms: timings, clientTs });
+    return NextResponse.json({ transcript, language: sttLanguage ?? intent.language, intent, resolution, timings_ms: timings, clientTs, area: area.id });
   } catch (err) {
     console.error("report failed", err);
     timings.total = Math.round(performance.now() - t0);

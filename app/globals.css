@@ -56,6 +56,36 @@ input {
   bottom: var(--sheet-h, 0);
 }
 
+/* ---------- area switch ---------- */
+.areas {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 10px;
+  display: flex;
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 3px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.areas button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 14px;
+  font-weight: 650;
+  min-height: 36px;
+  cursor: pointer;
+}
+.areas button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.areas button:disabled {
+  opacity: 0.6;
+}
+
 .sheet {
   position: absolute;
   left: 0;

@@ -5,9 +5,8 @@
  */
 import type { Candidate, Category, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
-import { categoryIsExplicit, genericCategoryOf, searchByName } from "./gazetteer";
+import { categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 
-export const AREA_CENTRE: LatLon = { lat: 48.8455, lon: 2.435 };
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
 export const NEAREST_RATIO = 0.4;
@@ -16,6 +15,10 @@ export const GOOD_SCORE = 0.7;
 /** ...and be within this of the best match to count as a contender. */
 export const SCORE_MARGIN = 0.1;
 export const MAX_CHOICES = 3;
+/** Same-name matches this close together are one place for our purposes; no question is worth asking. */
+export const COLOCATED_M = 120;
+/** ...unless one of them is bigger than this: a 1.2 km street and the station on it are worth a question. */
+export const COLOCATED_MAX_EXTENT_M = 300;
 
 const REL_RADIUS: Record<Relation, number> = {
   at: 30,
@@ -41,7 +44,12 @@ export interface ResolveInput {
   /** epoch ms; injected so the function stays pure */
   now: number;
   gazetteer: GazetteerFeature[];
+  /** Reference point when there is no last position. Defaults to the centre of Vincennes. */
+  areaCentre?: LatLon;
 }
+
+type Lang = "en" | "fr" | "uk";
+const DEFAULT_CENTRE: LatLon = { lat: 48.8455, lon: 2.435 };
 
 /** Where the speaker is if `f` is the landmark they meant. */
 export function placementFor(f: GazetteerFeature, relation: Relation | null, kind: Intent["kind"], last: LastPosition | null | undefined): Placement {
@@ -85,35 +93,54 @@ function toCandidate(f: GazetteerFeature, ref: LatLon, intent: Intent, last: Las
   };
 }
 
-const CAT_LABEL: Record<Category, { en: string; fr: string; frWhich: string }> = {
-  church: { en: "church", fr: "église", frWhich: "Quelle église" },
-  metro_station: { en: "station", fr: "station", frWhich: "Quelle station" },
-  castle: { en: "castle", fr: "château", frWhich: "Quel château" },
-  town_hall: { en: "town hall", fr: "mairie", frWhich: "Quelle mairie" },
-  school: { en: "school", fr: "école", frWhich: "Quelle école" },
-  park: { en: "park", fr: "parc", frWhich: "Quel parc" },
-  hospital: { en: "hospital", fr: "hôpital", frWhich: "Quel hôpital" },
-  police: { en: "police station", fr: "commissariat", frWhich: "Quel commissariat" },
-  bridge: { en: "bridge", fr: "pont", frWhich: "Quel pont" },
-  street: { en: "street", fr: "rue", frWhich: "Quelle rue" },
-  other: { en: "place", fr: "lieu", frWhich: "Quel lieu" },
+const CAT_LABEL: Record<Category, Record<Lang, string> & { frWhich: string; ukWhich: string }> = {
+  church: { en: "church", fr: "église", uk: "церква", frWhich: "Quelle église", ukWhich: "Яка церква" },
+  metro_station: { en: "station", fr: "station", uk: "станція", frWhich: "Quelle station", ukWhich: "Яка станція" },
+  castle: { en: "castle", fr: "château", uk: "замок", frWhich: "Quel château", ukWhich: "Який замок" },
+  town_hall: { en: "town hall", fr: "mairie", uk: "адміністрація", frWhich: "Quelle mairie", ukWhich: "Яка адміністрація" },
+  school: { en: "school", fr: "école", uk: "школа", frWhich: "Quelle école", ukWhich: "Яка школа" },
+  park: { en: "park", fr: "parc", uk: "парк", frWhich: "Quel parc", ukWhich: "Який парк" },
+  hospital: { en: "hospital", fr: "hôpital", uk: "лікарня", frWhich: "Quel hôpital", ukWhich: "Яка лікарня" },
+  police: { en: "police station", fr: "commissariat", uk: "поліція", frWhich: "Quel commissariat", ukWhich: "Який відділок поліції" },
+  bridge: { en: "bridge", fr: "pont", uk: "міст", frWhich: "Quel pont", ukWhich: "Який міст" },
+  street: { en: "street", fr: "rue", uk: "вулиця", frWhich: "Quelle rue", ukWhich: "Яка вулиця" },
+  other: { en: "place", fr: "lieu", uk: "місце", frWhich: "Quel lieu", ukWhich: "Яке місце" },
+};
+
+/** Kinds of "other" places worth naming in a question. */
+const SUBTYPE_LABEL: Record<string, Record<Lang, string>> = {
+  theatre: { en: "theatre", fr: "théâtre", uk: "театр" },
+  cinema: { en: "cinema", fr: "cinéma", uk: "кінотеатр" },
+  museum: { en: "museum", fr: "musée", uk: "музей" },
+  gallery: { en: "gallery", fr: "galerie", uk: "галерея" },
+  artwork: { en: "artwork", fr: "œuvre", uk: "скульптура" },
+  monument: { en: "monument", fr: "monument", uk: "пам'ятник" },
+  memorial: { en: "memorial", fr: "mémorial", uk: "меморіал" },
+  attraction: { en: "landmark", fr: "site", uk: "пам'ятка" },
+  square: { en: "square", fr: "place", uk: "площа" },
+  library: { en: "library", fr: "bibliothèque", uk: "бібліотека" },
+  post_office: { en: "post office", fr: "poste", uk: "пошта" },
+  marketplace: { en: "market", fr: "marché", uk: "ринок" },
+  stadium: { en: "stadium", fr: "stade", uk: "стадіон" },
 };
 
 /** Choice labels; add the category when two choices share a name ("Château de Vincennes (castle)"). */
-export function choiceLabels(cands: Candidate[], lang: "en" | "fr"): string[] {
+export function choiceLabels(cands: Candidate[], lang: Lang): string[] {
+  const kind = (c: Candidate) => (c.category === "other" && c.subtype && SUBTYPE_LABEL[c.subtype]?.[lang]) || CAT_LABEL[c.category][lang];
   return cands.map((c) => {
-    const clash = cands.some((o) => o !== c && o.name === c.name);
-    return clash ? `${c.name} (${CAT_LABEL[c.category][lang]})` : c.name;
+    // Also when another choice contains this name: "Хрещатик (станція)" next to "вулиця Хрещатик".
+    const clash = cands.some((o) => o !== c && o.name.toLowerCase().includes(c.name.toLowerCase()));
+    return clash ? `${c.name} (${kind(c)})` : c.name;
   });
 }
 
-function joinOr(items: string[], lang: "en" | "fr"): string {
+function joinOr(items: string[], lang: Lang): string {
   if (items.length <= 1) return items.join("");
-  const or = lang === "fr" ? " ou " : ", or ";
+  const or = lang === "fr" ? " ou " : lang === "uk" ? " чи " : ", or ";
   return items.slice(0, -1).join(", ") + or + items[items.length - 1];
 }
 
-function askQuestion(cands: Candidate[], lang: "en" | "fr", category: Category | null, notFound?: string): string {
+function askQuestion(cands: Candidate[], lang: Lang, category: Category | null, notFound?: string): string {
   const labels = joinOr(choiceLabels(cands, lang), lang);
   const cat = category ? CAT_LABEL[category] : null;
   if (lang === "fr") {
@@ -121,18 +148,25 @@ function askQuestion(cands: Candidate[], lang: "en" | "fr", category: Category |
     if (cands.length === 1) return `${lead}Vous voulez dire ${labels} ?`;
     return `${lead}${cat ? cat.frWhich : "Lequel"} : ${labels} ?`;
   }
+  if (lang === "uk") {
+    const lead = notFound ? `Не знаходжу «${notFound}». ` : "";
+    if (cands.length === 1) return `${lead}Ви маєте на увазі ${labels}?`;
+    return `${lead}${cat ? cat.ukWhich : "Уточніть"}: ${labels}?`;
+  }
   const lead = notFound ? `I can't find "${notFound}". ` : "";
   if (cands.length === 1) return `${lead}Do you mean ${labels}?`;
   return `${lead}Which ${cat ? cat.en : "one"}: ${labels}?`;
 }
 
-function unresolvedPrompt(lang: "en" | "fr"): string {
-  return lang === "fr" ? "Je n'ai pas pu vous placer. Donnez le nom d'une rue ou d'un lieu." : "I couldn't place that. Name a street or a landmark.";
+function unresolvedPrompt(lang: Lang): string {
+  if (lang === "fr") return "Je n'ai pas pu vous placer. Donnez le nom d'une rue ou d'un lieu.";
+  if (lang === "uk") return "Не вдалося визначити місце. Назвіть вулицю або орієнтир.";
+  return "I couldn't place that. Name a street or a landmark.";
 }
 
 export function resolve(input: ResolveInput): Resolution {
   const { intent, transcript, lastPosition: last, now, gazetteer } = input;
-  const lang = intent.language === "fr" ? "fr" : "en";
+  const lang: Lang = intent.language === "fr" || intent.language === "uk" ? intent.language : "en";
   const unresolved = (rule: string, detail: string): Resolution => ({
     status: "unresolved",
     candidates: [],
@@ -143,11 +177,14 @@ export function resolve(input: ResolveInput): Resolution {
   if (intent.kind === "other") return unresolved("no_position_in_report", "the report did not state a position or movement");
 
   let name = intent.landmark_name?.trim() || null;
+  // Dictionary form of an inflected name ("мостом Патона" → "міст Патона"); same as the name in English and French.
+  let lemma = intent.landmark_name_lemma?.trim() || null;
+  if (!name) [name, lemma] = [lemma, null];
   let category = intent.landmark_category;
 
-  // "the church", "la mairie": a category word said as if it were a name.
+  // "the church", "la mairie", "церкви": a category word said as if it were a name.
   if (name) {
-    const generic = genericCategoryOf(name);
+    const generic = genericCategoryOf(lemma ?? name) ?? genericCategoryOf(name);
     if (generic !== undefined) {
       name = null;
       category = category ?? generic;
@@ -155,7 +192,7 @@ export function resolve(input: ResolveInput): Resolution {
   }
   if (!name && !category) return unresolved("no_landmark", "no landmark name or category in the report");
 
-  const ref: LatLon = last ?? AREA_CENTRE;
+  const ref: LatLon = last ?? input.areaCentre ?? DEFAULT_CENTRE;
   const fresh = !!last && now - last.ts < FRESH_MS;
   const refLabel = last ? (fresh ? "last position" : "stale last position") : "area centre";
 
@@ -188,22 +225,49 @@ export function resolve(input: ResolveInput): Resolution {
   };
 
   if (name) {
-    const all = searchByName(name, gazetteer);
+    const queries = [...new Set([lemma, name].filter((q): q is string => !!q))];
+    let all = searchByName(queries, gazetteer);
+    let saidForExplicit = name;
+    let note = `name "${lemma ?? name}"`;
+    // "станція метро Хрещатик": nothing is called that, so drop the type words and look for a
+    // station called "Хрещатик". Only features of that type count, or "Gare du Nord" would find "Rue du Nord".
+    if ((all[0]?.score ?? 0) < GOOD_SCORE) {
+      const cores = queries.map((q) => stripCategoryWords(q)).filter((c): c is NonNullable<typeof c> => !!c);
+      if (cores.length) {
+        const alt = searchByName([...new Set(cores.map((c) => c.core))], gazetteer).filter((m) => m.feature.category === cores[0].category);
+        if ((alt[0]?.score ?? 0) >= GOOD_SCORE) {
+          all = alt;
+          category = category ?? cores[0].category;
+          saidForExplicit = stripCategoryWords(name)?.core ?? cores[0].core;
+          note = `name "${cores[0].core}" (type words dropped)`;
+        }
+      }
+    }
     const best = all[0]?.score ?? 0;
     let good = all.filter((m) => m.score >= GOOD_SCORE && m.score >= best - SCORE_MARGIN);
-    let note = `name "${name}" best score ${best.toFixed(2)}`;
+    note += ` best score ${best.toFixed(2)}`;
     // An exact name beats a name that merely contains it ("Châtelet du Château de Vincennes").
     if (good.some((m) => m.exact)) good = good.filter((m) => m.exact);
-    if (good.length > 1 && category && categoryIsExplicit(transcript, name, category)) {
+    if (good.length > 1 && category && categoryIsExplicit(transcript, saidForExplicit, category)) {
       const ofCat = good.filter((m) => m.feature.category === category);
       if (ofCat.length) {
         good = ofCat;
         note += `; narrowed to ${category} (said outright)`;
       }
     }
-    if (good.length) {
-      const cands = good.map((m) => toCandidate(m.feature, ref, intent, last, m.score));
-      return decide(cands, "named", `${note}; ${good.length} match(es); ref ${refLabel}`);
+    const groups = collapseColocated(good);
+    if (groups.length < good.length) note += `; ${good.length - groups.length} co-located duplicate(s) folded in`;
+    if (groups.length) {
+      const cands = groups.map(({ match, folded }) => {
+        const c = toCandidate(match.feature, ref, intent, last, match.score);
+        // The folded places widen the circle: "on Maidan" is the whole square, not just the station entrance.
+        for (const f of folded) {
+          const r = placementFor(f.feature, intent.relation, intent.kind, last).radius_m;
+          if (c.placement.radius_m != null && r != null) c.placement.radius_m = Math.max(c.placement.radius_m, r);
+        }
+        return c;
+      });
+      return decide(cands, "named", `${note}; ${cands.length} match(es); ref ${refLabel}`);
     }
     if (category && category !== "street" && category !== "other") {
       const cands = categoryCandidates(category, gazetteer, ref, intent, last);
@@ -224,6 +288,31 @@ function categoryCandidates(category: Category, gazetteer: GazetteerFeature[], r
     .filter((f) => f.category === category)
     .map((f) => toCandidate(f, ref, intent, last))
     .filter((c) => c.distance_m <= CATEGORY_RADIUS_M);
+}
+
+/**
+ * "Bérault" is a metro station and the small square above it; "Майдан Незалежності" is a station,
+ * a square and a street in the same spot. Those are one place, not a question.
+ * A match is folded into an earlier one when they are within COLOCATED_M of each other (or one
+ * lies inside the other) and neither is bigger than COLOCATED_MAX_EXTENT_M. Points of interest
+ * are kept in preference to streets. "Хрещатик" the 1.2 km street is never folded into its station.
+ */
+function collapseColocated(matches: NameMatch[]): { match: NameMatch; folded: NameMatch[] }[] {
+  const extent = (f: GazetteerFeature) => (f.bbox ? bboxHalfDiagonalM(f.bbox) : 0);
+  const inside = (p: LatLon, f: GazetteerFeature) => !!f.bbox && p.lon >= f.bbox[0] && p.lon <= f.bbox[2] && p.lat >= f.bbox[1] && p.lat <= f.bbox[3];
+  const nearestOn = (f: GazetteerFeature, to: LatLon): LatLon => (f.lines?.length ? nearestPointOnLines(to, f.lines) : f);
+  const sorted = [...matches].sort((a, b) => Number(a.feature.category === "street") - Number(b.feature.category === "street"));
+  const kept: { match: NameMatch; folded: NameMatch[] }[] = [];
+  for (const m of sorted) {
+    const f = m.feature;
+    const home = kept.find(({ match: { feature: k } }) => {
+      if (extent(f) > COLOCATED_MAX_EXTENT_M || extent(k) > COLOCATED_MAX_EXTENT_M) return false;
+      return distanceM(nearestOn(k, f), nearestOn(f, k)) <= COLOCATED_M || inside(k, f) || inside(f, k);
+    });
+    if (home) home.folded.push(m);
+    else kept.push({ match: m, folded: [] });
+  }
+  return kept;
 }
 
 function sameCategory(cands: Candidate[]): Category | null {

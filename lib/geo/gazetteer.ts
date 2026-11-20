@@ -1,4 +1,6 @@
-import raw from "../../data/gazetteer.vincennes.json";
+import vincennes from "../../data/gazetteer.vincennes.json";
+import kyiv from "../../data/gazetteer.kyiv.json";
+import type { AreaId } from "./areas";
 import type { Category, GazetteerFeature } from "./types";
 import { normalize, tokens } from "./normalize";
 
@@ -10,18 +12,22 @@ interface GazetteerFile {
   features: GazetteerFeature[];
 }
 
-const data = raw as unknown as GazetteerFile;
+const FILES: Record<AreaId, GazetteerFile> = {
+  vincennes: vincennes as unknown as GazetteerFile,
+  kyiv: kyiv as unknown as GazetteerFile,
+};
 
-export function loadGazetteer(): GazetteerFeature[] {
-  return data.features;
+export function loadGazetteer(area: AreaId = "vincennes"): GazetteerFeature[] {
+  return FILES[area].features;
 }
 
-export const GAZETTEER_SOURCE = data.source;
+export const GAZETTEER_SOURCE = FILES.vincennes.source;
 
 /** Words that carry no identity in a place name. */
 const STOPWORDS = new Set([
   "the", "of", "a", "an", "at", "on", "in", "to", "by", "and", "near",
-  "de", "du", "des", "la", "le", "les", "l", "d", "au", "aux", "en", "et", "a",
+  "de", "du", "des", "la", "le", "les", "l", "d", "au", "aux", "en", "et",
+  "на", "в", "у", "біля", "до", "від", "з", "із", "і", "й", "та", "імені", "ім",
 ]);
 
 /** Spelling variants mapped to one token before comparison (both query and names). */
@@ -38,25 +44,66 @@ const CANON: Record<string, string> = {
   church: "eglise",
   chapel: "chapelle",
   castle: "chateau",
-  metro: "metro",
+  вул: "вулиця",
+  просп: "проспект",
+  пр: "проспект",
+  пл: "площа",
+  пров: "провулок",
+  бул: "бульвар",
+  бульв: "бульвар",
 };
 
-/** Category words in English and French, as canonical tokens. Used to spot "generic" names and explicit category words. */
-export const CATEGORY_WORDS: Record<Exclude<Category, "other">, string[]> = {
-  church: ["eglise", "chapelle", "temple", "cathedral", "cathedrale", "basilica", "basilique"],
-  metro_station: ["metro", "subway", "station", "gare", "underground", "tube", "rer", "stop"],
-  castle: ["chateau", "fort", "fortress", "forteresse", "donjon", "keep"],
-  town_hall: ["mairie", "town", "city", "hall", "townhall", "hotel", "ville"],
-  school: ["school", "ecole", "college", "lycee", "university", "universite", "creche", "kindergarten"],
-  park: ["park", "parc", "bois", "garden", "jardin", "woods", "forest", "foret"],
-  hospital: ["hospital", "hopital", "clinic", "clinique"],
-  police: ["police", "commissariat", "gendarmerie"],
-  bridge: ["bridge", "pont", "passerelle"],
-  street: ["rue", "avenue", "boulevard", "allee", "place", "quai", "impasse", "passage", "chemin", "route", "villa", "cours", "sentier"],
+type NamedCategory = Exclude<Category, "other">;
+
+/** Category words as canonical tokens: English, French, Ukrainian (and common Russian), dictionary form. */
+export const CATEGORY_WORDS: Record<NamedCategory, string[]> = {
+  church: ["eglise", "chapelle", "temple", "cathedral", "cathedrale", "basilica", "basilique", "церква", "храм", "собор", "костел", "костьол", "каплиця", "церковь"],
+  metro_station: ["metro", "subway", "station", "gare", "underground", "tube", "rer", "stop", "метро", "станція", "вокзал", "станция"],
+  castle: ["chateau", "fort", "fortress", "forteresse", "donjon", "keep", "замок", "фортеця"],
+  town_hall: ["mairie", "town", "city", "hall", "townhall", "hotel", "ville", "мерія", "міськрада", "ратуша", "мэрия"],
+  school: ["school", "ecole", "college", "lycee", "university", "universite", "creche", "kindergarten", "школа", "ліцей", "гімназія", "університет", "коледж", "інститут"],
+  park: ["park", "parc", "bois", "garden", "jardin", "woods", "forest", "foret", "парк", "сквер"],
+  hospital: ["hospital", "hopital", "clinic", "clinique", "лікарня", "госпіталь", "шпиталь", "поліклініка", "больница"],
+  police: ["police", "commissariat", "gendarmerie", "поліція", "відділок", "полиция"],
+  bridge: ["bridge", "pont", "passerelle", "міст", "мост"],
+  street: [
+    "rue", "avenue", "boulevard", "allee", "place", "quai", "impasse", "passage", "chemin", "route", "villa", "cours", "sentier", "square", "lane",
+    "вулиця", "проспект", "бульвар", "площа", "провулок", "узвіз", "набережна", "шосе", "улица",
+  ],
 };
 
-const WORD_TO_CATEGORY = new Map<string, Category>();
-for (const [cat, words] of Object.entries(CATEGORY_WORDS)) for (const w of words) if (!WORD_TO_CATEGORY.has(w)) WORD_TO_CATEGORY.set(w, cat as Category);
+/**
+ * Ukrainian nouns change their ending with grammatical case ("біля церкви", "за мостом").
+ * A token is a category word if it is one of these stems plus a known case ending.
+ * "міст" (bridge) is deliberately not a stem: "міста" means "of the city".
+ */
+const CATEGORY_STEMS: Record<NamedCategory, string[]> = {
+  church: ["церкв", "церков", "храм", "собор", "костел", "костьол", "каплиц"],
+  metro_station: ["станці", "станци", "вокзал"],
+  castle: ["замк", "фортец"],
+  town_hall: ["мері", "міськрад", "ратуш", "мэри"],
+  school: ["школ", "ліце", "гімназі", "університет", "коледж", "інститут"],
+  park: ["парк", "сквер"],
+  hospital: ["лікарн", "госпітал", "шпитал", "поліклінік", "больниц"],
+  police: ["поліці", "відділк", "полици"],
+  bridge: ["мост"],
+  street: ["вулиц", "проспект", "бульвар", "площ", "провулк", "узвоз", "набережн", "улиц"],
+};
+const CASE_ENDINGS = new Set(["", "а", "я", "у", "ю", "і", "ї", "и", "е", "є", "ь", "й", "ом", "ем", "єм", "ою", "ею", "єю", "ові", "еві", "ій", "ої", "ах", "ях"]);
+const CYRILLIC = /[Ѐ-ӿ]/;
+
+const NAMED_CATEGORIES = Object.keys(CATEGORY_WORDS) as NamedCategory[];
+
+export function isCategoryWord(token: string, category: Category): boolean {
+  if (category === "other") return false;
+  if (CATEGORY_WORDS[category].includes(token)) return true;
+  if (!CYRILLIC.test(token)) return false;
+  return CATEGORY_STEMS[category].some((stem) => token.startsWith(stem) && CASE_ENDINGS.has(token.slice(stem.length)));
+}
+
+export function categoryOfToken(token: string): Category | undefined {
+  return NAMED_CATEGORIES.find((c) => isCategoryWord(token, c));
+}
 
 /** Canonical tokens with stopwords removed (falls back to all tokens if only stopwords remain). */
 export function canonTokens(s: string): string[] {
@@ -66,15 +113,28 @@ export function canonTokens(s: string): string[] {
 }
 
 /**
- * If every token of `name` is a category word ("the church", "la mairie", "metro station"),
+ * If every token of `name` is a category word ("the church", "la mairie", "церкви"),
  * the name carries no identity: return the category it implies. Otherwise undefined.
  */
 export function genericCategoryOf(name: string): Category | null | undefined {
   const toks = canonTokens(name);
   if (!toks.length) return null;
-  const cats = toks.map((t) => WORD_TO_CATEGORY.get(t));
+  const cats = toks.map((t) => categoryOfToken(t));
   if (cats.some((c) => c === undefined)) return undefined;
   return cats[0] ?? null;
+}
+
+/**
+ * "станція метро Хрещатик" → { core: "хрещатик", category: "metro_station" }.
+ * null when the name has no category words, or nothing else.
+ */
+export function stripCategoryWords(name: string): { core: string; category: Category } | null {
+  const toks = canonTokens(name);
+  const cats = toks.map((t) => categoryOfToken(t));
+  const core = toks.filter((_, i) => cats[i] === undefined);
+  const first = cats.find((c) => c !== undefined);
+  if (!first || !core.length) return null;
+  return { core: core.join(" "), category: first };
 }
 
 /**
@@ -84,13 +144,12 @@ export function genericCategoryOf(name: string): Category | null | undefined {
  */
 export function categoryIsExplicit(transcript: string, name: string, category: Category): boolean {
   if (category === "other") return false;
-  const words = new Set(CATEGORY_WORDS[category]);
   const residual = canonTokens(transcript);
   for (const t of canonTokens(name)) {
     const i = residual.indexOf(t);
     if (i >= 0) residual.splice(i, 1);
   }
-  return residual.some((t) => words.has(t));
+  return residual.some((t) => isCategoryWord(t, category));
 }
 
 function levenshtein(a: string, b: string): number {
@@ -113,8 +172,24 @@ function tokenSim(a: string, b: string): number {
   const minLen = Math.min(a.length, b.length);
   if (minLen < 4) return 0;
   if (a.startsWith(b) || b.startsWith(a)) return 0.9;
+  // Ukrainian case endings: same word if the first letters agree and only short endings differ
+  // ("Софійського" / "Софійський", "Володимирській" / "Володимирська").
+  if (CYRILLIC.test(a) && CYRILLIC.test(b)) {
+    let cp = 0;
+    while (cp < minLen && a[cp] === b[cp]) cp++;
+    if (cp >= 4 && a.length - cp <= 3 && b.length - cp <= 3) return 0.85;
+  }
   const r = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
   return r >= 0.75 ? r : 0;
+}
+
+function scoreTokens(q: string[], n: string[]): number {
+  if (!q.length || !n.length) return 0;
+  const best = (t: string, pool: string[]) => Math.max(...pool.map((p) => tokenSim(t, p)));
+  const recall = q.reduce((s, t) => s + best(t, n), 0) / q.length;
+  const precision = n.reduce((s, t) => s + best(t, q), 0) / n.length;
+  const phrase = ` ${n.join(" ")} `.includes(` ${q.join(" ")} `) ? 1 : 0;
+  return 0.6 * recall + 0.25 * precision + 0.15 * phrase;
 }
 
 /**
@@ -124,14 +199,42 @@ function tokenSim(a: string, b: string): number {
  * "Sainte-Chapelle" should beat "Chapelle Sainte-Bernadette").
  */
 export function nameScore(query: string, name: string): number {
-  const q = canonTokens(query);
-  const n = canonTokens(name);
-  if (!q.length || !n.length) return 0;
-  const best = (t: string, pool: string[]) => Math.max(...pool.map((p) => tokenSim(t, p)));
-  const recall = q.reduce((s, t) => s + best(t, n), 0) / q.length;
-  const precision = n.reduce((s, t) => s + best(t, q), 0) / n.length;
-  const phrase = ` ${n.join(" ")} `.includes(` ${q.join(" ")} `) ? 1 : 0;
-  return 0.6 * recall + 0.25 * precision + 0.15 * phrase;
+  return scoreTokens(canonTokens(query), canonTokens(name));
+}
+
+interface IndexedName {
+  raw: string;
+  toks: string[];
+  key: string;
+}
+interface Indexed {
+  feature: GazetteerFeature;
+  names: IndexedName[];
+}
+const INDEX = new WeakMap<GazetteerFeature[], Indexed[]>();
+
+function indexOf(features: GazetteerFeature[]): Indexed[] {
+  let idx = INDEX.get(features);
+  if (idx) return idx;
+  idx = features.map((feature) => {
+    const names: IndexedName[] = [];
+    const add = (raw: string, toks: string[]) => {
+      const key = toks.join(" ");
+      if (key && !names.some((n) => n.key === key)) names.push({ raw, toks, key });
+    };
+    for (const raw of feature.names.length ? feature.names : [feature.name]) {
+      const toks = canonTokens(raw);
+      add(raw, toks);
+      // People drop the street word ("на Хрещатику", "on Fontenay"): index streets without it too.
+      if (feature.category === "street") {
+        const bare = toks.filter((t) => !isCategoryWord(t, "street"));
+        if (bare.length && bare.length < toks.length) add(raw, bare);
+      }
+    }
+    return { feature, names };
+  });
+  INDEX.set(features, idx);
+  return idx;
 }
 
 export interface NameMatch {
@@ -142,37 +245,48 @@ export interface NameMatch {
   exact: boolean;
 }
 
-/** All features scored against `query`, best first. */
-export function searchByName(query: string, features: GazetteerFeature[]): NameMatch[] {
+/** All features scored against the query (or the best of several spellings of it), best first. */
+export function searchByName(query: string | string[], features: GazetteerFeature[]): NameMatch[] {
+  const queries = (Array.isArray(query) ? query : [query]).map((q) => canonTokens(q)).filter((q) => q.length);
+  const keys = new Set(queries.map((q) => q.join(" ")));
   const out: NameMatch[] = [];
-  const qKey = canonTokens(query).join(" ");
-  for (const f of features) {
+  for (const { feature, names } of indexOf(features)) {
     let best = 0;
-    let matched = f.name;
+    let matched = feature.name;
     let exact = false;
-    for (const n of f.names.length ? f.names : [f.name]) {
-      if (canonTokens(n).join(" ") === qKey) exact = true;
-      const s = nameScore(query, n);
-      if (s > best) {
-        best = s;
-        matched = n;
+    for (const n of names) {
+      if (keys.has(n.key)) exact = true;
+      for (const q of queries) {
+        const s = scoreTokens(q, n.toks);
+        if (s > best) {
+          best = s;
+          matched = n.raw;
+        }
       }
     }
-    if (best > 0) out.push({ feature: f, score: Math.round(best * 1000) / 1000, matched_name: matched, exact });
+    if (best > 0) out.push({ feature, score: Math.round(best * 1000) / 1000, matched_name: matched, exact });
   }
   return out.sort((a, b) => b.score - a.score);
 }
 
-const BIAS_PRIORITY: Category[] = ["metro_station", "castle", "town_hall", "church", "police", "hospital", "bridge", "park", "other", "street", "school"];
-const MAJOR_STREET = /^(trunk|primary|secondary|tertiary)$/;
+const MAJOR_STREET = /^(trunk|primary|secondary|tertiary|pedestrian)$/;
+const BIAS_RANK: Record<Category, number> = {
+  metro_station: 0,
+  castle: 1,
+  town_hall: 2,
+  bridge: 3,
+  street: 4, // major streets only; minor streets rank last
+  church: 5,
+  park: 6,
+  police: 7,
+  hospital: 8,
+  other: 9,
+  school: 11,
+};
 
 /** Up to `max` distinct place names to bias speech-to-text, most useful first. */
 export function biasTerms(features: GazetteerFeature[], max = 100): string[] {
-  const rank = (f: GazetteerFeature) => {
-    const base = BIAS_PRIORITY.indexOf(f.category);
-    if (f.category === "street") return MAJOR_STREET.test(f.subtype ?? "") ? 8.5 : 9.5;
-    return base;
-  };
+  const rank = (f: GazetteerFeature) => (f.category === "street" && !MAJOR_STREET.test(f.subtype ?? "") ? 10 : BIAS_RANK[f.category]);
   const sorted = [...features].sort((a, b) => rank(a) - rank(b));
   const seen = new Set<string>();
   const out: string[] = [];

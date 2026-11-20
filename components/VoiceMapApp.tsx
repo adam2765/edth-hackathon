@@ -1,11 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
+import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
 
-const CENTER: [number, number] = [2.435, 48.8455]; // lon, lat: Vincennes centre
+type Lang = "en" | "fr" | "uk";
+const SPEECH_LANG: Record<Lang, string> = { en: "en-GB", fr: "fr-FR", uk: "uk-UA" };
+
+/** Which area is active: `?area=` in the URL wins, then the last choice on this phone, then the default. */
+const AREA_EVENT = "v2m-area";
+const areaStore = {
+  get(): AreaId {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("area");
+      if (isAreaId(fromUrl)) return fromUrl;
+      const saved = window.localStorage.getItem(AREA_EVENT);
+      if (isAreaId(saved)) return saved;
+    } catch {}
+    return DEFAULT_AREA;
+  },
+  set(id: AreaId) {
+    try {
+      window.localStorage.setItem(AREA_EVENT, id);
+      window.history.replaceState(null, "", `?area=${id}`);
+    } catch {}
+    window.dispatchEvent(new Event(AREA_EVENT));
+  },
+  subscribe(cb: () => void) {
+    window.addEventListener(AREA_EVENT, cb);
+    return () => window.removeEventListener(AREA_EVENT, cb);
+  },
+};
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const MAX_CLIP_MS = 15_000;
 const HOLD_THRESHOLD_MS = 400;
@@ -32,7 +59,7 @@ type Report = {
   timings?: Timings;
   roundTripMs?: number;
 };
-type Pending = { reportId: string; question: string; candidates: Candidate[]; lang: "en" | "fr" };
+type Pending = { reportId: string; question: string; candidates: Candidate[]; lang: Lang };
 type RecState = "idle" | "starting" | "recording" | "sending";
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -104,13 +131,13 @@ function unlockSpeech() {
   } catch {}
 }
 
-function speak(text: string, lang: "en" | "fr") {
+function speak(text: string, lang: Lang) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   try {
     const synth = window.speechSynthesis;
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang === "fr" ? "fr-FR" : "en-GB";
+    u.lang = SPEECH_LANG[lang];
     const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang));
     if (voice) u.voice = voice;
     u.rate = 1;
@@ -125,6 +152,7 @@ export default function VoiceMapApp() {
   const mlRef = useRef<typeof import("maplibre-gl") | null>(null);
   const candMarkers = useRef<Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
 
   const [position, setPosition] = useState<Position | null>(null);
   const [trail, setTrail] = useState<Position[]>([]);
@@ -173,8 +201,8 @@ export default function VoiceMapApp() {
       const map = new ml.Map({
         container: mapEl.current,
         style: STYLE_URL,
-        center: CENTER,
-        zoom: 14.5,
+        center: [AREAS[areaStore.get()].centre.lon, AREAS[areaStore.get()].centre.lat],
+        zoom: AREAS[areaStore.get()].zoom,
         attributionControl: { compact: false, customAttribution: "© OpenStreetMap contributors" },
       });
       map.addControl(new ml.NavigationControl({ showCompass: true }), "top-right");
@@ -219,7 +247,7 @@ export default function VoiceMapApp() {
     return () => ro.disconnect();
   }, [mapReady]);
 
-  const sheetPadding = useCallback(() => ({ top: 50, left: 40, right: 60, bottom: 30 }), []);
+  const sheetPadding = useCallback(() => ({ top: 76, left: 40, right: 60, bottom: 30 }), []);
 
   // Draw position, accuracy circle, trail.
   useEffect(() => {
@@ -320,7 +348,8 @@ export default function VoiceMapApp() {
     (data: ApiResponse, source: "voice" | "text", roundTripMs: number) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const res = data.resolution;
-      const lang: "en" | "fr" = data.intent?.language === "fr" ? "fr" : "en";
+      const said = data.intent?.language;
+      const lang: Lang = said === "fr" || said === "uk" ? said : !data.intent && areaStore.get() === "kyiv" ? "uk" : "en";
       setLastTranscript(data.transcript || "(no words heard)");
       setLastTimings(fmtTimings(data.timings_ms, roundTripMs));
       let outcome = "";
@@ -380,7 +409,13 @@ export default function VoiceMapApp() {
     window.speechSynthesis?.cancel();
     updateReport(pending.reportId, { outcome: "Rejected all choices" });
     setPending(null);
-    setStatus(pending.lang === "fr" ? "Redites-le avec un nom de rue ou de lieu." : "Say it again with a street or place name.");
+    setStatus(
+      pending.lang === "fr"
+        ? "Redites-le avec un nom de rue ou de lieu."
+        : pending.lang === "uk"
+          ? "Повторіть з назвою вулиці або місця."
+          : "Say it again with a street or place name.",
+    );
   };
 
   // ---------- sending ----------
@@ -397,6 +432,7 @@ export default function VoiceMapApp() {
       const p = positionRef.current;
       if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts }));
       fd.append("clientTs", String(Date.now()));
+      fd.append("area", areaStore.get());
       const t0 = performance.now();
       try {
         const r = await fetch("/api/report", { method: "POST", body: fd });
@@ -546,7 +582,8 @@ export default function VoiceMapApp() {
     send({ text: t });
   };
 
-  const resetAll = () => {
+  const resetAll = (areaId: AreaId = areaStore.get()) => {
+    window.speechSynthesis?.cancel();
     setPosition(null);
     positionRef.current = null;
     setTrail([]);
@@ -556,7 +593,15 @@ export default function VoiceMapApp() {
     setLastTranscript("");
     setLastTimings("");
     setStatus("Cleared. Hold the button and say where you are.");
-    mapRef.current?.easeTo({ center: CENTER, zoom: 14.5 });
+    const a = AREAS[areaId];
+    mapRef.current?.jumpTo({ center: [a.centre.lon, a.centre.lat], zoom: a.zoom });
+  };
+
+  const switchArea = (id: AreaId) => {
+    if (id === areaStore.get() || recStateRef.current !== "idle") return;
+    areaStore.set(id);
+    resetAll(id);
+    setStatus(`Area: ${AREAS[id].label}. Hold the button and say where you are.`);
   };
 
   const btnLabel =
@@ -573,6 +618,13 @@ export default function VoiceMapApp() {
   return (
     <main className="app">
       <div ref={mapEl} className="map" />
+      <nav className="areas" aria-label="Area">
+        {(Object.keys(AREAS) as AreaId[]).map((id) => (
+          <button key={id} className={id === area ? "active" : ""} aria-pressed={id === area} onClick={() => switchArea(id)} disabled={recState !== "idle"}>
+            {AREAS[id].label}
+          </button>
+        ))}
+      </nav>
       <section ref={sheetEl} className="sheet">
         {pending && (
           <div className="ask" role="dialog" aria-label="Which one did you mean?">
@@ -615,7 +667,7 @@ export default function VoiceMapApp() {
           </button>
           <div className="talk-side">
             <div className="transcript" aria-live="polite">
-              {lastTranscript ? `“${lastTranscript}”` : <span className="muted">Try: “I&apos;m at Bérault metro”, “moving towards the château”, “je suis devant la mairie”.</span>}
+              {lastTranscript ? `“${lastTranscript}”` : <span className="muted">{AREAS[area].hint}</span>}
             </div>
             <div className="status" aria-live="polite">
               {status}
@@ -638,7 +690,7 @@ export default function VoiceMapApp() {
             Report log ({reports.length}){position ? ` · last fix ${fmtTime(position.ts)}` : ""}
           </summary>
           {reports.length > 0 && (
-            <button className="reset" onClick={resetAll}>
+            <button className="reset" onClick={() => resetAll()}>
               Clear map and log
             </button>
           )}

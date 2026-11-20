@@ -1,14 +1,21 @@
 /**
- * Builds data/gazetteer.vincennes.json from one Overpass query.
- * Run: npm run gazetteer
+ * Builds data/gazetteer.<area>.json from one Overpass query.
+ * Run: npm run gazetteer -- vincennes   (or: kyiv)
  * The running app never calls Overpass or Nominatim; it only reads the committed JSON.
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import type { Category, GazetteerFeature } from "../lib/geo/types";
-import { normalize } from "../lib/geo/normalize";
+import { normalize, transliterateUk } from "../lib/geo/normalize";
+import { AREAS, isAreaId } from "../lib/geo/areas";
 
-// S, W, N, E: Vincennes centre, the château and three Line 1 stations.
-const BBOX = { s: 48.835, w: 2.41, n: 48.856, e: 2.46 };
+const areaArg = process.argv[2] ?? "vincennes";
+if (!isAreaId(areaArg)) {
+  console.error(`Unknown area "${areaArg}". Known: ${Object.keys(AREAS).join(", ")}`);
+  process.exit(1);
+}
+const AREA = AREAS[areaArg];
+const BBOX = AREA.bbox;
+const OUT_FILE = `data/gazetteer.${AREA.id}.json`;
 const ENDPOINT = process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
 
 const bb = `${BBOX.s},${BBOX.w},${BBOX.n},${BBOX.e}`;
@@ -52,7 +59,7 @@ function categorize(t: Record<string, string>): { category: Category; subtype: s
   if (has("amenity", /^place_of_worship$/)) {
     return t.religion === "christian" ? { category: "church", subtype: t.building ?? "church" } : { category: "other", subtype: `place_of_worship:${t.religion ?? "unknown"}` };
   }
-  if (has("amenity", /^townhall$/) || (has("office", /^government$/) && /mairie|hôtel de ville/i.test(t.name ?? ""))) return { category: "town_hall", subtype: "townhall" };
+  if (has("amenity", /^townhall$/) || (has("office", /^government$/) && /mairie|hôtel de ville|міська рада|міська державна адміністрація/i.test(t.name ?? ""))) return { category: "town_hall", subtype: "townhall" };
   if (has("historic", /^(castle|fort|manor|palace)$/)) return { category: "castle", subtype: t.historic };
   if (has("amenity", /^(school|college|university|kindergarten)$/)) return { category: "school", subtype: t.amenity };
   if (has("amenity", /^(hospital|clinic)$/)) return { category: "hospital", subtype: t.amenity };
@@ -64,14 +71,16 @@ function categorize(t: Record<string, string>): { category: Category; subtype: s
 }
 
 function namesOf(t: Record<string, string>): string[] {
-  const keys = ["name", "name:fr", "name:en", "alt_name", "short_name", "official_name", "old_name"];
+  const keys = ["name", "name:uk", "name:fr", "name:en", "int_name", "alt_name", "short_name", "official_name", "old_name", "loc_name", "name:ru"];
   const out: string[] = [];
-  for (const k of keys) {
-    for (const v of (t[k] ?? "").split(";")) {
-      const s = v.trim();
-      if (s && !out.includes(s)) out.push(s);
-    }
-  }
+  const add = (v: string | null | undefined) => {
+    const s = (v ?? "").trim();
+    if (s && !out.includes(s)) out.push(s);
+  };
+  for (const k of keys) for (const v of (t[k] ?? "").split(";")) add(v);
+  // Latin spelling of Ukrainian names, so "Khreshchatyk" matches when OSM has no name:en.
+  const ukName = t["name:uk"] ?? t.name;
+  if (ukName) add(transliterateUk(ukName));
   return out;
 }
 
@@ -222,15 +231,16 @@ async function main() {
   const out = {
     source: "OpenStreetMap via Overpass API (© OpenStreetMap contributors, ODbL)",
     built_at: new Date().toISOString(),
+    area: AREA.id,
     bbox: BBOX,
     count: features.length,
     features,
   };
-  writeFileSync("data/gazetteer.vincennes.json", JSON.stringify(out));
+  writeFileSync(OUT_FILE, JSON.stringify(out));
 
   const counts: Record<string, number> = {};
   for (const f of features) counts[f.category] = (counts[f.category] ?? 0) + 1;
-  console.log(`Wrote ${features.length} features`, counts);
+  console.log(`Wrote ${features.length} features to ${OUT_FILE}`, counts);
   for (const c of ["metro_station", "church", "castle", "town_hall"]) {
     console.log(`\n${c}:`);
     for (const f of features.filter((x) => x.category === c)) console.log(`  ${f.id}  ${f.name}  [${f.subtype}]  ${f.lat},${f.lon}`);

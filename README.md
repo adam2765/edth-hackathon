@@ -3,19 +3,19 @@
 EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map updates.
 When a report could mean more than one place, the app asks back instead of guessing.
 
-Live: https://edth-hackathon.vercel.app (stage 1, single user, no auth)
+Live: https://edth-hackathon.vercel.app (stage 1, single user, no auth). Two areas: Vincennes (English, French) and central Kyiv (Ukrainian, English), switched at the top of the page or with `?area=kyiv`.
 
 ## How it works
 
 ```
 phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcribe-3, place names as context_bias)
                          ─► intent extraction (Mistral mistral-small-latest, JSON schema; never coordinates)
-                         ─► resolver (deterministic, local gazetteer of Vincennes from OpenStreetMap)
+                         ─► resolver (deterministic, local gazetteer of the chosen area from OpenStreetMap)
                          ◄─ { transcript, language, intent, resolution, timings_ms }
 ```
 
-- The language model only extracts intent: kind, landmark name/category, relation, language.
-- `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.vincennes.json`.
+- The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, language.
+- `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`.
 - The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`.
 
 ### Resolver rules
@@ -28,6 +28,8 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |
+| Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
+| Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 
 Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent. "Towards" keeps the pin and draws an arrow.
 
@@ -44,6 +46,18 @@ Chosen from the real gazetteer (889 features: 6 rail/metro stations, 11 churches
 
 If hall noise defeats transcription, type the same sentences in the text box; text and voice go through the same pipeline.
 
+### Kyiv, in Ukrainian
+
+Switch to **Київ** (2,112 features: 26 stations, 67 churches, 317 streets). Checked with a synthetic Ukrainian voice, not yet with a native speaker.
+
+| # | Say | Expected |
+|---|---|---|
+| 1 | «Я біля станції метро Хрещатик.» | Pin at Khreshchatyk station, ±80 m |
+| 2 | «Я на Хрещатику.» | Asks «вулиця Хрещатик чи Хрещатик (станція)?»; tap one |
+| 3 | «Рухаюсь до Софійського собору.» | Arrow to Saint Sophia Cathedral |
+| 4 | «Я на Майдані Незалежності.» | Pin ±249 m, no question: station, square and street are one place |
+| 5 | "I'm at the Golden Gate." | English in the same session: pin at Золоті ворота, ±30 m |
+
 ## Run locally
 
 ```bash
@@ -54,7 +68,7 @@ npm run dev -- -p 3117
 
 ```bash
 npm test             # resolver unit tests
-npm run gazetteer    # rebuild data/gazetteer.vincennes.json from Overpass (only when changing the area)
+npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes or kyiv)
 ```
 
 Environment: `MISTRAL_API_KEY` (preferred). Fallbacks behind the same interfaces: `ELEVENLABS_API_KEY` for speech-to-text, `FEATHERLESS_API_KEY` for extraction. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
@@ -66,9 +80,10 @@ app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk butt
 app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs
 lib/providers/transcriber.ts               Transcriber interface + Mistral (ElevenLabs fallback)
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
-lib/geo/gazetteer.ts                       name search, category words, bias terms
+lib/geo/areas.ts                           areas: centre, bounding box, hint text
+lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms
 lib/geo/resolver.ts                        pure resolver
-scripts/build-gazetteer.ts                 one Overpass query → data/gazetteer.vincennes.json
+scripts/build-gazetteer.ts                 one Overpass query → data/gazetteer.<area>.json
 DECISIONS.md                               every choice made, one line each
 ```
 

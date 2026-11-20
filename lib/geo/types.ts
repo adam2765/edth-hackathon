@@ -44,9 +44,14 @@ export interface Intent {
   kind: "position" | "movement" | "other";
   landmark_text: string | null;
   landmark_name: string | null;
+  /**
+   * landmark_name in dictionary (nominative) form, same script, for inflected languages:
+   * "мостом Патона" → "міст Патона". Equal to landmark_name in English and French.
+   */
+  landmark_name_lemma?: string | null;
   landmark_category: Category | null;
   relation: Relation | null;
-  language: "en" | "fr";
+  language: "en" | "fr" | "uk";
   confidence: number;
 }
 

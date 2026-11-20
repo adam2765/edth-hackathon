@@ -42,7 +42,9 @@ describe("resolver", () => {
     expect(r.status).toBe("resolved");
     expect(r.evidence.feature_id).toBe(BERAULT.id);
     expect(r.evidence.rule).toBe("named_unique");
-    expect(r.radius_m).toBe(30);
+    // 30 m for "at", widened to cover Place Bérault, the small square of the same name above the station.
+    expect(r.radius_m).toBeGreaterThanOrEqual(30);
+    expect(r.radius_m).toBeLessThanOrEqual(120);
   });
 
   it("accent-free and slightly misspelled names still match", () => {
@@ -172,5 +174,88 @@ describe("name scoring", () => {
     const b = biasTerms(gaz, 100);
     expect(b.length).toBeLessThanOrEqual(100);
     expect(b).toContain("Bérault");
+  });
+});
+
+describe("Ukrainian reports against the central Kyiv gazetteer", () => {
+  const kyiv = loadGazetteer("kyiv");
+  const centre = { lat: 50.4501, lon: 30.5234 };
+  const k = (n: string, cat: string) => kyiv.find((f) => f.name === n && f.category === cat)!;
+  const KHRESHCHATYK_METRO = k("Хрещатик", "metro_station");
+  const KHRESHCHATYK_STREET = k("вулиця Хрещатик", "street");
+  const SOFIA = k("Софійський собор", "church");
+  const uk = (p: Partial<Intent>): Intent => intent({ language: "uk", ...p });
+  const run = (i: Intent, transcript: string, lastPosition?: LastPosition) => resolve({ intent: i, transcript, lastPosition, now: NOW, gazetteer: kyiv, areaCentre: centre });
+
+  it("has the features used below", () => {
+    expect(KHRESHCHATYK_METRO).toBeDefined();
+    expect(KHRESHCHATYK_STREET).toBeDefined();
+    expect(SOFIA).toBeDefined();
+  });
+
+  it("a name in the locative case matches through its dictionary form", () => {
+    const r = run(uk({ landmark_name: "Софійського собору", landmark_name_lemma: "Софійський собор", landmark_category: "church", relation: "near" }), "Я біля Софійського собору");
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(SOFIA.id);
+  });
+
+  it("still matches an inflected name when no dictionary form is given", () => {
+    const r = run(uk({ landmark_name: "Софійського собору", landmark_name_lemma: null, relation: "near" }), "Я біля Софійського собору");
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(SOFIA.id);
+  });
+
+  it("«на Хрещатику» is a station and a long street: asks in Ukrainian", () => {
+    const r = run(uk({ landmark_name: "Хрещатику", landmark_name_lemma: "Хрещатик" }), "Я на Хрещатику");
+    expect(r.status).toBe("ambiguous");
+    expect(r.candidates.map((c) => c.id).sort()).toEqual([KHRESHCHATYK_METRO.id, KHRESHCHATYK_STREET.id].sort());
+    expect(r.question).toMatch(/Хрещатик \(станція\)/);
+    expect(r.question).toMatch(/ чи /);
+  });
+
+  it("«біля станції метро Хрещатик» resolves to the station, type words inside the name or not", () => {
+    for (const name of ["Хрещатик", "станції метро Хрещатик"]) {
+      const lemma = name === "Хрещатик" ? "Хрещатик" : "станція метро Хрещатик";
+      const r = run(uk({ landmark_name: name, landmark_name_lemma: lemma, landmark_category: "metro_station", relation: "near" }), "Перебуваю біля станції метро Хрещатик");
+      expect(r.status).toBe("resolved");
+      expect(r.evidence.feature_id).toBe(KHRESHCHATYK_METRO.id);
+    }
+  });
+
+  it("«на вулиці Хрещатик» resolves to the street", () => {
+    const r = run(uk({ landmark_name: "вулиці Хрещатик", landmark_name_lemma: "вулиця Хрещатик", landmark_category: "street" }), "Я на вулиці Хрещатик");
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(KHRESHCHATYK_STREET.id);
+  });
+
+  it("«на Майдані Незалежності» is a station, a square and a street in one spot: no question, wider circle", () => {
+    const r = run(uk({ landmark_name: "Майдані Незалежності", landmark_name_lemma: "Майдан Незалежності" }), "Я на Майдані Незалежності");
+    expect(r.status).toBe("resolved");
+    expect(r.radius_m).toBeGreaterThan(100);
+    expect(r.evidence.detail).toMatch(/folded in/);
+  });
+
+  it("«біля церкви» with no last position asks which church, in Ukrainian", () => {
+    const r = run(uk({ landmark_name: "церкви", landmark_name_lemma: "церква", landmark_category: null, relation: "near" }), "Я біля церкви");
+    expect(r.status).toBe("ambiguous");
+    expect(r.question).toMatch(/^Яка церква: /);
+    expect(r.candidates.every((c) => c.category === "church")).toBe(true);
+  });
+
+  it("an English speaker in Kyiv matches Latin spellings", () => {
+    const r = run(intent({ landmark_name: "Khreshchatyk", landmark_category: "metro_station" }), "I'm at Khreshchatyk metro");
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(KHRESHCHATYK_METRO.id);
+  });
+
+  it("«міста» (of the city) is not read as «міст» (bridge)", () => {
+    const r = run(uk({ landmark_name: "центрі міста", landmark_name_lemma: "центр міста" }), "Я в центрі міста");
+    expect(r.evidence.rule).not.toMatch(/^category/);
+  });
+
+  it("unknown place is unresolved with a Ukrainian prompt", () => {
+    const r = run(uk({ landmark_name: "Ейфелевої вежі", landmark_name_lemma: "Ейфелева вежа", relation: "near" }), "Я біля Ейфелевої вежі");
+    expect(r.status).toBe("unresolved");
+    expect(r.question).toMatch(/Назвіть вулицю/);
   });
 });
