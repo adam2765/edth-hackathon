@@ -3,7 +3,7 @@ import { resolve } from "../lib/geo/resolver";
 import { biasTerms, loadGazetteer, nameScore, searchByName } from "../lib/geo/gazetteer";
 import { bearingDeg, distanceM, nearestPointOnLines } from "../lib/geo/geo";
 import { sanitizeIntent } from "../lib/providers/extractor";
-import type { Intent, LastPosition } from "../lib/geo/types";
+import type { GazetteerFeature, Intent, LastPosition } from "../lib/geo/types";
 
 const gaz = loadGazetteer();
 const NOW = Date.parse("2026-11-20T16:00:00Z");
@@ -321,6 +321,66 @@ describe("stated distances and compass directions", () => {
     expect(sanitizeIntent({ kind: "movement", distance_m: 300.4, direction: "north_east" })).toMatchObject({ distance_m: 300, direction: "north_east" });
     for (const distance_m of [-5, 0, 1e9, "300", null]) expect(sanitizeIntent({ distance_m }).distance_m).toBeNull();
     expect(sanitizeIntent({ direction: "left" }).direction).toBeNull();
+  });
+});
+
+describe("two streets with one name, in two towns", () => {
+  // As the gazetteer build writes them: one feature per street, each with its town.
+  const street = (town: string, lon0: number): GazetteerFeature => ({
+    id: `street/rue-gambetta/${town.toLowerCase()}`,
+    name: "Rue Gambetta",
+    names: ["Rue Gambetta"],
+    category: "street",
+    subtype: "residential",
+    lat: 48.853,
+    lon: lon0 + 0.001,
+    bbox: [lon0, 48.853, lon0 + 0.002, 48.853],
+    osm_type: "way",
+    osm_id: 1,
+    lines: [
+      [
+        [lon0, 48.853],
+        [lon0 + 0.002, 48.853],
+      ],
+    ],
+    town,
+  });
+  const WEST = street("Vincennes", 2.429);
+  const EAST = street("Montreuil", 2.457);
+  const twoTowns = [WEST, EAST];
+  const run = (lang: "en" | "fr", lastPosition?: LastPosition, streets = twoTowns) =>
+    resolve({ intent: intent({ landmark_name: "rue Gambetta", landmark_category: "street", language: lang }), transcript: "I'm on rue Gambetta", lastPosition, now: NOW, gazetteer: streets });
+
+  it("with no last position, asks which one and names the towns", () => {
+    const r = run("en");
+    expect(r.status).toBe("ambiguous");
+    expect(r.candidates.map((c) => c.id).sort()).toEqual([EAST.id, WEST.id].sort());
+    expect(r.question).toMatch(/Rue Gambetta \(Vincennes\)/);
+    expect(r.question).toMatch(/Rue Gambetta \(Montreuil\)/);
+    expect(r.candidates.map((c) => c.town).sort()).toEqual(["Montreuil", "Vincennes"]);
+    expect(run("fr").question).toMatch(/^Quelle rue : Rue Gambetta \((Vincennes|Montreuil)\) ou Rue Gambetta/);
+  });
+
+  it("a fresh last position on one of them picks it: nearest wins", () => {
+    const r = run("en", at({ lat: 48.8535, lon: 2.4295 }, 2));
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(WEST.id);
+  });
+
+  it("with no towns to tell them apart, the question gives the distances", () => {
+    const r = run("en", undefined, twoTowns.map(({ town, ...f }) => (void town, f)));
+    expect(r.status).toBe("ambiguous");
+    expect(r.question).toMatch(/Rue Gambetta \(\d+ m\)|Rue Gambetta \(\d\.\d km\)/);
+    expect(r.question).not.toMatch(/\(street\)/);
+  });
+
+  it("in the real Vincennes gazetteer, «rue Gambetta» is two streets and the question names their towns", () => {
+    const gambettas = gaz.filter((f) => f.category === "street" && f.name === "Rue Gambetta");
+    expect(gambettas.map((f) => f.town).sort()).toEqual(["Fontenay-sous-Bois", "Montreuil"]);
+    const r = resolve({ intent: intent({ landmark_name: "rue Gambetta", landmark_category: "street" }), transcript: "I'm on rue Gambetta", now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("ambiguous");
+    expect(r.question).toMatch(/Rue Gambetta \(Fontenay-sous-Bois\)/);
+    expect(r.question).toMatch(/Rue Gambetta \(Montreuil\)/);
   });
 });
 

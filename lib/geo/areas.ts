@@ -12,6 +12,11 @@ export interface Area {
   bbox: { s: number; w: number; n: number; e: number };
   /** Example reports shown under the talk button. */
   hint: string;
+  /**
+   * OSM admin_level of the town inside which street names are unique: the commune in France (8),
+   * the city for Kyiv (4). The gazetteer build uses it to tell same-name streets apart.
+   */
+  townAdminLevel: number;
 }
 
 export const AREAS: Record<AreaId, Area> = {
@@ -24,6 +29,7 @@ export const AREAS: Record<AreaId, Area> = {
     // Vincennes centre, the château and three Line 1 stations.
     bbox: { s: 48.835, w: 2.41, n: 48.856, e: 2.46 },
     hint: "Try: “I'm at Bérault metro”, “moving towards the château”, “je suis devant la mairie”.",
+    townAdminLevel: 8,
   },
   kyiv: {
     id: "kyiv",
@@ -34,6 +40,7 @@ export const AREAS: Record<AreaId, Area> = {
     // Main railway station in the west to the Lavra in the east, Olimpiiska in the south to Podil in the north.
     bbox: { s: 50.428, w: 30.485, n: 50.472, e: 30.565 },
     hint: "Спробуйте: «Я біля Золотих воріт», «Я на Хрещатику», «Рухаюсь до Софійського собору», “I'm at the Golden Gate”.",
+    townAdminLevel: 4,
   },
 };
 

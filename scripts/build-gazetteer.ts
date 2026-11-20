@@ -7,6 +7,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import type { Category, GazetteerFeature } from "../lib/geo/types";
 import { normalize, transliterateUk } from "../lib/geo/normalize";
 import { AREAS, isAreaId } from "../lib/geo/areas";
+import { groupStreetPieces, joinSameTown } from "../lib/geo/streets";
 
 const areaArg = process.argv[2] ?? "vincennes";
 if (!isAreaId(areaArg)) {
@@ -100,31 +101,100 @@ function priority(el: OsmEl): number {
   return el.type === "node" ? 3 : el.type === "way" ? 2 : 1;
 }
 
-async function main() {
-  // Busy public servers return 429/502/504; back off and alternate between the main server and a mirror.
+// Busy public servers return 429/502/504; back off and alternate between the main server and a mirror.
+// `accept` rejects an answer that parsed but is not usable; that counts as a failed attempt.
+async function overpass(q: string, what: string, accept: (json: { elements: OsmEl[] }) => string | null = () => null): Promise<{ elements: OsmEl[] }> {
   const endpoints = [ENDPOINT, "https://overpass.private.coffee/api/interpreter"];
-  let json: { elements: OsmEl[] } | null = null;
-  for (let attempt = 0; attempt < 6 && !json; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const url = endpoints[attempt % endpoints.length];
-    console.log(`Querying Overpass at ${url} for bbox ${bb} (attempt ${attempt + 1}) ...`);
+    console.log(`Querying Overpass at ${url} for ${what} (attempt ${attempt + 1}) ...`);
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "edth-voice-to-map-gazetteer/0.1" },
-        body: new URLSearchParams({ data: query }).toString(),
+        body: new URLSearchParams({ data: q }).toString(),
+        signal: AbortSignal.timeout(180_000),
       });
-      if (res.ok) json = (await res.json()) as { elements: OsmEl[] };
-      else console.log(`  ${res.status}: ${(await res.text()).slice(0, 80).replace(/\s+/g, " ")}`);
+      if (res.ok) {
+        const json = (await res.json()) as { elements: OsmEl[] };
+        const problem = accept(json);
+        if (!problem) return json;
+        console.log(`  unusable answer: ${problem}`);
+      } else console.log(`  ${res.status}: ${(await res.text()).slice(0, 80).replace(/\s+/g, " ")}`);
     } catch (e) {
       console.log(`  ${(e as Error).message}`);
     }
-    if (!json) await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+    await new Promise((r) => setTimeout(r, Math.min(60_000, 2000 * 2 ** attempt)));
   }
-  if (!json) throw new Error("Overpass unavailable after retries; existing data file left untouched");
+  throw new Error("Overpass unavailable after retries; existing data file left untouched");
+}
+
+/**
+ * The town each point is in: the admin area at `level` (commune, city) that contains it.
+ * One query; a marker element before each lookup tells the answers apart.
+ */
+async function townsOf(points: { lat: number; lon: number }[], level: number): Promise<(string | undefined)[]> {
+  if (!points.length) return [];
+  const q =
+    "[out:json][timeout:120];\n" +
+    points
+      .map((p, i) => `make marker n="${i}"; out;\nis_in(${p.lat},${p.lon})->.a; area.a["boundary"="administrative"]["admin_level"="${level}"]; out tags;`)
+      .join("\n");
+  type El = OsmEl | { type: "marker"; tags: { n: string } };
+  const read = (json: { elements: OsmEl[] }) => {
+    const towns: (string | undefined)[] = points.map(() => undefined);
+    let cur = -1;
+    let markers = 0;
+    for (const el of json.elements as El[]) {
+      if (el.type === "marker") {
+        cur = Number(el.tags.n);
+        markers++;
+      } else if (cur >= 0 && towns[cur] === undefined) towns[cur] = el.tags?.name;
+    }
+    return { towns, markers };
+  };
+  // Some mirrors answer without their area index: no markers, or no town at all. Try again elsewhere.
+  const json = await overpass(q, `the towns of ${points.length} street groups`, (j) => {
+    const { towns, markers } = read(j);
+    if (markers !== points.length) return `${markers} of ${points.length} lookups answered`;
+    return towns.some(Boolean) ? null : "no town found for any street";
+  });
+  const { towns } = read(json);
+  const missing = towns.filter((t) => !t).length;
+  if (missing) console.log(`  ${missing} street group(s) are in no admin_level=${level} area; they are told apart by distance`);
+  return towns;
+}
+
+type Line = [number, number][];
+type StreetPiece = { line: Line; osm_id: number; name: string; names: string[]; subtype: string };
+
+/** The vertex nearest the middle of the pieces' box, so it always lies on the street. */
+function onStreetCentre(lines: Line[]): { lat: number; lon: number; bbox: [number, number, number, number] } {
+  const pts = lines.flat();
+  const minLon = Math.min(...pts.map((p) => p[0]));
+  const maxLon = Math.max(...pts.map((p) => p[0]));
+  const minLat = Math.min(...pts.map((p) => p[1]));
+  const maxLat = Math.max(...pts.map((p) => p[1]));
+  const cLon = (minLon + maxLon) / 2;
+  const cLat = (minLat + maxLat) / 2;
+  let best = pts[0];
+  let bestD = Infinity;
+  for (const p of pts) {
+    const d = (p[0] - cLon) ** 2 + (p[1] - cLat) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return { lat: best[1], lon: best[0], bbox: [minLon, minLat, maxLon, maxLat] };
+}
+
+async function main() {
+  const json = await overpass(query, `bbox ${bb}`);
   console.log(`Overpass returned ${json.elements.length} elements`);
 
   const pois: (GazetteerFeature & { _prio: number })[] = [];
-  const streets = new Map<string, GazetteerFeature & { _prio: number }>();
+  const pieces = new Map<string, StreetPiece[]>();
 
   for (const el of json.elements) {
     const t = el.tags ?? {};
@@ -136,25 +206,7 @@ async function main() {
       if (!el.geometry?.length) continue;
       const line = el.geometry.map((p) => [r5(p.lon), r5(p.lat)] as [number, number]);
       const key = normalize(t.name);
-      const existing = streets.get(key);
-      if (existing) {
-        existing.lines!.push(line);
-        for (const n of namesOf(t)) if (!existing.names.includes(n)) existing.names.push(n);
-      } else {
-        streets.set(key, {
-          id: `street/${key.replace(/ /g, "-")}`,
-          name: t.name,
-          names: namesOf(t),
-          category: "street",
-          subtype: cat.subtype,
-          lat: 0,
-          lon: 0,
-          osm_type: "way",
-          osm_id: el.id,
-          lines: [line],
-          _prio: 0,
-        });
-      }
+      pieces.set(key, [...(pieces.get(key) ?? []), { line, osm_id: el.id, name: t.name, names: namesOf(t), subtype: cat.subtype }]);
       continue;
     }
 
@@ -182,28 +234,53 @@ async function main() {
     });
   }
 
-  // Finish streets: centre is the vertex nearest the bbox centre, so it always lies on the street.
-  for (const s of streets.values()) {
-    const pts = s.lines!.flat();
-    const minLon = Math.min(...pts.map((p) => p[0]));
-    const maxLon = Math.max(...pts.map((p) => p[0]));
-    const minLat = Math.min(...pts.map((p) => p[1]));
-    const maxLat = Math.max(...pts.map((p) => p[1]));
-    const cLon = (minLon + maxLon) / 2;
-    const cLat = (minLat + maxLat) / 2;
-    let best = pts[0];
-    let bestD = Infinity;
-    for (const p of pts) {
-      const d = (p[0] - cLon) ** 2 + (p[1] - cLat) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = p;
-      }
-    }
-    s.lon = best[0];
-    s.lat = best[1];
-    s.bbox = [minLon, minLat, maxLon, maxLat];
+  // Streets: pieces of one name are one street when they are close, or close enough and in the
+  // same town. Two towns' "rue Gambetta" stay two features, each with its town, so a report naming
+  // one is asked back. Only names that split need the town lookup.
+  const byName = [...pieces.entries()].map(([key, ps]) => ({
+    key,
+    groups: groupStreetPieces(ps.map((p) => p.line)).map((g) => g.map((i) => ps[i])),
+  }));
+  const split = byName.flatMap((n) => (n.groups.length > 1 ? n.groups : []));
+  const towns = await townsOf(
+    split.map((g) => onStreetCentre(g.map((p) => p.line))),
+    AREA.townAdminLevel,
+  );
+  const townOf = new Map(split.map((g, i) => [g, towns[i]]));
+  const streets: GazetteerFeature[] = [];
+  for (const { key, groups } of byName) {
+    const withTown = groups.map((g) => ({ pieces: g, lines: g.map((p) => p.line), town: townOf.get(g) }));
+    const streetsOfName = joinSameTown(withTown).map((ix) => ({
+      pieces: ix.flatMap((i) => withTown[i].pieces),
+      town: withTown[ix[0]].town,
+    }));
+    const slug = (s: string) => normalize(s).replace(/ /g, "-");
+    const suffixes = streetsOfName.map((s) => (s.town ? slug(s.town) : ""));
+    streetsOfName.forEach((s, i) => {
+      const first = s.pieces[0];
+      const lines = s.pieces.map((p) => p.line);
+      const names: string[] = [];
+      for (const p of s.pieces) for (const n of p.names) if (!names.includes(n)) names.push(n);
+      // One street keeps the plain id; same-name streets get their town, or a number when that does not tell them apart.
+      const unique = suffixes[i] && suffixes.filter((x) => x === suffixes[i]).length === 1;
+      const id = streetsOfName.length === 1 ? `street/${slug(key)}` : `street/${slug(key)}/${unique ? suffixes[i] : `${suffixes[i] || "part"}-${i + 1}`}`;
+      streets.push({
+        id,
+        name: first.name,
+        names,
+        category: "street",
+        subtype: first.subtype,
+        ...onStreetCentre(lines),
+        ...(streetsOfName.length > 1 && s.town ? { town: s.town } : {}),
+        osm_type: "way",
+        osm_id: first.osm_id,
+        lines,
+      });
+    });
   }
+  const sharedNames = streets.filter((s) => s.id.split("/").length > 2);
+  console.log(`Streets: ${streets.length} from ${pieces.size} names; ${sharedNames.length} share a name with another street:`);
+  for (const s of sharedNames) console.log(`  ${s.id}  ${s.town ?? "(no town)"}  ${s.lat},${s.lon}  ${s.lines!.length} piece(s)`);
 
   // Merge duplicate POIs: same normalised name, same category, within 300 m.
   pois.sort((a, b) => b._prio - a._prio);
@@ -221,11 +298,14 @@ async function main() {
     merged.push(p);
   }
 
-  const features: GazetteerFeature[] = [...merged, ...streets.values()].map(({ _prio, ...f }) => {
-    void _prio;
-    return f;
-  });
-  features.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  const features: GazetteerFeature[] = [
+    ...merged.map(({ _prio, ...f }) => {
+      void _prio;
+      return f;
+    }),
+    ...streets,
+  ];
+  features.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 
   mkdirSync("data", { recursive: true });
   const out = {

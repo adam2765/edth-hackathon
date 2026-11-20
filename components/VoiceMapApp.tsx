@@ -716,7 +716,7 @@ export default function VoiceMapApp() {
                   <span className="choice-name">
                     {c.name}
                     <small>
-                      {c.category.replace("_", " ")} · {c.distance_m < 1000 ? `${c.distance_m} m` : `${(c.distance_m / 1000).toFixed(1)} km`}{" "}
+                      {c.category.replace("_", " ")} · {c.town ? `${c.town} · ` : ""}{c.distance_m < 1000 ? `${c.distance_m} m` : `${(c.distance_m / 1000).toFixed(1)} km`}{" "}
                       {position ? "from you" : "from centre"}
                     </small>
                   </span>

@@ -145,6 +145,7 @@ function toCandidate(f: GazetteerFeature, ref: LatLon, intent: Intent, last: Las
     lat: f.lat,
     lon: f.lon,
     distance_m: Math.round(distanceM(ref, f.lines?.length ? nearestPointOnLines(ref, f.lines) : f)),
+    ...(f.town ? { town: f.town } : {}),
     score,
     placement: placementFor(f, intent, last),
   };
@@ -181,13 +182,23 @@ const SUBTYPE_LABEL: Record<string, Record<Lang, string>> = {
   stadium: { en: "stadium", fr: "stade", uk: "стадіон" },
 };
 
-/** Choice labels; add the category when two choices share a name ("Château de Vincennes (castle)"). */
+/**
+ * Choice labels. When two choices share a name, say what tells them apart: the kind of place
+ * ("Château de Vincennes (castle)"), or for two places of one kind the town ("Rue Gambetta
+ * (Montreuil)"), or failing that the distance ("Rue Gambetta (2.1 km)").
+ */
 export function choiceLabels(cands: Candidate[], lang: Lang): string[] {
   const kind = (c: Candidate) => (c.category === "other" && c.subtype && SUBTYPE_LABEL[c.subtype]?.[lang]) || CAT_LABEL[c.category][lang];
+  const name = (c: Candidate) => c.name.toLowerCase();
+  const twin = (a: Candidate, b: Candidate) => a.category === b.category && name(a) === name(b);
+  const far = (m: number) => (m < 1000 ? `${m} ${lang === "uk" ? "м" : "m"}` : `${(m / 1000).toFixed(1).replace(".", lang === "en" ? "." : ",")} ${lang === "uk" ? "км" : "km"}`);
   return cands.map((c) => {
     // Also when another choice contains this name: "Хрещатик (станція)" next to "вулиця Хрещатик".
-    const clash = cands.some((o) => o !== c && o.name.toLowerCase().includes(c.name.toLowerCase()));
-    return clash ? `${c.name} (${kind(c)})` : c.name;
+    const kindClash = cands.some((o) => o !== c && !twin(o, c) && name(o).includes(name(c)));
+    const twins = cands.filter((o) => o !== c && twin(o, c));
+    const where = !twins.length ? null : c.town && twins.every((o) => o.town && o.town !== c.town) ? c.town : far(c.distance_m);
+    const parts = [kindClash ? kind(c) : null, where].filter(Boolean);
+    return parts.length ? `${c.name} (${parts.join(", ")})` : c.name;
   });
 }
 

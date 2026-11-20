@@ -49,7 +49,7 @@ Movement with a distance is dead reckoning from the last position, and is also s
 
 ## Demo script
 
-Chosen from the real gazetteer (889 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle). Start from a fresh page (or "Clear map and log").
+Chosen from the real gazetteer (911 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle). Start from a fresh page (or "Clear map and log").
 
 | # | Say | Expected |
 |---|---|---|

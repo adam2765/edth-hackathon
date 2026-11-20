@@ -45,6 +45,8 @@ export interface GazetteerFeature {
   osm_id: number;
   /** Streets only: polylines as [lon, lat] pairs. */
   lines?: [number, number][][];
+  /** Set when another street in the gazetteer has the same name: the town this one is in, to tell them apart. */
+  town?: string;
 }
 
 export interface Intent {
@@ -109,6 +111,8 @@ export interface Candidate {
   lon: number;
   /** Distance from the reference point (last position or area centre), metres. */
   distance_m: number;
+  /** As in GazetteerFeature: the town, when another street has the same name. */
+  town?: string;
   score?: number;
   placement: Placement;
 }
