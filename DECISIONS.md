@@ -69,3 +69,6 @@ One line each, numbered, newest last.
 65. One screen, so no Expo Router, despite the template's advice. The template's MIT licence file is removed: it covers Expo's template, and this repo's own terms are not settled.
 66. The iOS build needs a UTF-8 locale (`LANG=en_US.UTF-8`), or CocoaPods fails before compiling.
 67. The transmitter's reply types are imported from `lib/geo/types.ts` as types only, so a change to the server's reply shows up as a type error in the app instead of at run time.
+68. `AGENTS.md` is the one instruction file for every coding agent: Claude Code and Codex both read it, and one teammate uses Codex (Alex, 20 Nov). There is no `CLAUDE.md`; project rules go in `AGENTS.md`, or `transmitter/AGENTS.md` for the app, which now says where the app departs from the Expo template's advice (no Expo Router, no EAS).
+69. `docs/DESIGN.md` is the team's design document: the challenge, our approach, what is built, the contracts between parts, the work ahead and open questions. A shareable copy for people without the repo is kept in Claude Docs; the repo file wins if they differ.
+70. `.env.example` lists every environment variable the code reads, with no values, and is the one `.env*` file git tracks.

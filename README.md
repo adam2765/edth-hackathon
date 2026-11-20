@@ -78,7 +78,7 @@ Order matters for step 1: said within 10 minutes of a fix at the station, «Я �
 
 ```bash
 npm install
-export MISTRAL_API_KEY=...   # never commit it
+cp .env.example .env.local   # then fill in MISTRAL_API_KEY; never commit it
 npm run dev -- -p 3117
 ```
 
@@ -110,7 +110,9 @@ lib/geo/areas.ts                           areas: centre, bounding box, hint tex
 lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms
 lib/geo/resolver.ts                        pure resolver
 scripts/build-gazetteer.ts                 one Overpass query → data/gazetteer.<area>.json
+docs/DESIGN.md                             design document: goals, what exists, contracts, plan, open questions
 DECISIONS.md                               every choice made, one line each
+AGENTS.md                                  instructions for coding agents (Claude Code and Codex read the same file)
 ```
 
 Map data © OpenStreetMap contributors (ODbL). Tiles by OpenFreeMap / OpenMapTiles.

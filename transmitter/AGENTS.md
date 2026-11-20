@@ -1,5 +1,19 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+## This app
+
+The transmitter: it stands in for a field radio and sends spoken reports to the coordinator (`POST /api/report` in the web app one folder up). Read `README.md` here, section 8.3 of `../docs/DESIGN.md`, and decisions 58 to 67 in `../DECISIONS.md`. The root `AGENTS.md` rules apply here too.
+
+Where this app differs from the Expo template advice below:
+
+- **One screen, no Expo Router** (decision 65). Ignore the routing section below unless the app grows a second screen.
+- **Native development build, not Expo Go** (decision 59): on-device speech-to-text and an open microphone need native modules. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
+- **No EAS.** There is no paid Apple account, so iPhones get the app by cable from a Mac and Android by install file. Do not set up EAS build, submit or update.
+- **Every source makes an `Utterance`** (`src/types.ts`) and goes down one send path. Add a new source (for example an open microphone) as another producer of utterances, not as a second path.
+- **Reply types come from `../lib/geo/types.ts`** as type-only imports (decision 67). Do not copy them here.
+- **Uploads use expo-file-system's `File`** (decision 64); React Native's `{ uri, name, type }` form part is rejected by Expo 58's fetch.
+- Check with `npx tsc --noEmit` before calling a task done. There is no lint setup here yet.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
