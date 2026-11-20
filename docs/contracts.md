@@ -12,6 +12,7 @@ The types live in `lib/geo/types.ts`. The transmitter imports them as types only
 |---|---|
 | `audio` (file) or `text` | The report. Text skips speech-to-text: it is the test hook and the demo fallback if the hall is too noisy. |
 | `area` | `vincennes` (default) or `kyiv` |
+| `language` | Optional: `en`, `fr` or `uk`, the language the speaker's device is set to. The question comes back in it. Without it, the language is guessed from the words [104, 106]. |
 | `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. |
 | `clientTs` | Client time, epoch ms |
 | `session` | Session code: lower-case letters, digits, `-` and `_`, up to 40. With one, the report is saved to that session's log for the receiver; without one (the web page), it is not saved [99]. |

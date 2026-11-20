@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { NoLocalTranscriberError, getTranscriber } from "@/lib/providers/transcriber";
-import { getExtractor } from "@/lib/providers/extractor";
+import { getExtractor, pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { resolve } from "@/lib/geo/resolver";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
@@ -90,6 +90,8 @@ export async function POST(req: Request) {
   const callsign = callsignOf(form.get("callsign"));
   const seqIn = Number(form.get("seq"));
   const seq = Number.isInteger(seqIn) && seqIn > 0 ? seqIn : null;
+  // The language the device is set to. It decides the question's language; without it, it is guessed.
+  const pinned = pinnedLanguage(form.get("language"));
   const meta = { callsign, seq, clientTs, area: area.id, lastPosition };
 
   const timings = { stt: 0, extract: 0, resolve: 0, total: 0 };
@@ -112,18 +114,19 @@ export async function POST(req: Request) {
 
     if (!transcript) {
       timings.total = Math.round(performance.now() - t0);
+      const heard = pinned ?? sttLanguage;
       const resolution: Resolution = {
         status: "unresolved",
         candidates: [],
-        question: NO_WORDS[sttLanguage === "ru" ? "uk" : (sttLanguage ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
+        question: NO_WORDS[heard === "ru" ? "uk" : (heard ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
         evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
       };
-      const saved = await save(session, { ...meta, transcript: "", language: sttLanguage, intent: null, resolution, timings_ms: timings });
-      return NextResponse.json({ transcript: "", language: sttLanguage, intent: null, resolution, timings_ms: timings, clientTs, ...saved });
+      const saved = await save(session, { ...meta, transcript: "", language: heard, intent: null, resolution, timings_ms: timings });
+      return NextResponse.json({ transcript: "", language: heard, intent: null, resolution, timings_ms: timings, clientTs, ...saved });
     }
 
     const e = performance.now();
-    const intent = await getExtractor().extract(transcript, { languageHint: sttLanguage, place: area.place });
+    const intent = await getExtractor().extract(transcript, { languageHint: sttLanguage, place: area.place, language: pinned });
     timings.extract = Math.round(performance.now() - e);
 
     const r0 = performance.now();
@@ -131,7 +134,7 @@ export async function POST(req: Request) {
     timings.resolve = Math.round(performance.now() - r0);
     timings.total = Math.round(performance.now() - t0);
 
-    const language = sttLanguage ?? intent.language;
+    const language = pinned ?? sttLanguage ?? intent.language;
     const saved = await save(session, { ...meta, transcript, language, intent, resolution, timings_ms: timings });
     return NextResponse.json({ transcript, language, intent, resolution, timings_ms: timings, clientTs, area: area.id, ...saved });
   } catch (err) {

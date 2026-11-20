@@ -6,7 +6,8 @@ The largest untested risks are real Ukrainian speech and mixed-language clips; t
 - **One place per report:** intersections, "between A and B" and "at A, going to B" keep only one place.
 - **Spoken coordinates and grid references** are not parsed.
 - **Real Ukrainian speech is untested;** all Ukrainian tests used a synthetic voice. Short clips sometimes came back misspelled, though the place still resolved.
-- **Language tagging:** an English sentence with a French street name was tagged as French, so a follow-up question would have been in French.
+- **Language tagging, for clients that do not send `language`:** the web page and the transmitter always send it [106]. Without it, an English sentence with a French street name was tagged as French, so a follow-up question would have been in French. A report in Latin letters is never tagged Ukrainian unless speech-to-text said so [104].
+- **A pinned language that is wrong is not caught:** a phone left on Українська while someone speaks English makes Whisper write the English in Cyrillic, and the place is not found [106].
 - **No retry on Mistral rate limits;** a refused call fails the report. Most calls take under a second, but one took 8.3 s against a 10 s timeout.
 - **Interface text is English only;** only the question and place names follow the speaker's language [39].
 - **The Ukrainian voice downloads 77 MB** the first time with nothing on screen to show it.

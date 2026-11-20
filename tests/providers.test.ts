@@ -62,4 +62,18 @@ describe("provider mode", () => {
     expect(body.model).toBe("ministral-3:3b");
     expect(body.response_format.type).toBe("json_schema");
   });
+
+  it("takes the language the device pinned over the model's label (decision 106)", async () => {
+    vi.stubEnv("PROVIDER_MODE", "local");
+    // What the local 3B model answered for an English report in Kyiv
+    const reply = { kind: "position", landmark_text: "Khreshchatyk", landmark_name: "Хрещатик", landmark_name_lemma: "Хрещатик", landmark_category: null, relation: "at", distance_m: null, direction: null, language: "uk", confidence: 0.9 };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }))));
+    const { getExtractor, pinnedLanguage } = await providers();
+    const place = "central Kyiv, Ukraine";
+    expect((await getExtractor().extract("I'm at Хрещатик.", { place, language: "en" })).language).toBe("en");
+    expect((await getExtractor().extract("I'm at Хрещатик.", { place, language: "fr" })).language).toBe("fr");
+    // Not pinned: the model's label, checked against the letters (mixed here, so it stands)
+    expect((await getExtractor().extract("I'm at Хрещатик.", { place })).language).toBe("uk");
+    expect([pinnedLanguage("uk"), pinnedLanguage("ru"), pinnedLanguage(null), pinnedLanguage("")]).toEqual(["uk", null, null, null]);
+  });
 });

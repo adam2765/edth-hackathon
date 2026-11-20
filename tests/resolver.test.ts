@@ -322,6 +322,24 @@ describe("stated distances and compass directions", () => {
     for (const distance_m of [-5, 0, 1e9, "300", null]) expect(sanitizeIntent({ distance_m }).distance_m).toBeNull();
     expect(sanitizeIntent({ direction: "left" }).direction).toBeNull();
   });
+
+  it("intent clean-up checks the language against the letters said (decision 104)", () => {
+    const lang = (language: string, text: string, hint: string | null = null) => sanitizeIntent({ language }, hint, text).language;
+    // What the local 3B model did with English reports in Kyiv
+    expect(lang("uk", "I'm at Khreshchatyk.")).toBe("en");
+    expect(lang("uk", "Moving towards Saint Sophia Cathedral.")).toBe("en");
+    expect(lang("uk", "Je suis devant la mairie.", "fr")).toBe("fr");
+    // Speech-to-text heard Ukrainian: trusted, even in Latin letters
+    expect(lang("uk", "Ya na Khreshchatyku.", "uk")).toBe("uk");
+    // Only Cyrillic letters: Ukrainian, whatever the label
+    expect(lang("en", "Я на Хрещатику.")).toBe("uk");
+    // Both scripts, or labels that already fit: the model's label stands
+    expect(lang("en", "I'm at Хрещатик.")).toBe("en");
+    expect(lang("uk", "Рухаюсь до Saint Sophia.")).toBe("uk");
+    expect(lang("fr", "Je suis au château.")).toBe("fr");
+    // Without the transcript, nothing is checked
+    expect(sanitizeIntent({ language: "uk" }).language).toBe("uk");
+  });
 });
 
 describe("two streets with one name, in two towns", () => {

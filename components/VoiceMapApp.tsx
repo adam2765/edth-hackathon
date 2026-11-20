@@ -34,6 +34,34 @@ const areaStore = {
     return () => window.removeEventListener(AREA_EVENT, cb);
   },
 };
+/**
+ * The language this phone's speaker uses (decision 106): the last choice on this phone, else English.
+ * It is sent with every report and decides the question's language and voice; nothing guesses it.
+ */
+const LANG_EVENT = "v2m-lang";
+const LANGS: Lang[] = ["en", "fr", "uk"];
+const LANG_NAME: Record<Lang, string> = { en: "English", fr: "Français", uk: "Українська" };
+const LANG_SHORT: Record<Lang, string> = { en: "EN", fr: "FR", uk: "УКР" };
+const isLang = (v: unknown): v is Lang => v === "en" || v === "fr" || v === "uk";
+const langStore = {
+  get(): Lang {
+    try {
+      const saved = window.localStorage.getItem(LANG_EVENT);
+      if (isLang(saved)) return saved;
+    } catch {}
+    return "en";
+  },
+  set(l: Lang) {
+    try {
+      window.localStorage.setItem(LANG_EVENT, l);
+    } catch {}
+    window.dispatchEvent(new Event(LANG_EVENT));
+  },
+  subscribe(cb: () => void) {
+    window.addEventListener(LANG_EVENT, cb);
+    return () => window.removeEventListener(LANG_EVENT, cb);
+  },
+};
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const MAX_CLIP_MS = 15_000;
 const HOLD_THRESHOLD_MS = 400;
@@ -126,7 +154,7 @@ let speechUnlocked = false;
 function unlockSpeech() {
   if (typeof window === "undefined") return;
   // The on-device Ukrainian voice plays through its own audio element, which also needs a tap.
-  if (areaStore.get() === "kyiv" || ukrainianVoice.ready) ukrainianVoice.unlock();
+  if (langStore.get() === "uk" || ukrainianVoice.ready) ukrainianVoice.unlock();
   if (speechUnlocked || !("speechSynthesis" in window)) return;
   speechUnlocked = true;
   try {
@@ -185,11 +213,12 @@ export default function VoiceMapApp() {
   const candMarkers = useRef<Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
+  const speakerLang = useSyncExternalStore(langStore.subscribe, langStore.get, (): Lang => "en");
 
-  // Kyiv questions are in Ukrainian, so fetch the on-device voice as soon as Kyiv is chosen.
+  // Ukrainian questions use the on-device voice, so fetch it as soon as Ukrainian is chosen.
   useEffect(() => {
-    if (area === "kyiv") preloadUkrainianVoice();
-  }, [area]);
+    if (speakerLang === "uk") preloadUkrainianVoice();
+  }, [speakerLang]);
 
   const [position, setPosition] = useState<Position | null>(null);
   const [trail, setTrail] = useState<Position[]>([]);
@@ -423,8 +452,9 @@ export default function VoiceMapApp() {
     (data: ApiResponse, source: "voice" | "text", roundTripMs: number) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const res = data.resolution;
+      // The language the question was written in: the pinned one, unless the server ignored it.
       const said = data.intent?.language;
-      const lang: Lang = said === "fr" || said === "uk" ? said : !data.intent && areaStore.get() === "kyiv" ? "uk" : "en";
+      const lang: Lang = isLang(said) ? said : langStore.get();
       setLastTranscript(data.transcript || "(no words heard)");
       setLastTimings(fmtTimings(data.timings_ms, roundTripMs));
       let outcome = "";
@@ -513,6 +543,7 @@ export default function VoiceMapApp() {
       if (p) fd.append("lastPosition", JSON.stringify({ lat: p.lat, lon: p.lon, ts: p.ts, radius_m: p.radius_m, ...(p.estimated ? { uncertainty_m: p.radius_m } : {}) }));
       fd.append("clientTs", String(Date.now()));
       fd.append("area", areaStore.get());
+      fd.append("language", langStore.get());
       const t0 = performance.now();
       try {
         const r = await fetch("/api/report", { method: "POST", body: fd });
@@ -684,6 +715,13 @@ export default function VoiceMapApp() {
     setStatus(`Area: ${AREAS[id].label}. Hold the button and say where you are.`);
   };
 
+  const switchLang = (l: Lang) => {
+    if (l === langStore.get() || recStateRef.current !== "idle") return;
+    stopSpeaking();
+    langStore.set(l);
+    setStatus(`Language: ${LANG_NAME[l]}. Questions come back in it.`);
+  };
+
   const btnLabel =
     recState === "starting"
       ? "Opening mic…"
@@ -702,6 +740,22 @@ export default function VoiceMapApp() {
         {(Object.keys(AREAS) as AreaId[]).map((id) => (
           <button key={id} className={id === area ? "active" : ""} aria-pressed={id === area} onClick={() => switchArea(id)} disabled={recState !== "idle"}>
             {AREAS[id].label}
+          </button>
+        ))}
+      </nav>
+      <nav className="langs" aria-label="Language">
+        {LANGS.map((l) => (
+          <button
+            key={l}
+            lang={l}
+            className={l === speakerLang ? "active" : ""}
+            aria-pressed={l === speakerLang}
+            aria-label={LANG_NAME[l]}
+            title={LANG_NAME[l]}
+            onClick={() => switchLang(l)}
+            disabled={recState !== "idle"}
+          >
+            {LANG_SHORT[l]}
           </button>
         ))}
       </nav>

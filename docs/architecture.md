@@ -33,7 +33,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Intent extraction | Mistral's API, same route; or Ollama on the same computer in local mode [83] |
 | Resolving the place | Our server; plain code, no AI, no outside calls |
 | Map | On the phone; tiles, fonts and icons from OpenFreeMap |
-| Speaking the question | The browser's voice for English and French; for Ukrainian, a Piper voice that runs in the browser [49] |
+| Speaking the question | In the language the phone is set to [106]. The browser's voice for English and French; for Ukrainian, a Piper voice that runs in the browser [49] |
 | State (position history) | On the phone, which sends its last position with each report; and in the session log on the coordinator, which the receiver reads [99] |
 | Shared map and replay | The receiver page, rebuilt from the session log in the browser [98] |
 
@@ -46,7 +46,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Speech-to-text and extraction | `lib/providers/transcriber.ts`, `lib/providers/extractor.ts` | Mistral, or extraction through Ollama on the computer with `PROVIDER_MODE=local`; behind interfaces |
 | Resolver | `lib/geo/resolver.ts` | Pure function, unit-tested (`npm test`) |
 | Gazetteers | `data/gazetteer.vincennes.json` (911 places), `data/gazetteer.kyiv.json` (2,112) | Built with `npm run gazetteer -- <area>`; the running app never calls Overpass. See [gazetteer.md](gazetteer.md). |
-| Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |
+| Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web in a worker, so the page keeps responding [105]. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |
 | Stated distances, eight compass points, dead reckoning | resolver and extractor | On `main`, **not deployed** |
 | Native transmitter (Expo 58, React Native) | `transmitter/` | Runs in the iPhone simulator and, since 20 Nov, on an iPhone 13 mini through the coordinator on a Mac: Kyiv scenario 10 of 10 steps, round trip 1.2 to 1.9 s [79]. Not yet on Android. |
 | On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |

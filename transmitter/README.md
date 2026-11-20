@@ -20,8 +20,8 @@ after it does.
 
 The main screen is only for reporting. Top to bottom:
 
-- **Who and where:** the call sign, the area, and the coordinator with a dot (green when it
-  answers, red when it does not). Tapping it, or the gear, opens Setup.
+- **Who and where:** the call sign, the area, the language, and the coordinator with a dot
+  (green when it answers, red when it does not). Tapping it, or the gear, opens Setup.
 - **A notice**, only when the next report would fail: the coordinator is not answering, or
   speech-to-text is set to the phone and its model is not downloaded.
 - **The talk button** and, under it, what happened last and the last known position. While
@@ -33,8 +33,10 @@ The main screen is only for reporting. Top to bottom:
 - **Two tabs:** Scenarios (pick one, play it all, or tap one report) and Sent (every report
   from this phone with the coordinator's answer and timings).
 
-**Setup** is a sheet: call sign and area, which coordinator, where speech becomes text and the
-model download, sound, and scenario timing.
+**Setup** is a sheet: call sign, area and language, which coordinator, where speech becomes text
+and the model download, sound, and scenario timing. The language is the one you speak, English by
+default: it goes with every report, Whisper on the phone listens for it, and questions come back
+in it. Scenarios use each report's own language instead ([decision 106](../DECISIONS.md)).
 
 The UI lives in `src/ui/`: `theme.ts` (colours, type and spacing, shared with the web app's
 palette), `controls.tsx` (segmented control, grouped rows, buttons), and one file each for the

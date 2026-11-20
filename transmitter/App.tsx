@@ -42,12 +42,19 @@ const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
 ];
+/** The language the speaker uses (decision 106). Speech-to-text listens for it and questions come back in it. */
+const LANGUAGES: { id: Lang; label: string }[] = [
+  { id: "en", label: "English" },
+  { id: "fr", label: "Français" },
+  { id: "uk", label: "Українська" },
+];
 
 type Busy = "idle" | "starting" | "recording" | "sending" | "scenario";
 
-function langOf(reply: ReportReply, area: AreaId): Lang {
+/** The language the question was written in: the pinned one, unless the coordinator ignored it. */
+function langOf(reply: ReportReply, pinned: Lang): Lang {
   const l = reply.intent?.language;
-  return l === "fr" || l === "uk" ? l : !reply.intent && area === "kyiv" ? "uk" : "en";
+  return l === "en" || l === "fr" || l === "uk" ? l : pinned;
 }
 
 /** Did the coordinator answer what the scenario step expected? */
@@ -76,6 +83,7 @@ function Transmitter() {
   useKeepAwake();
   const [callsign, setCallsign] = useState("ALPHA 1");
   const [area, setArea] = useState<AreaId>("vincennes");
+  const [language, setLanguage] = useState<Lang>("en");
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
   const [reach, setReach] = useState<Reach>("checking");
   const [setupOpen, setSetupOpen] = useState(false);
@@ -162,12 +170,12 @@ function Transmitter() {
    * apply the reply, speak a question back. Returns the reply and the log entry id.
    */
   const handleUtterance = useCallback(
-    async (u: Utterance, opts: { area: AreaId; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
+    async (u: Utterance, opts: { area: AreaId; language: Lang; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
-        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, session: SESSION, lastPosition: positionRef.current });
+        const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, language: opts.language, session: SESSION, lastPosition: positionRef.current });
         const res = reply.resolution;
-        const lang = langOf(reply, opts.area);
+        const lang = langOf(reply, opts.language);
         const t = reply.timings_ms;
         const timings = `${opts.phoneMs != null ? `phone STT ${opts.phoneMs} · ` : ""}${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms`;
         const base = { id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: reply.transcript || "(no words heard)", timings };
@@ -240,8 +248,8 @@ function Transmitter() {
       if (sttMode === "server") {
         u = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
       } else {
-        // Speech-to-text on the phone: only the words travel.
-        const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined });
+        // Speech-to-text on the phone: only the words travel. Each step says its own language.
+        const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined, language: step.lang });
         phoneMs = heard.ms;
         phoneTimesRef.current.push(heard.ms);
         if (!heard.text) {
@@ -251,7 +259,7 @@ function Transmitter() {
         }
         u = { ...base, text: heard.text, endedAt: Date.now() };
       }
-      const out = await handleUtterance(u, { area: sc.area, scripted: step.text, quiet: !speakReplies, phoneMs });
+      const out = await handleUtterance(u, { area: sc.area, language: step.lang, scripted: step.text, quiet: !speakReplies, phoneMs });
       if (!out) {
         setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "no answer from the coordinator" } }));
         return false;
@@ -352,23 +360,23 @@ function Transmitter() {
       const base = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic" as const, startedAt: recordStartRef.current, endedAt };
       if (phoneStt) {
         setStatus("Transcribing on the phone…");
-        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(area) : undefined });
+        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(area) : undefined, language });
         if (!heard.text) {
           setStatus("The phone heard nothing. Try again.");
           return;
         }
         setStatus("Sending…");
-        await handleUtterance({ ...base, text: heard.text }, { area, quiet: !speakReplies, phoneMs: heard.ms });
+        await handleUtterance({ ...base, text: heard.text }, { area, language, quiet: !speakReplies, phoneMs: heard.ms });
       } else {
         setStatus("Sending…");
-        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area, quiet: !speakReplies });
+        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area, language, quiet: !speakReplies });
       }
     } catch (e) {
       setStatus(e instanceof Error ? `Recording failed: ${e.message}` : "Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, area, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
+  }, [recorder, callsign, area, language, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -428,6 +436,7 @@ function Transmitter() {
 
   const coordinatorName = serverUrl === LOCAL_COORDINATOR ? "This Mac" : serverUrl === LIVE_SITE ? "Live site" : serverUrl.replace(/^https?:\/\//, "");
   const areaLabel = AREAS.find((a) => a.id === area)?.label ?? area;
+  const languageLabel = LANGUAGES.find((l) => l.id === language)?.label ?? language;
   const openSetup = () => setSetupOpen(true);
   /** The newest question still waiting for an answer, if any. */
   const asking = entries.find((e) => e.pending && e.candidates?.length);
@@ -462,7 +471,7 @@ function Transmitter() {
             style={styles.identity}
             onPress={openSetup}
             accessibilityRole="button"
-            accessibilityLabel={`Call sign ${callsign || "not set"}. Area ${areaLabel}. Coordinator ${coordinatorName}, ${reach === "ok" ? "answering" : reach === "unreachable" ? "not answering" : "checking"}`}
+            accessibilityLabel={`Call sign ${callsign || "not set"}. Area ${areaLabel}. Language ${languageLabel}. Coordinator ${coordinatorName}, ${reach === "ok" ? "answering" : reach === "unreachable" ? "not answering" : "checking"}`}
             accessibilityHint="Opens setup"
           >
             <Text style={type.title} numberOfLines={1} maxFontSizeMultiplier={1.3}>
@@ -470,7 +479,7 @@ function Transmitter() {
             </Text>
             <View style={styles.context}>
               <Text style={type.footnote} numberOfLines={1}>
-                {areaLabel}
+                {areaLabel} · {languageLabel}
               </Text>
               <View style={[styles.dot, { backgroundColor: reach === "ok" ? color.ok : reach === "unreachable" ? color.bad : color.textDim }]} />
               <Text style={[type.footnote, styles.contextLast, reach === "unreachable" && styles.badText]} numberOfLines={1}>
@@ -535,6 +544,9 @@ function Transmitter() {
         areas={AREAS}
         area={area}
         onArea={setArea}
+        languages={LANGUAGES}
+        language={language}
+        onLanguage={setLanguage}
         serverUrl={serverUrl}
         onServerUrl={setServerUrl}
         localCoordinator={LOCAL_COORDINATOR}

@@ -3,7 +3,7 @@
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { PHONE_MODELS, STT_MODES, type PhoneMode, type SttMode } from "../stt";
-import type { AreaId } from "../types";
+import type { AreaId, Lang } from "../types";
 import { Button, Group, Row, Segmented, SwitchRow } from "./controls";
 import type { Reach } from "./model";
 import { color, space, type } from "./theme";
@@ -19,6 +19,9 @@ export interface SetupProps {
   areas: { id: AreaId; label: string }[];
   area: AreaId;
   onArea: (a: AreaId) => void;
+  languages: { id: Lang; label: string }[];
+  language: Lang;
+  onLanguage: (l: Lang) => void;
 
   serverUrl: string;
   onServerUrl: (v: string) => void;
@@ -77,7 +80,10 @@ export function SetupSheet(p: SetupProps) {
           </View>
 
           <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
-            <Group title="This unit" footer="The area decides which place names the coordinator looks reports up in.">
+            <Group
+              title="This unit"
+              footer="The area decides which place names the coordinator looks reports up in. The language is the one you speak: speech-to-text on the phone listens for it, and questions come back in it. Scenarios use each report’s own language."
+            >
               <Row
                 label="Call sign"
                 right={
@@ -98,6 +104,9 @@ export function SetupSheet(p: SetupProps) {
               />
               <View style={styles.padded}>
                 <Segmented label="Area" options={p.areas} value={p.area} onChange={p.onArea} disabled={p.locked} />
+              </View>
+              <View style={styles.padded}>
+                <Segmented label="Language" options={p.languages} value={p.language} onChange={p.onLanguage} disabled={p.locked} />
               </View>
             </Group>
 

@@ -1,10 +1,12 @@
 import { File } from "expo-file-system";
-import type { AreaId, Placement, Position, ReportReply, Utterance } from "./types";
+import type { AreaId, Lang, Placement, Position, ReportReply, Utterance } from "./types";
 
 export interface SendContext {
   /** Coordinator base URL, e.g. https://edth-hackathon.vercel.app or http://192.168.1.20:3117 */
   serverUrl: string;
   area: AreaId;
+  /** The language the speaker uses; the question comes back in it (decision 106). */
+  language: Lang;
   session: string;
   lastPosition: Position | null;
 }
@@ -29,6 +31,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
     throw new Error("Utterance has neither audio nor text");
   }
   form.append("area", ctx.area);
+  form.append("language", ctx.language);
   form.append("clientTs", String(u.endedAt));
   // The coordinator saves the report under this session and call sign for the receiver;
   // `seq` with the client time lets it drop a report sent twice.

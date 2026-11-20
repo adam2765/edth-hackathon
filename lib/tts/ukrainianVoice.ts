@@ -1,7 +1,7 @@
 /**
  * Ukrainian speech in the browser, on the device: the Piper voice `uk_UA-ukrainian_tts-medium`
- * (CC0) run with onnxruntime-web. None of Piper's GPL engine is used: the text handling is in
- * ukrainianText.ts and the model is run directly.
+ * (CC0) run with onnxruntime-web, in a worker so the page stays responsive. None of Piper's GPL
+ * engine is used: the text handling is in ukrainianText.ts and the model is run directly.
  *
  * The model is served by this site (public/tts/, see scripts/prepare-tts.mjs) and kept in the
  * browser's Cache Storage after the first load. Downloading it from Hugging Face instead is
@@ -35,7 +35,7 @@ export type Synthesis = {
   samples: Float32Array;
   sampleRate: number;
   seconds: number;
-  /** Time spent in the model. The page is unresponsive for this long. */
+  /** Time spent in the model. It runs in a worker, so the page keeps responding (decision 105). */
   synthMs: number;
   /** Characters that were skipped because the voice cannot say them. */
   unsupported: string[];
@@ -235,6 +235,9 @@ class UkrainianVoice {
     const ort = (await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ runtimeUrl)) as typeof Ort;
     ort.env.wasm.wasmPaths = new URL(ORT_BASE, location.href).href;
     ort.env.wasm.numThreads = 1; // more threads need cross-origin isolation headers the app does not set
+    // Starting the model and each sentence froze the page for about a second on a Mac. The proxy
+    // runs them in a worker that onnxruntime starts from its own script (decision 105).
+    ort.env.wasm.proxy = true;
 
     const { model, source } = await this.fetchModel(onProgress);
     onProgress({ phase: "start" });

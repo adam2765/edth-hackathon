@@ -14,6 +14,16 @@ export interface ExtractOptions {
   place?: string;
   /** Overrides the extractor's own time limit, for example while a local model loads. */
   timeoutMs?: number;
+  /**
+   * The language the speaker's device is set to (decision 106). The intent takes it as is and the
+   * model's own label is not used. Without it, the model's label is checked against the transcript.
+   */
+  language?: Intent["language"] | null;
+}
+
+/** A language the device pinned, from the report's `language` field; null when absent or unknown. */
+export function pinnedLanguage(v: unknown): Intent["language"] | null {
+  return v === "en" || v === "fr" || v === "uk" ? v : null;
 }
 
 /** Local extraction model (decision 84): as accurate as the 8B on the scenarios, and about 2 s instead of 5. */
@@ -101,13 +111,32 @@ function pick<T extends string>(v: unknown, allowed: readonly T[]): T | null {
   return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : null;
 }
 
-/** Coerce whatever came back into a valid Intent. */
-export function sanitizeIntent(raw: unknown, languageHint?: string | null): Intent {
+/**
+ * The model's language label, checked against the letters actually said (decision 104). The local
+ * 3B model labelled English reports in Kyiv as Ukrainian ("I'm at Khreshchatyk."), so the
+ * question came back in Ukrainian.
+ *   no Cyrillic letters:           not Ukrainian, unless speech-to-text said so; then the model's
+ *                                  en or fr, else speech-to-text's, else English
+ *   Cyrillic and no Latin letters: Ukrainian
+ *   both:                          the model's label
+ */
+export function checkLanguage(said: Intent["language"], transcript: string, hint: Intent["language"] | null): Intent["language"] {
+  if (!/\p{Script=Cyrillic}/u.test(transcript)) {
+    if (said !== "uk" || hint === "uk") return said;
+    return hint === "fr" ? "fr" : "en";
+  }
+  if (!/\p{Script=Latin}/u.test(transcript)) return "uk";
+  return said;
+}
+
+/** Coerce whatever came back into a valid Intent. With the transcript, the language is checked too. */
+export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const hint = languageHint === "fr" ? "fr" : languageHint === "en" ? "en" : languageHint === "uk" || languageHint === "ru" ? "uk" : null;
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0.5;
   const dist = typeof o.distance_m === "number" && Number.isFinite(o.distance_m) && o.distance_m > 0 && o.distance_m <= MAX_DISTANCE_M ? Math.round(o.distance_m) : null;
+  const said = pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en";
   return {
     kind: pick(o.kind, ["position", "movement", "other"] as const) ?? "other",
     landmark_text: str(o.landmark_text),
@@ -117,7 +146,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null): Inte
     relation: pick(o.relation, RELATIONS),
     distance_m: dist || null,
     direction: pick(o.direction, DIRECTIONS),
-    language: pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en",
+    language: transcript === undefined ? said : checkLanguage(said, transcript, hint),
     confidence: conf,
   };
 }
@@ -164,7 +193,8 @@ class ChatJsonExtractor implements IntentExtractor {
       const m = content.match(/\{[\s\S]*\}/);
       parsed = m ? JSON.parse(m[0]) : {};
     }
-    return sanitizeIntent(parsed, opts.languageHint);
+    const intent = sanitizeIntent(parsed, opts.languageHint, text);
+    return opts.language ? { ...intent, language: opts.language } : intent;
   }
 }
 
