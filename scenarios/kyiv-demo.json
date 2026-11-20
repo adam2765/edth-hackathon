@@ -1,0 +1,12 @@
+{
+  "id": "kyiv-demo",
+  "title": "Kyiv demo script",
+  "area": "kyiv",
+  "steps": [
+    { "id": "k1", "t": 0, "callsign": "BRAVO 1", "lang": "uk", "text": "Я на Хрещатику.", "expect": { "status": "ambiguous" }, "choose": "street/вулиця-хрещатик" },
+    { "id": "k2", "t": 10, "callsign": "BRAVO 1", "lang": "uk", "text": "Рухаюсь до Софійського собору.", "expect": { "status": "resolved", "heading_to": "way/27830282" } },
+    { "id": "k3", "t": 20, "callsign": "BRAVO 1", "lang": "uk", "text": "Я біля станції метро Хрещатик.", "expect": { "status": "resolved", "feature_id": "node/9151108492" } },
+    { "id": "k4", "t": 30, "callsign": "BRAVO 1", "lang": "uk", "text": "Я на Майдані Незалежності.", "expect": { "status": "resolved", "feature_id": "node/9151090552" } },
+    { "id": "k5", "t": 40, "callsign": "BRAVO 1", "lang": "en", "text": "I'm at the Golden Gate.", "expect": { "status": "resolved", "feature_id": "way/27830130" } }
+  ]
+}

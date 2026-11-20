@@ -1,0 +1,11 @@
+{
+  "id": "vincennes-demo",
+  "title": "Vincennes demo script",
+  "area": "vincennes",
+  "steps": [
+    { "id": "v1", "t": 0, "callsign": "ALPHA 1", "lang": "en", "text": "I'm at Bérault metro.", "expect": { "status": "resolved", "feature_id": "node/9415191169" } },
+    { "id": "v2", "t": 10, "callsign": "ALPHA 1", "lang": "en", "text": "Now I'm at the château de Vincennes.", "expect": { "status": "ambiguous" }, "choose": "node/9863472112" },
+    { "id": "v3", "t": 20, "callsign": "ALPHA 1", "lang": "en", "text": "Moving towards the town hall.", "expect": { "status": "resolved", "heading_to": "way/83816816" } },
+    { "id": "v4", "t": 30, "callsign": "ALPHA 1", "lang": "fr", "text": "Je suis devant la mairie.", "expect": { "status": "resolved", "feature_id": "way/83816816" } }
+  ]
+}

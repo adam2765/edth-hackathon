@@ -50,3 +50,9 @@ next-env.d.ts
 
 # local tooling
 .claude/settings.local.json
+
+# native transmitter app (it also has its own .gitignore); keeps these out of git and out of Vercel uploads
+/transmitter/node_modules
+/transmitter/.expo
+/transmitter/ios
+/transmitter/android

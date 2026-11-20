@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "gazetteer": "tsx scripts/build-gazetteer.ts"
+    "gazetteer": "tsx scripts/build-gazetteer.ts",
+    "scenarios": "node scripts/build-scenarios.mjs"
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",
