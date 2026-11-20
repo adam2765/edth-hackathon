@@ -27,9 +27,23 @@ npx expo start --dev-client            # the dev server the app loads its code f
 `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
 Android: `npx expo run:android`. This is a native build, so Expo Go cannot run it.
 
-The app talks to `https://edth-hackathon.vercel.app` unless `EXPO_PUBLIC_SERVER_URL` is set or
-the address is changed on screen. A plain `http://` address on the local network is allowed,
-for the no-internet demo.
+## Which coordinator it talks to
+
+A development build loads its code from the computer running the dev server, so it knows that
+computer's address. It sends reports to the coordinator on that same computer, port 3117
+(`npm run dev -- -p 3117` in the folder above). The "Coordinator" row switches between
+"This Mac" and "Live site" (`https://edth-hackathon.vercel.app`), and a light shows whether the
+coordinator answers. `EXPO_PUBLIC_SERVER_URL` overrides the default.
+
+For a phone, the phone and the computer must be on the same network, and iOS must be allowed
+to "find devices on your local network" when it asks. A plain `http://` address on the local
+network is allowed. The coordinator on the computer still calls Mistral, so the computer needs
+the internet until local models exist.
+
+Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
+ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
+speech-to-text. Results: `../scenarios/results/iphone13mini-via-mac-coordinator-2026-11-20.jsonl`.
+On-phone speech-to-text has not been run on a real phone yet.
 
 ## Speech-to-text: on the server or on the phone
 
