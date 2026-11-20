@@ -10,6 +10,7 @@ New to the project? Read these in order:
 2. [Architecture](architecture.md): the parts, where each step runs, what is built.
 3. [Plan](plan.md): the work ahead, part by part.
 4. [CONTRIBUTING.md](../CONTRIBUTING.md): set up, run the checks, how we work together.
+5. [Setup](setup.md): get it running on your computer and phone, step by step. A coding agent can follow it.
 
 ## What is where
 
@@ -23,6 +24,7 @@ New to the project? Read these in order:
 | [open-questions.md](open-questions.md) | Questions for the team and for Lysk | A question is asked, answered or dropped |
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
+| [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 
 Elsewhere in the repo:
 

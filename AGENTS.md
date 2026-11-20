@@ -10,6 +10,7 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 - `README.md`: how the pipeline works, the resolver rules, demo scripts, how to run.
 - `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it.
 - `CONTRIBUTING.md`: setup, checks and working agreements for the four of us.
+- `docs/setup.md`: setting up a computer step by step, with a check after each step: the coordinator, offline mode with Ollama, the transmitter on a phone. Follow it when asked to set up a machine or get the project running.
 
 ## Layout
 

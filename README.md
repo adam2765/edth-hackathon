@@ -76,6 +76,8 @@ Order matters for step 1: said within 10 minutes of a fix at the station, «Я �
 
 ## Run locally
 
+The short version is below. [docs/setup.md](docs/setup.md) has every step with a check, including offline mode and the transmitter on a phone.
+
 ```bash
 npm install
 cp .env.example .env.local   # then fill in MISTRAL_API_KEY; never commit it

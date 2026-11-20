@@ -9,7 +9,7 @@ git clone git@github.com:beverage/edth-hackathon.git
 cd edth-hackathon
 ```
 
-Then follow [Run locally](README.md#run-locally) in the README: install, copy `.env.example` to `.env.local`, add a Mistral key, and start on port 3117. The unit tests need no key and no network.
+Then follow [docs/setup.md](docs/setup.md): the coordinator, offline mode with Ollama, and the transmitter on a phone, with a check after each step. It is written so Claude Code or Codex can do it for you: ask yours to "set up this computer by following docs/setup.md". The short version is [Run locally](README.md#run-locally) in the README. The unit tests need no key and no network.
 
 The transmitter app has its own `package.json` and tooling; see [transmitter/README.md](transmitter/README.md). iOS builds need a Mac with Xcode.
 

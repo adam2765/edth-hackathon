@@ -50,6 +50,10 @@ npx expo start --dev-client            # the dev server the app loads its code f
 `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
 Android: `npx expo run:android`. This is a native build, so Expo Go cannot run it.
 
+On a phone, sign with your own Apple ID: set `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
+before `npx expo run:ios --device`, because `dev.voicetomap.transmitter` belongs to Alex's team
+(`app.config.ts`). Every step, with checks: [../docs/setup.md](../docs/setup.md).
+
 ## Which coordinator it talks to
 
 A development build loads its code from the computer running the dev server, so it knows that
