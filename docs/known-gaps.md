@@ -3,7 +3,9 @@
 The largest untested risks are real Ukrainian speech and mixed-language clips; the rest are known limits. Add a gap when you find one; remove it, with a decision line, when it is fixed.
 
 - **Mixed languages in one clip:** in one synthetic test the English half of a Ukrainian-then-English clip was dropped.
-- **One place per report:** intersections, "between A and B" and "at A, going to B" keep only one place.
+- **One place per report:** intersections, "between A and B" and "at A, going to B" keep only one place. In "the pharmacy on rue de Fontenay" the street does not narrow the choice.
+- **No shops, cafés, restaurants, banks or house numbers** in the gazetteer ([gazetteer.md](gazetteer.md#how-it-is-built)). Stops, fuel stations, pharmacies, hotels, water and named buildings are in.
+- **A name shared by a hotel and a landmark goes to the nearest one.** From Maidan, "Я біля Дніпра" picks Hotel Dnipro, 250 m away, not the river; before hotels were in, it picked the Dnipro metro station, 2.6 km away. Saying "the river" picks the river. The model's guess of a category is not used unless the word was said [15].
 - **Spoken coordinates and grid references** are not parsed.
 - **Real Ukrainian speech is untested;** all Ukrainian tests used a synthetic voice. Short clips sometimes came back misspelled, though the place still resolved.
 - **Language tagging, for clients that do not send `language`:** the web page and the transmitter always send it [106]. Without it, an English sentence with a French street name was tagged as French, so a follow-up question would have been in French. A report in Latin letters is never tagged Ukrainian unless speech-to-text said so [104].

@@ -6,7 +6,7 @@
  */
 import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
-import { categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
+import { canonTokens, categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
@@ -116,13 +116,15 @@ export function placementFor(f: GazetteerFeature, said: Said, last: LastPosition
   }
 
   // Size of the feature itself is uncertainty too: "at the park" is anywhere in the park.
+  // A street or a river is a line: the anchor is already the nearest point on it.
+  const line = f.category === "street" || !!f.lines?.length;
   let extent = 0;
-  if (f.category === "street") extent = last ? 40 : f.bbox ? Math.min(400, bboxHalfDiagonalM(f.bbox)) : 150;
+  if (line) extent = last ? 40 : f.bbox ? Math.min(400, bboxHalfDiagonalM(f.bbox)) : 150;
   else if (f.bbox) extent = Math.min(MAX_EXTENT_RADIUS_M, bboxHalfDiagonalM(f.bbox));
 
   const bearing = COMPASS[rel];
   if (bearing !== undefined) {
-    const edge = f.bbox && f.category !== "street" ? Math.min(MAX_EXTENT_RADIUS_M, bboxHalfExtentM(f.bbox, bearing)) : 0;
+    const edge = f.bbox && !line ? Math.min(MAX_EXTENT_RADIUS_M, bboxHalfExtentM(f.bbox, bearing)) : 0;
     // With a distance said, the pin is that far out and the circle grows with it; without one, about 100 m out.
     return d != null
       ? { pin: destination(anchor, bearing, edge + d), radius_m: compassRadius(d) }
@@ -158,10 +160,17 @@ const CAT_LABEL: Record<Category, Record<Lang, string> & { frWhich: string; ukWh
   town_hall: { en: "town hall", fr: "mairie", uk: "адміністрація", frWhich: "Quelle mairie", ukWhich: "Яка адміністрація" },
   school: { en: "school", fr: "école", uk: "школа", frWhich: "Quelle école", ukWhich: "Яка школа" },
   park: { en: "park", fr: "parc", uk: "парк", frWhich: "Quel parc", ukWhich: "Який парк" },
+  cemetery: { en: "cemetery", fr: "cimetière", uk: "кладовище", frWhich: "Quel cimetière", ukWhich: "Яке кладовище" },
   hospital: { en: "hospital", fr: "hôpital", uk: "лікарня", frWhich: "Quel hôpital", ukWhich: "Яка лікарня" },
   police: { en: "police station", fr: "commissariat", uk: "поліція", frWhich: "Quel commissariat", ukWhich: "Який відділок поліції" },
   bridge: { en: "bridge", fr: "pont", uk: "міст", frWhich: "Quel pont", ukWhich: "Який міст" },
   street: { en: "street", fr: "rue", uk: "вулиця", frWhich: "Quelle rue", ukWhich: "Яка вулиця" },
+  stop: { en: "stop", fr: "arrêt", uk: "зупинка", frWhich: "Quel arrêt", ukWhich: "Яка зупинка" },
+  fuel: { en: "fuel station", fr: "station-service", uk: "заправка", frWhich: "Quelle station-service", ukWhich: "Яка заправка" },
+  pharmacy: { en: "pharmacy", fr: "pharmacie", uk: "аптека", frWhich: "Quelle pharmacie", ukWhich: "Яка аптека" },
+  hotel: { en: "hotel", fr: "hôtel", uk: "готель", frWhich: "Quel hôtel", ukWhich: "Який готель" },
+  water: { en: "river or lake", fr: "plan d'eau", uk: "водойма", frWhich: "Quel plan d'eau", ukWhich: "Яка водойма" },
+  building: { en: "building", fr: "bâtiment", uk: "будівля", frWhich: "Quel bâtiment", ukWhich: "Яка будівля" },
   other: { en: "place", fr: "lieu", uk: "місце", frWhich: "Quel lieu", ukWhich: "Яке місце" },
 };
 
@@ -284,12 +293,16 @@ export function resolve(input: ResolveInput): Resolution {
   if (!name) [name, lemma] = [lemma, null];
   let category = intent.landmark_category;
 
-  // "the church", "la mairie", "церкви": a category word said as if it were a name.
+  // "the church", "la mairie", "церкви": a category word said as if it were a name. Unless a
+  // place is called exactly that: "Hôtel du Château" is a hotel, not "the hotel" or "the castle".
+  // One word is always generic: a pharmacy called just "Pharmacie" must not win "la pharmacie".
   if (name) {
     const generic = genericCategoryOf(lemma ?? name) ?? genericCategoryOf(name);
-    if (generic !== undefined) {
+    const named = (q: string | null) => !!q && canonTokens(q).length > 1 && searchByName(q, gazetteer).some((m) => m.exact);
+    if (generic !== undefined && !named(lemma) && !named(name)) {
       name = null;
-      category = category ?? generic;
+      // The model sometimes files the word under "other" ("Heading towards the cemetery", 20 Nov).
+      if (!category || (category === "other" && generic)) category = generic;
     }
   }
   if (!name && !category) {
@@ -363,10 +376,14 @@ export function resolve(input: ResolveInput): Resolution {
       }
     }
     const best = all[0]?.score ?? 0;
-    let good = all.filter((m) => m.score >= GOOD_SCORE && m.score >= best - SCORE_MARGIN);
     note += ` best score ${best.toFixed(2)}`;
-    // An exact name beats a name that merely contains it ("Châtelet du Château de Vincennes").
-    if (good.some((m) => m.exact)) good = good.filter((m) => m.exact);
+    // An exact name beats a name that merely contains it: "Châtelet du Château de Vincennes" for
+    // "Château de Vincennes", the bell tower "Дзвіниця Софійського собору" for "Софійського собору".
+    // With a case ending the exact name scores lower than the longer one, and still wins.
+    const exact = all.filter((m) => m.exact && m.score >= GOOD_SCORE);
+    const pool = exact.length ? exact : all;
+    if (exact.length && pool[0] !== all[0]) note += `; whole name "${pool[0].feature.name}" preferred to "${all[0].feature.name}"`;
+    let good = pool.filter((m) => m.score >= GOOD_SCORE && m.score >= pool[0].score - SCORE_MARGIN);
     if (good.length > 1 && category && categoryIsExplicit(transcript, saidForExplicit, category)) {
       const ofCat = good.filter((m) => m.feature.category === category);
       if (ofCat.length) {

@@ -24,6 +24,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 |---|---|
 | No place in the report | `unresolved`, prompt to name a street or place |
 | Named place, one good match | `resolved` |
+| A name said whole, and a longer name that contains it ("Софійського собору": the cathedral, and its bell tower "Дзвіниця Софійського собору") | the whole name wins, even with a Ukrainian case ending that makes it score lower |
 | Named place, several good matches (e.g. "Château de Vincennes" = castle and metro station) | `ambiguous`, unless a category word outside the name ("…metro station") narrows it |
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
@@ -49,7 +50,7 @@ Movement with a distance is dead reckoning from the last position, and is also s
 
 ## Demo script
 
-Chosen from the real gazetteer (911 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle). Start from a fresh page (or "Clear map and log").
+Chosen from the real gazetteer (1,108 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle, 31 stops, 38 pharmacies). Start from a fresh page (or "Clear map and log").
 
 | # | Say | Expected |
 |---|---|---|
@@ -62,7 +63,7 @@ If hall noise defeats transcription, type the same sentences in the text box; te
 
 ### Kyiv, in Ukrainian
 
-Switch to **Київ** (2,112 features: 26 stations, 67 churches, 317 streets) and start from a fresh page. Checked with a synthetic Ukrainian voice, not yet with a native speaker.
+Switch to **Київ** (2,840 features: 26 stations, 67 churches, 317 streets, 44 stops, 142 pharmacies, 104 hotels) and start from a fresh page. Checked with a synthetic Ukrainian voice, not yet with a native speaker.
 
 | # | Say | Expected |
 |---|---|---|

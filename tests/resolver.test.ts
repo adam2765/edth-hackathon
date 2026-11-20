@@ -500,3 +500,41 @@ describe("Ukrainian reports against the central Kyiv gazetteer", () => {
     expect(r.question).toMatch(/Назвіть вулицю/);
   });
 });
+
+describe("cemeteries", () => {
+  // A real report from the demo mission, 20 Nov: other voices around the speaker, and the
+  // extractor read "towards the cemetery" from the Mairie de Vincennes correctly. It was not
+  // placed because the gazetteer had no cemeteries.
+  const transcript = "and I couldn't cover anything. - Heading towards the cemetery. - Many people came up and I was able to explain them.";
+  const fromMairie: LastPosition = { lat: 48.84765, lon: 2.43977, ts: NOW - 60_000, radius_m: 80 };
+  const ANCIEN = byName("Cimetière ancien", "cemetery");
+
+  it("the gazetteer has the Vincennes cemetery", () => {
+    expect(ANCIEN).toBeDefined();
+  });
+
+  it("the logged intent, a generic word as the name, now heads to the nearest cemetery", () => {
+    const logged = intent({ kind: "movement", landmark_text: "the cemetery", landmark_name: "cemetery", landmark_name_lemma: "cemetery", landmark_category: "other", relation: "towards", confidence: 0.95 });
+    const r = resolve({ intent: logged, transcript, lastPosition: fromMairie, now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("resolved");
+    expect(r.heading_to?.id).toBe(ANCIEN.id);
+  });
+
+  it("the category in English, French and Ukrainian", () => {
+    const cases: [Partial<Intent>, string][] = [
+      [{ landmark_text: "the cemetery", landmark_category: "cemetery" }, "Heading towards the cemetery"],
+      [{ landmark_text: "le cimetière", landmark_category: "cemetery", language: "fr" }, "Je me dirige vers le cimetière"],
+      [{ landmark_text: "кладовища", landmark_category: "cemetery", language: "uk" }, "Рухаюсь до кладовища"],
+    ];
+    for (const [p, said] of cases) {
+      const r = resolve({ intent: intent({ kind: "movement", relation: "towards", ...p }), transcript: said, lastPosition: fromMairie, now: NOW, gazetteer: gaz });
+      expect(r.status, said).toBe("resolved");
+      expect(r.heading_to?.id, said).toBe(ANCIEN.id);
+    }
+  });
+
+  it("with no last position, asks which cemetery", () => {
+    const r = resolve({ intent: intent({ landmark_text: "the cemetery", landmark_category: "cemetery" }), transcript: "I'm at the cemetery", now: NOW, gazetteer: gaz });
+    expect(r.status).not.toBe("resolved");
+  });
+});

@@ -6,16 +6,34 @@ The app places every report against a local list of named places from OpenStreet
 
 `npm run gazetteer -- <area>` runs `scripts/build-gazetteer.ts`:
 
-1. **One Overpass query** over the area's box from `lib/geo/areas.ts`. It asks for named stations; places of worship, town halls, schools, hospitals, police, post offices, libraries, theatres, cinemas and markets; historic sites; museums, attractions and artworks; parks, gardens, stadiums and forests; bridges; squares and neighbourhoods; and every named road from trunk down to footway, with its line.
-2. **A category for each place:** church, metro_station, castle, town_hall, school, hospital, police, park, bridge, street or other, plus a subtype (the kind of road, the kind of "other").
-3. **Every name it goes by:** `name`, `name:uk`, `name:fr`, `name:en`, `int_name`, `alt_name`, `short_name`, `official_name`, `old_name`, `loc_name`, `name:ru`, and a Latin spelling of the Ukrainian name, so "Khreshchatyk" matches when OpenStreetMap has no English name.
-4. **Duplicates merge:** same name, same category, within 300 m. A station's point wins over its entrance or platform.
-5. **Street pieces become streets:** see [Same-name streets](#same-name-streets).
-6. **The file is written only when every query succeeded.** Overpass is often busy; the script retries, alternating with a mirror, and leaves the old file alone if it gives up.
+1. **One Overpass query** over the area's box from `lib/geo/areas.ts`. It asks for named stations; places of worship, town halls, schools, hospitals, police, post offices, libraries, theatres, cinemas and markets; historic sites; museums, attractions and artworks; parks, gardens, stadiums and forests; cemeteries; bridges; squares and neighbourhoods; bus, tram and trolleybus stops; fuel stations and pharmacies; hotels and hostels; named lakes and ponds; named buildings that are none of these; every named river, canal and stream, with its line; and every named road from trunk down to footway, with its line.
+2. **A category for each place:** church, metro_station, castle, town_hall, school, hospital, police, park, cemetery, bridge, street, stop, fuel, pharmacy, hotel, water, building or other, plus a subtype (the kind of road, stop or water, the kind of "other").
+3. **Every name it goes by:** `name`, `name:uk`, `name:fr`, `name:en`, `int_name`, `alt_name`, `short_name`, `official_name`, `old_name`, `loc_name`, `name:ru`, `brand`, and a Latin spelling of the Ukrainian name, so "Khreshchatyk" matches when OpenStreetMap has no English name. A fuel station or pharmacy with no name of its own takes its chain's name.
+4. **Duplicates merge:** same name, same category, within 300 m. A station's point wins over its entrance or platform, and a stop's two sides of the road become one stop.
+5. **Street pieces become streets:** see [Same-name streets](#same-name-streets). River pieces are joined the same way, and only the stretches within 500 m of the area are kept. A stretch in a culvert or tunnel is left out: Kyiv's Хрещатик, Кловиця and Скоморох streams run under the streets, and nobody stands by them. A river is a line, like a street: "near the Dnipro" is placed on the bank nearest the speaker.
+6. **Far places are left out.** A place is placed at the middle of its outline. For something that only touches the area (a river's whole water surface, a medieval trade route, a university spread over the city) that middle is far away, so anything more than 1 km outside the box is dropped.
+7. **Stops and buildings that only repeat a nearby name are left out.** The "Bérault-Métro" bus stop next to Bérault metro, or a "Хрещатик" stop on Khreshchatyk, would add a question and no new place. A stop or building whose name, without its type words, matches another place within 400 m is dropped: 55 in Vincennes. Named roofs, kiosks and sheds ("Caisse") are dropped too.
+8. **The file is written only when every query succeeded.** Overpass is often busy; the script retries, alternating with a mirror, and leaves the old file alone if it gives up. With `GAZETTEER_RAW=<file>` the build keeps Overpass's main answer in that file and reads it back on the next run, so changing the build's rules does not query a busy server again.
 
-The report endpoint loads the file once on the server (`lib/geo/gazetteer.ts`). Name search scans every entry with a cached index. The 100 place names sent to speech-to-text as spelling hints come from the same file, stations first.
+The report endpoint loads the file once on the server (`lib/geo/gazetteer.ts`). Name search scans every entry with a cached index. The 100 place names sent to speech-to-text as spelling hints come from the same file, stations first. Pharmacies, fuel stations and buildings come last, so they never crowd out the landmarks.
+
+**What it still leaves out:** shops, cafés and restaurants, banks, and house numbers. OpenStreetMap has them (about 1,200 shops and cafés in the Vincennes box and 3,500 in Kyiv, counted 20 November), but each needs more than a query line. Many shops belong to chains, so the resolver needs "the Franprix on rue de Fontenay", a place narrowed by a street, before they help more than they ask back. House numbers are a street plus a number, not a name, and need a field in the intent. See [known gaps](known-gaps.md).
 
 Rebuild on purpose, not routinely: OpenStreetMap changes daily, so a rebuild can change counts and, rarely, ids. After one, compare the counts the build prints with the old file, run `npm test` and the scenarios, and update the counts in the README and [architecture.md](architecture.md).
+
+Rebuilt 20 November with the new kinds of place [123]:
+
+| | Vincennes | Central Kyiv |
+|---|---|---|
+| Places | 1,108 (was 911) | 2,840 (was 2,112) |
+| Stops | 31 | 44 |
+| Pharmacies | 38 | 142 |
+| Hotels | 24 | 104 |
+| Fuel stations | 1 | 5 |
+| Water | 4 | 25, the Dnipro among them, as a line |
+| Named buildings | 96 | 406 |
+
+Checked the same evening by replaying the 9 demo reports through hosted Mistral against the old and the new file: all 9 give the expected answer with the new file. New test reports for each kind of place resolved: a named stop, fuel station, lake, hotel and the château's gate tower; "the pharmacy" and "the bus stop" pick the nearest or ask.
 
 ## Same-name streets
 
@@ -53,7 +71,7 @@ What Ukraine looks like in OpenStreetMap (Geofabrik's download and tag counts, c
 | Places of worship, schools, hospitals, town halls, police | 16,299 · 13,821 · 3,588 · 2,895 · 1,857 |
 | Rail stations and halts | 1,979 + 2,799 |
 
-For comparison, central Kyiv today is about 2,100 places in a file under 1 MB over about 27 km². With our filters, Ukraine would be a few hundred thousand places, very roughly 100 to 200 MB as one file like today's. That size is an estimate, not a measurement.
+For comparison, central Kyiv today is about 2,800 places in a file of about 1 MB over about 27 km². With our filters, Ukraine would be a few hundred thousand places, very roughly 100 to 200 MB as one file like today's. That size is an estimate, not a measurement.
 
 What breaks, in order:
 

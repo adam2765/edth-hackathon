@@ -46,7 +46,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Report endpoint | `app/api/report/route.ts` | Live |
 | Speech-to-text and extraction | `lib/providers/transcriber.ts`, `lib/providers/extractor.ts` | Mistral, or extraction through Ollama on the computer with `PROVIDER_MODE=local`; behind interfaces |
 | Resolver | `lib/geo/resolver.ts` | Pure function, unit-tested (`npm test`) |
-| Gazetteers | `data/gazetteer.vincennes.json` (911 places), `data/gazetteer.kyiv.json` (2,112) | Built with `npm run gazetteer -- <area>`; the running app never calls Overpass. See [gazetteer.md](gazetteer.md). |
+| Gazetteers | `data/gazetteer.vincennes.json` (1,108 places), `data/gazetteer.kyiv.json` (2,840), rebuilt 20 November | Built with `npm run gazetteer -- <area>`; the running app never calls Overpass. See [gazetteer.md](gazetteer.md). |
 | Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web in a worker, so the page keeps responding [105]. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |
 | Stated distances, eight compass points, dead reckoning | resolver and extractor | On `main`, **not deployed** |
 | Native transmitter (Expo 58, React Native) | `transmitter/` | Runs in the iPhone simulator and, since 20 Nov, on an iPhone 13 mini through the coordinator on a Mac: Kyiv scenario 10 of 10 steps, round trip 1.2 to 1.9 s [79]. Not yet on Android. |

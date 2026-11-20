@@ -58,11 +58,13 @@ type NamedCategory = Exclude<Category, "other">;
 /** Category words as canonical tokens: English, French, Ukrainian (and common Russian), dictionary form. */
 export const CATEGORY_WORDS: Record<NamedCategory, string[]> = {
   church: ["eglise", "chapelle", "temple", "cathedral", "cathedrale", "basilica", "basilique", "церква", "храм", "собор", "костел", "костьол", "каплиця", "церковь"],
-  metro_station: ["metro", "subway", "station", "gare", "underground", "tube", "rer", "stop", "метро", "станція", "вокзал", "станция"],
+  metro_station: ["metro", "subway", "station", "gare", "underground", "tube", "rer", "метро", "станція", "вокзал", "станция"],
   castle: ["chateau", "fort", "fortress", "forteresse", "donjon", "keep", "замок", "фортеця"],
-  town_hall: ["mairie", "town", "city", "hall", "townhall", "hotel", "ville", "мерія", "міськрада", "ратуша", "мэрия"],
+  // "hôtel de ville" becomes "mairie" in canonTokens, so "hotel" alone means a hotel.
+  town_hall: ["mairie", "town", "city", "hall", "townhall", "ville", "мерія", "міськрада", "ратуша", "мэрия"],
   school: ["school", "ecole", "college", "lycee", "university", "universite", "creche", "kindergarten", "школа", "ліцей", "гімназія", "університет", "коледж", "інститут"],
   park: ["park", "parc", "bois", "garden", "jardin", "woods", "forest", "foret", "парк", "сквер"],
+  cemetery: ["cemetery", "graveyard", "cimetiere", "кладовище", "цвинтар", "кладбище"],
   hospital: ["hospital", "hopital", "clinic", "clinique", "лікарня", "госпіталь", "шпиталь", "поліклініка", "больница"],
   police: ["police", "commissariat", "gendarmerie", "поліція", "відділок", "полиция"],
   bridge: ["bridge", "pont", "passerelle", "міст", "мост"],
@@ -70,6 +72,12 @@ export const CATEGORY_WORDS: Record<NamedCategory, string[]> = {
     "rue", "avenue", "boulevard", "allee", "place", "quai", "impasse", "passage", "chemin", "route", "villa", "cours", "sentier", "square", "lane",
     "вулиця", "проспект", "бульвар", "площа", "провулок", "узвіз", "набережна", "шосе", "улица",
   ],
+  stop: ["stop", "busstop", "arret", "bus", "tram", "tramway", "trolleybus", "зупинка", "остановка", "автобус", "трамвай", "тролейбус", "троллейбус"],
+  fuel: ["fuel", "petrol", "gas", "carburant", "essence", "заправка", "автозаправка", "азс", "бензоколонка"],
+  pharmacy: ["pharmacy", "pharmacie", "chemist", "chemists", "drugstore", "аптека"],
+  hotel: ["hotel", "hostel", "motel", "готель", "хостел", "гостиниця", "гостиница"],
+  water: ["river", "lake", "pond", "canal", "stream", "riviere", "fleuve", "lac", "etang", "ruisseau", "річка", "озеро", "ставок", "канал", "река"],
+  building: ["building", "immeuble", "batiment", "residence", "будівля", "будинок", "корпус", "жк", "здание"],
 };
 
 /**
@@ -84,10 +92,18 @@ const CATEGORY_STEMS: Record<NamedCategory, string[]> = {
   town_hall: ["мері", "міськрад", "ратуш", "мэри"],
   school: ["школ", "ліце", "гімназі", "університет", "коледж", "інститут"],
   park: ["парк", "сквер"],
+  cemetery: ["кладовищ", "цвинтар", "кладбищ"],
   hospital: ["лікарн", "госпітал", "шпитал", "поліклінік", "больниц"],
   police: ["поліці", "відділк", "полици"],
   bridge: ["мост"],
   street: ["вулиц", "проспект", "бульвар", "площ", "провулк", "узвоз", "набережн", "улиц"],
+  stop: ["зупинк", "зупинц", "остановк", "автобус", "трамва", "тролейбус", "троллейбус"],
+  fuel: ["заправк", "заправц", "автозаправк", "автозаправц", "бензоколонк", "бензоколонц"],
+  pharmacy: ["аптек", "аптец"],
+  hotel: ["готел", "хостел", "гостиниц"],
+  // Not "ставк": "ставка" is also a headquarters.
+  water: ["річк", "річц", "озер", "рек"],
+  building: ["будівл", "будинк", "корпус", "здани"],
 };
 const CASE_ENDINGS = new Set(["", "а", "я", "у", "ю", "і", "ї", "и", "е", "є", "ь", "й", "ом", "ем", "єм", "ою", "ею", "єю", "ові", "еві", "ій", "ої", "ах", "ях"]);
 const CYRILLIC = /[Ѐ-ӿ]/;
@@ -105,9 +121,33 @@ export function categoryOfToken(token: string): Category | undefined {
   return NAMED_CATEGORIES.find((c) => isCategoryWord(token, c));
 }
 
+/** Type phrases that are one word for our purposes: "hôtel de ville" is a town hall, not a hotel. */
+const PHRASES: [string[], string][] = [
+  [["hotel", "de", "ville"], "mairie"],
+  [["hotel", "ville"], "mairie"],
+  [["station", "service"], "carburant"],
+  [["station", "essence"], "carburant"],
+  [["gas", "station"], "carburant"],
+  [["petrol", "station"], "carburant"],
+  [["filling", "station"], "carburant"],
+  [["service", "station"], "carburant"],
+];
+
+function joinPhrases(toks: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < toks.length; ) {
+    const hit = PHRASES.find(([p]) => p.every((w, j) => toks[i + j] === w));
+    if (hit) {
+      out.push(hit[1]);
+      i += hit[0].length;
+    } else out.push(toks[i++]);
+  }
+  return out;
+}
+
 /** Canonical tokens with stopwords removed (falls back to all tokens if only stopwords remain). */
 export function canonTokens(s: string): string[] {
-  const all = tokens(s).map((t) => CANON[t] ?? t);
+  const all = joinPhrases(tokens(s)).map((t) => CANON[t] ?? t);
   const kept = all.filter((t) => !STOPWORDS.has(t));
   return kept.length ? kept : all;
 }
@@ -167,20 +207,31 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
+/**
+ * Ukrainian case endings: the same word if the first letters agree and only short endings differ
+ * ("Софійського" / "Софійський", "собору" / "собор", "Володимирській" / "Володимирська").
+ */
+function caseVariant(a: string, b: string): boolean {
+  if (!CYRILLIC.test(a) || !CYRILLIC.test(b)) return false;
+  const minLen = Math.min(a.length, b.length);
+  let cp = 0;
+  while (cp < minLen && a[cp] === b[cp]) cp++;
+  return cp >= 4 && a.length - cp <= 3 && b.length - cp <= 3;
+}
+
 function tokenSim(a: string, b: string): number {
   if (a === b) return 1;
   const minLen = Math.min(a.length, b.length);
   if (minLen < 4) return 0;
   if (a.startsWith(b) || b.startsWith(a)) return 0.9;
-  // Ukrainian case endings: same word if the first letters agree and only short endings differ
-  // ("Софійського" / "Софійський", "Володимирській" / "Володимирська").
-  if (CYRILLIC.test(a) && CYRILLIC.test(b)) {
-    let cp = 0;
-    while (cp < minLen && a[cp] === b[cp]) cp++;
-    if (cp >= 4 && a.length - cp <= 3 && b.length - cp <= 3) return 0.85;
-  }
+  if (caseVariant(a, b)) return 0.85;
   const r = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
   return r >= 0.75 ? r : 0;
+}
+
+/** The whole name, word for word, allowing a Ukrainian case ending on each word. */
+function sameName(q: string[], n: string[]): boolean {
+  return q.length === n.length && q.every((t, i) => t === n[i] || caseVariant(t, n[i]));
 }
 
 function scoreTokens(q: string[], n: string[]): number {
@@ -241,7 +292,10 @@ export interface NameMatch {
   feature: GazetteerFeature;
   score: number;
   matched_name: string;
-  /** Same canonical tokens in the same order as one of the feature's names. */
+  /**
+   * Same canonical tokens in the same order as one of the feature's names, allowing a Ukrainian
+   * case ending on each ("Софійського собору" is exact for "Софійський собор").
+   */
   exact: boolean;
 }
 
@@ -255,7 +309,7 @@ export function searchByName(query: string | string[], features: GazetteerFeatur
     let matched = feature.name;
     let exact = false;
     for (const n of names) {
-      if (keys.has(n.key)) exact = true;
+      if (keys.has(n.key) || queries.some((q) => sameName(q, n.toks))) exact = true;
       for (const q of queries) {
         const s = scoreTokens(q, n.toks);
         if (s > best) {
@@ -275,13 +329,21 @@ const BIAS_RANK: Record<Category, number> = {
   castle: 1,
   town_hall: 2,
   bridge: 3,
+  water: 3,
   street: 4, // major streets only; minor streets rank last
   church: 5,
   park: 6,
+  cemetery: 6,
   police: 7,
   hospital: 8,
   other: 9,
+  stop: 9,
+  hotel: 10,
   school: 11,
+  // Many, and often a chain or a generic name: they would crowd out the landmarks.
+  pharmacy: 12,
+  fuel: 12,
+  building: 12,
 };
 
 /** Up to `max` distinct place names to bias speech-to-text, most useful first. */

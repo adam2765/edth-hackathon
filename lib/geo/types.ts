@@ -5,10 +5,20 @@ export type Category =
   | "town_hall"
   | "school"
   | "park"
+  | "cemetery"
   | "hospital"
   | "police"
   | "bridge"
   | "street"
+  /** Bus, tram and trolleybus stops. */
+  | "stop"
+  | "fuel"
+  | "pharmacy"
+  | "hotel"
+  /** Rivers, canals, lakes and ponds. */
+  | "water"
+  /** A named building that is none of the above. */
+  | "building"
   | "other";
 
 export type Relation =
@@ -43,7 +53,7 @@ export interface GazetteerFeature {
   bbox?: [number, number, number, number];
   osm_type: "node" | "way" | "relation";
   osm_id: number;
-  /** Streets only: polylines as [lon, lat] pairs. */
+  /** Streets and rivers: polylines as [lon, lat] pairs. */
   lines?: [number, number][][];
   /** Set when another street in the gazetteer has the same name: the town this one is in, to tell them apart. */
   town?: string;
