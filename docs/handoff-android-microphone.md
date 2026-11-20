@@ -143,6 +143,7 @@ From `AGENTS.md` and `transmitter/AGENTS.md`:
 - Every source makes an `Utterance` and goes down one send path.
 - Do not push, deploy or move the `prior-work-fri-1800` tag unless the person you work for asks. Other people commit to `main` at the same time: pull before you start, and stage only your own files.
 
+
 ## Ollama setup on this Mac
 
 Local mode needs two separate things: the web coordinator and an Ollama server with the
@@ -231,3 +232,4 @@ needs the PCM fix described above; installing Ollama alone does not implement th
 References: [Homebrew formula](https://formulae.brew.sh/formula/ollama),
 [Ollama configuration](https://github.com/ollama/ollama/blob/main/docs/faq.mdx),
 [model](https://ollama.com/library/ministral-3:3b).
+
