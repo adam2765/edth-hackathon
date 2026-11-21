@@ -80,6 +80,51 @@ describe("resolver", () => {
     expect(r.evidence.feature_id).toBe(CHATEAU_METRO.id);
   });
 
+  // Mission vincennes-21: "friendly at Vincennes Metro" put the track at the RER station, the only
+  // station called exactly "Vincennes"; the metro with that name in it is Château de Vincennes [181].
+  describe("a metro word with the whole name of a train station", () => {
+    const RER = gaz.find((f) => f.id === "node/1730998187")!;
+    const run = (transcript: string, from = MAIRIE_VINCENNES, language: Intent["language"] = "en") =>
+      resolve({ intent: intent({ landmark_name: "Vincennes", landmark_category: "metro_station", language }), transcript, lastPosition: at(from), now: NOW, gazetteer: gaz });
+
+    it("is the RER station Vincennes in this gazetteer", () => {
+      expect(RER).toMatchObject({ name: "Vincennes", category: "metro_station", subtype: "rail" });
+    });
+
+    it("asks between the train station and the metro station with the name", () => {
+      const r = run("friendly at Vincennes Metro");
+      expect(r.status).toBe("ambiguous");
+      expect(r.evidence.rule).toBe("named_metro_or_train");
+      expect(r.candidates.map((c) => c.id).sort()).toEqual([CHATEAU_METRO.id, RER.id].sort());
+      expect(r.question).toMatch(/^Which station: .*Vincennes.*Vincennes\?$/);
+      expect(r.pin).toBeUndefined();
+    });
+
+    it("asks even when the speaker stands at the train station", () => {
+      expect(run("I'm at Vincennes metro", RER).status).toBe("ambiguous");
+    });
+
+    it("asks in French", () => {
+      const r = run("Je suis au métro Vincennes", MAIRIE_VINCENNES, "fr");
+      expect(r.status).toBe("ambiguous");
+      expect(r.question).toMatch(/^Quelle station : /);
+    });
+
+    it("still places 'station' and 'RER' at the train station, as before [12]", () => {
+      for (const t of ["I'm at Vincennes station", "I'm at the Vincennes RER"]) {
+        const r = run(t);
+        expect(r.status).toBe("resolved");
+        expect(r.evidence.feature_id).toBe(RER.id);
+      }
+    });
+
+    it("leaves a metro station called by its whole name alone", () => {
+      const r = resolve({ intent: intent({ landmark_name: "Bérault", landmark_category: "metro_station" }), transcript: "I'm at Bérault metro", lastPosition: at(MAIRIE_VINCENNES), now: NOW, gazetteer: gaz });
+      expect(r.status).toBe("resolved");
+      expect(r.evidence.feature_id).toBe(BERAULT.id);
+    });
+  });
+
   it("an unknown name with no category is unresolved", () => {
     const r = resolve({ intent: intent({ landmark_name: "Gare du Nord" }), transcript: "I'm at Gare du Nord", now: NOW, gazetteer: gaz });
     expect(r.status).toBe("unresolved");
