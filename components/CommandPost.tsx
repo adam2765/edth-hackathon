@@ -289,9 +289,11 @@ export default function CommandPost() {
   const [stored, setStored] = useState<boolean | null>(null);
   const [lastOk, setLastOk] = useState(0);
   const [now, setNow] = useState(0);
+  const otherMissions = missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
   const [mode, setMode] = useState<"live" | "replay">("live");
   const [replayT, setReplayT] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [replayOpen, setReplayOpen] = useState(false);
   const [speed, setSpeed] = useState(10);
   const [follow, setFollow] = useState(true);
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
@@ -407,7 +409,7 @@ export default function CommandPost() {
     setActionError(null);
     setNoMission(code == null);
     showSession(code);
-  }, []);
+  }, [setPlaying]);
 
   // ---------- the log ----------
   useEffect(() => {
@@ -525,7 +527,7 @@ export default function CommandPost() {
     setPlaying(false);
     setMode("live");
     setFollow(true);
-  }, []);
+  }, [setPlaying]);
 
   /** The replay has moved into another mission of the day: show it. What was picked belongs to the old one. */
   const enterMission = useCallback((code: string) => {
@@ -535,7 +537,7 @@ export default function CommandPost() {
     setAnswering(null);
     setConfirmEnd(false);
     showSession(code, true);
-  }, []);
+  }, [setPicked, setAnswering]);
 
   const scrub = useCallback(
     (t: number) => {
@@ -558,7 +560,7 @@ export default function CommandPost() {
     setMode("replay");
     setFollow(true);
     setPlaying(true);
-  }, [playing, mode, shownStretch, rangeStart]);
+  }, [playing, mode, shownStretch, rangeStart, setPlaying]);
 
   useEffect(() => {
     if (!playing) return;
@@ -1063,7 +1065,7 @@ export default function CommandPost() {
       if (t.area !== area) setManualArea(t.area);
       map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
     },
-    [area],
+    [area, setPicked],
   );
 
   // ---------- the command post's own changes ----------
@@ -1091,7 +1093,7 @@ export default function CommandPost() {
     // The camera stays where the person is looking while they place.
     setFollow(false);
     setTool((t) => (t?.kind === "place" ? null : { kind: "place", what: { ...DEFAULT_WHAT }, radius: PLOT_RADIUS_DEFAULT, at: null }));
-  }, []);
+  }, [setPicked]);
 
   const startEdit = useCallback((t: TrackState) => {
     setToolError(null);
@@ -1248,7 +1250,7 @@ export default function CommandPost() {
         setPicked(activeTool.n);
       }
     }
-  }, [activeTool, busy, note, sendPlot, tracksUrl]);
+  }, [activeTool, busy, note, sendPlot, tracksUrl, setPicked]);
 
   const saveEdit = useCallback(async () => {
     if (activeTool?.kind !== "edit" || busy) return;
@@ -1323,7 +1325,7 @@ export default function CommandPost() {
         setSettling(null);
       }
     },
-    [session],
+    [session, setNewSign],
   );
 
   // Keys, while no field has the cursor: P to place, H S U C F and 1 to 9 in the palette, Esc to step back.
@@ -1434,9 +1436,9 @@ export default function CommandPost() {
         {mission && ended == null ? (
           confirmEnd ? (
             <span className={styles.confirm} role="group" aria-label="End this mission?">
-              <span className={styles.confirmText}>End this mission? Reports stop. It stays here for replay.</span>
+              <span className={styles.confirmText}>Stop this mission? Reports stop. It stays here for replay.</span>
               <button type="button" className={styles.dangerBtn} onClick={endMission}>
-                End mission
+                Stop mission
               </button>
               <button type="button" className={styles.linkBtn} onClick={() => setConfirmEnd(false)}>
                 Cancel
@@ -1444,7 +1446,7 @@ export default function CommandPost() {
             </span>
           ) : (
             <button type="button" className={styles.ghostBtn} onClick={() => setConfirmEnd(true)}>
-              End mission
+              Stop mission
             </button>
           )
         ) : null}
@@ -1464,16 +1466,8 @@ export default function CommandPost() {
             {actionError}
           </span>
         ) : null}
-        {!fixedArea && !mission && session ? (
-          <div className={styles.segmented} role="group" aria-label="Area">
-            {(Object.keys(AREAS) as AreaId[]).map((id) => (
-              <button key={id} type="button" aria-pressed={area === id} onClick={() => setManualArea(id)}>
-                {AREAS[id].label}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <div className={styles.spacer} />
+        {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
         <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
           <span className={styles.connDot} aria-hidden="true" />
           {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
@@ -1607,6 +1601,9 @@ export default function CommandPost() {
         {/* A frame round the map says "this is a replay" from across the room. */}
         {mode === "replay" ? <div className={styles.replayFrame} aria-hidden="true" /> : null}
         <div className={styles.mapNotes}>
+          {otherMissions.map((other) => <div key={other.code} className={styles.mapNote} style={{ pointerEvents: "auto" }}>
+            Reports received in {other.name} · {other.code}. <button type="button" className={styles.linkBtn} onClick={() => pickSession(other.code)}>Show mission</button>
+          </div>)}
           {!mapReady ? (
             <div className={styles.mapNote} role="status">
               {mapSlow ? "The map has not loaded yet. It needs the network for its tiles. Units and reports still show in the lists." : "Loading the map…"}
@@ -1632,6 +1629,11 @@ export default function CommandPost() {
         </div>
 
         <div className={styles.replayBar}>
+          <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} onClick={() => {
+            if (replayOpen) goLive();
+            setReplayOpen(!replayOpen);
+          }}>{replayOpen ? "Close replay" : "Replay"}</button>
+          {replayOpen ? <>
           <button
             type="button"
             className={styles.liveBtn}
@@ -1721,6 +1723,7 @@ export default function CommandPost() {
               </button>
             ))}
           </div>
+          </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
         </div>
       </main>
 

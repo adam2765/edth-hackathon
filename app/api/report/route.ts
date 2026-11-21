@@ -113,8 +113,8 @@ export async function POST(req: Request) {
 
   const audio = form.get("audio");
   const textIn = form.get("text");
-  // Test clips: the phone's own recording and Whisper's timed segments, sent beside its text when
-  // its "Send clips" switch is on. Kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
+  // Legacy developer clients can send a test clip beside text. New phone reports use audio.
+  // Clips are kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
   const clipIn = form.get("clip");
   const clip = clipIn instanceof Blob && clipIn.size > 0 && clipIn.size <= MAX_AUDIO_BYTES ? clipIn : null;
   const segments = clipSegments(form.get("segments"));
@@ -270,8 +270,8 @@ export async function POST(req: Request) {
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
     if (err instanceof LocalTranscriberDownError) {
-      console.warn(`[stt] ${err.message}. Start it with \`npm run stt\` (docs/setup.md, part 3).`);
-      const error = "Speech-to-text on the coordinator is not running. Type the report, or use speech-to-text on the phone.";
+      console.warn(`[stt] ${err.message}. Run \`npm run build\` then \`npm start\`.`);
+      const error = "Speech-to-text on the coordinator is not ready. Start the servers with npm start; run npm run build first if speech models are missing.";
       return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 503 });
     }
     console.error("report failed", err);

@@ -3,7 +3,7 @@
 **Status, 21 Nov:** the local Expo-module fallback below is implemented and installed on a
 Galaxy S10. It records PCM WAV and sends Whisper's text to the offline coordinator. Do not
 install the PCM-stream library proposed below. Current setup is in the root README's
-[USB daily startup](../README.md#daily-use-usb-android-phone-no-studio); Studio can stay closed.
+[USB daily startup](../README.md#run-locally); Studio can stay closed.
 Two live town-hall reports reached the receiver correctly with base. Remaining runtime work:
 recognition accuracy, stale question cards and warm transcription timings with base and small;
 iOS was not tested in this change. The proposal below is retained until those checks finish.
@@ -121,7 +121,7 @@ Do not decode the AAC file into PCM on the phone. That needs a decoder module, w
   ```
 
   The app finds the coordinator at the address it loaded its code from (`coordinatorOnThisComputer` in `App.tsx`), so over `adb reverse` both are `localhost`. Run these again after reconnecting the cable. Same Wi-Fi with the Mac's address also works. Plain `http://` is already allowed on Android (`usesCleartextTraffic` in `app.json`).
-- **Order:** Ollama, then the coordinator (`PROVIDER_MODE=local npm run dev -- -p 3117`, wait for its `ready for` lines), then `cd transmitter && npx expo run:android`, then `npx expo start --dev-client` for later runs. See [setup.md](setup.md), parts 3, 6 and 7.
+- **Daily use:** `npm run build`, `npm start`, `npm stop`. Direct component commands remain in [setup.md](setup.md#advanced-console-use).
 - **The Whisper model downloads once** when a phone mode is first chosen (56 MB for base, 181 MB for small), so the phone needs the internet that one time.
 - **Open a mission** on the receiver (`http://localhost:3117/receiver`, Missions menu, Vincennes) and join it from the phone. Reports need a mission [114].
 
@@ -135,7 +135,7 @@ Do not decode the AAC file into PCM on the phone. That needs a decoder module, w
 - Docs updated in the same commit as the code:
   - `transmitter/README.md`: the "iOS only for now" lines under the speech-to-text results.
   - [plan.md](plan.md), Transmitter: remove "record uncompressed audio on Android" from Still to do.
-  - [setup.md](setup.md), part 6: the last sentence. Also write down what it took to build on Android on this computer, with a check after each step.
+  - [setup.md](setup.md): the Android installation instructions. Also write down what it took to build on Android on this computer, with a check after each step.
   - [architecture.md](architecture.md): "Not yet on Android" in the transmitter row.
 - New lines at the end of `DECISIONS.md`: the library (or the fallback) and why, and the measured phone times. Check the last number first, because other sessions append too.
 - This file deleted, and its row in [README.md](README.md) removed.

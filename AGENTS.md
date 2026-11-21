@@ -45,8 +45,11 @@ docs/                       design docs, one Markdown file per topic; start at d
 
 ```bash
 npm install
+npm run build              # build changed components and load phone app when needed
+npm start                  # restart servers; leave launching phone app to the person
+npm stop                   # stop project processes, including servers and connected phone app
 npm run dev -- -p 3117      # port 3117, not 3000; hosted mode, needs MISTRAL_API_KEY
-PROVIDER_MODE=local npm run dev -- -p 3117   # offline mode: no key, needs Ollama (docs/setup.md, part 3)
+PROVIDER_MODE=local npm run dev -- -p 3117   # offline mode: no key, needs Ollama (docs/setup.md)
 npm test                    # unit tests; no network or key needed
 npx tsc --noEmit            # type-check (excludes transmitter/)
 npm run lint
@@ -60,7 +63,7 @@ npm run eval:callsigns      # score the call-sign reader (docs/callsigns.md); no
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
 
-A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: only Ollama on the same computer with `ministral-3:3b` (`docs/setup.md`, part 3). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
+A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: Ollama with `ministral-3:3b` and whisper.cpp/ffmpeg with the host speech models on the same computer (`docs/setup.md`). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
 
 ## Rules
 

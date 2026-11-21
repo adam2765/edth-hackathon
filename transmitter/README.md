@@ -22,20 +22,17 @@ after it does.
 
 ## The screen
 
-The main screen is only for reporting. Top to bottom:
+The phone detects reachable coordinators from the USB/Metro host and its LAN Bonjour
+service directory. Tap Connect beside a server; multiple servers appear as separate rows.
+The phone automatically follows the newest running mission and follows newer missions
+between reports. There is no mission picker or Join/Leave control. With no running mission,
+it shows Waiting for mission and joins when the server starts one.
 
 - **Where:** the mission's name, the area, the language, and the coordinator with a dot
   (green when it answers, red when it does not). Tapping it, or the gear, opens Setup.
-- **Pick a mission**, like tuning to a net, until one is picked: a card lists the coordinator's
-  open missions, and the talk button says "Pick a mission". With only one open, it is picked for
-  you. Tapping one picks it: there is no call sign to type and nothing to join. The phone keeps
-  the code in `transmitter.json` in its documents, picks it again on start, and sends it with
-  each report. With other missions open, "Change" offers them. When the base ends the mission,
-  the phone says so within 5 seconds and offers the open ones; it waits for a pick, so it never
-  moves to another mission by itself. A coordinator that keeps no record (the live site) has no
-  missions: the phone reports without one [114, 208].
-- **A notice**, only when the next report would fail: the coordinator is not answering, or
-  speech-to-text is set to the phone and its model is not downloaded.
+- **Automatic mission:** after Connect, the phone follows the newest running mission,
+  switching between reports. It waits when none is running.
+- **A notice** when the coordinator is offline or no mission is running.
 - **The talk button** and, under it, one status line: listening, sending, sent, held for the
   operator, or not sent and why. While recording it turns red, counts the seconds, and a bar
   shows how much of the 15 seconds is used. The phone shows no answer: a question, and a report
@@ -46,38 +43,41 @@ The main screen is only for reporting. Top to bottom:
   operator: a step that expects one passes when the expected choice was offered. A later step
   that depends on the answer passes only once the operator gives it.
 
-**Setup** is a sheet: area and language, which coordinator, where speech becomes text and the
-model download, and scenario sound and timing. In a mission, the mission's area counts. The
-language is the one you speak, English by default: it goes with every report, Whisper on the
-phone listens for it, and the operator's questions are written in it. Scenarios use each
-report's own language instead ([decision 106](../DECISIONS.md)).
-
-The UI lives in `src/ui/`: `theme.ts` (colours, type and spacing, shared with the web app's
-palette), `controls.tsx` (segmented control, grouped rows, buttons), and one file each for the
-talk button, the scenario list, the mission card, and the Setup sheet. `src/mission.ts` lists
-missions and keeps the one picked. `src/speech.ts` is not used for now: it stays for hearing the
-operator's calls later.
-`App.tsx` holds the logic and composes them.
+**Setup** has language, discovered Hosts and Developer tools. The mission supplies the area.
+Scenario selection, sound/timing and a manual host override are under Developer tools.
+There is no phone model setup or transcription selector. The radio screen reports sent,
+held for the operator, or not sent; questions stay on the command post.
 
 ## Run it
 
+From the repository root:
+
 ```bash
-npm install
-LANG=en_US.UTF-8 npx expo run:ios      # first build takes a few minutes; needs Xcode
-npx expo start --dev-client            # the dev server the app loads its code from
+npm run build
+npm start
+npm stop
 ```
 
-`LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
-Android: `npx expo run:android`. This is a native build, so Expo Go cannot run it.
-For the Mac USB workflow with Studio closed, use the root README's
-[command-line build and rebuild steps](../README.md#build-and-try-changes-without-android-studio).
+Use `npm start light` for lower memory use; plain `npm start` selects regular mode. Connect only the phone being used. Tools and signing are in
+[setup](../docs/setup.md). The host remembers the phone. iPhone compilation requires a
+Mac with Xcode; free Apple provisioning expires after seven days. No EAS.
 
+Advanced developers can still run the component commands listed in
+[setup](../docs/setup.md#advanced-console-use). Phone JavaScript is served by Metro;
+only native changes need a new native binary. Voice-to-text runs on the coordinator.
+
+## Which coordinator it talks to
+
+The server startup supplies the coordinator address. Android USB uses loopback plus forwarding;
+iPhone uses the host’s `.local` name. Direct development builds can still infer the host
+from Metro, and `EXPO_PUBLIC_SERVER_URL` overrides that default. A manually selected host
+is remembered. There is no automatic fallback to the public site.
 On a phone, sign with your own Apple ID: put `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
 in `transmitter/.env.local` (ignored by git), because `dev.voicetomap.transmitter` belongs to
 Alex's team (`app.config.ts`). Expo's commands and `npm run phones` read that file; a value set in
 the shell wins. Every step, with checks: [../docs/setup.md](../docs/setup.md).
 
-## Updating the phones
+## Advanced fleet helper
 
 One command on the Mac, with Metro and the coordinator running:
 
@@ -87,8 +87,7 @@ cd transmitter && npm run phones
 
 It updates every iPhone connected to the Mac, by cable or on the same network, and opens the
 app on Metro there. A development build loads its code from Metro, so most updates need no
-install: after a change to `App.tsx` or `src/`, or a pull, the script only reopens the app. While
-Metro runs, saved changes also reach the open apps by themselves.
+install: after a change to `App.tsx` or `src/`, or a pull, the script only reopens the app. The managed daily Build command restarts Metro when JavaScript changes.
 
 The app is built and installed again only when its native side changed: a native package,
 `app.json`, `app.config.ts` and the variables it reads, or Expo itself. Expo's fingerprint of
@@ -114,46 +113,22 @@ computer's address. It sends reports to the coordinator on that same computer, p
 "Live site" (`https://edth-hackathon.vercel.app`), and the dot beside the coordinator's name
 shows whether it answers (re-checked every 5 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
-For a phone, open the app with the computer's network name, not a numeric address:
+Setup → Hosts lists discovered reachable coordinators. A manual override remains in
+Developer tools. No new native phone dependency is needed for discovery: the existing
+Metro/USB host browses LAN advertisements and the phone verifies each candidate.
 
-```bash
-xcrun devicectl device process launch --device <phone id> --terminate-existing \
-  --payload-url "exp+transmitter://?__expo_url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081&__expo_disable_fab=1&__expo_disable_onboarding=1" \
-  dev.voicetomap.transmitter
-```
+## Speech-to-text on the coordinator
 
-`__expo_disable_fab=1` hides Expo's floating developer button, which otherwise sits over the
-top right of the screen; leave it off when you want the developer menu.
+Microphone and scenario utterances send audio through the same report path. The phone
+records 16 kHz mono AAC/m4a and sends it with the selected language; it does not load a
+speech model or transcribe. In local mode, the coordinator uses Whisper turbo by default, base with `npm start light`
+through whisper-server with Silero VAD and ffmpeg conversion. Hosted mode uses Mistral.
+A report counts as successful only after the coordinator acknowledges saving it.
 
-The name keeps working when addresses change, and it works over the USB cable alone, with no
-shared Wi-Fi. A numeric address does not: over the cable the Mac's address changes every time
-the link re-forms, and the app then reports "no answer from the coordinator". iOS must be
-allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
-network is allowed. In hosted mode the coordinator calls Mistral, so the computer needs the
-internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither. In Server mode the
-coordinator then transcribes with whisper-server, which must be running (`npm run stt`,
-[../docs/setup.md](../docs/setup.md), part 3); the phone modes send text and do not need it.
-
-Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
-ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
-speech-to-text. Results: `../scenarios/results/iphone13mini-via-mac-coordinator-2026-11-20.jsonl`.
-The Android microphone check is recorded below.
-
-## Speech-to-text: on the server or on the phone
-
-Setup chooses where speech becomes text (`src/stt.ts`).
-
-| Mode | What happens | Needs |
-|---|---|---|
-| Server | The clip is uploaded and the coordinator transcribes it: Mistral, or whisper-server in offline mode [195]. | A connection good enough for audio |
-| Phone: base | Whisper `ggml-base-q5_1` runs on the phone; only the words are sent. | A one-time 56 MB download |
-| Phone: small | Whisper `ggml-small-q5_1`, slower and more accurate. | A one-time 181 MB download |
-
-Phone models come from `ggerganov/whisper.cpp` on Hugging Face and are kept in the app's documents.
-"Place-name hints" gives Whisper the area's place names and report words (`src/hints.generated.json`),
-fitted to its prompt budget (below). `npm run setup` fetches the base model to `assets/models/` on
-the Mac and checks its SHA-256, for `../scripts/build-transmitter-hints.ts` to count tokens with; the
-app does not use that copy.
+Build prepares the host’s models. Start/Stop manage the speech server with the other
+components. The native package dependencies are retained for compatibility with installed
+builds; the active recording and scenario paths no longer import the phone transcriber.
+No speech mode, model download or test-clip selector is needed on the phone.
 
 ### Model comparison (20 Nov)
 
@@ -179,6 +154,9 @@ A step counts when the coordinator's answer is the expected one.
   this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
 - The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
 
+The measurements above describe the old on-phone path. They are not measurements of
+the merged coordinator path. Live microphone recognition on this Mac/phone pair remains
+to check after the coordinator tools and models are installed.
 ### The prompt for Whisper base (21 Nov)
 
 Whisper keeps only the last 223 tokens of its prompt. The Vincennes list was 268 tokens, so its
@@ -228,3 +206,7 @@ coordinator, and the operator's calls do not reach the phone yet [208]. "Play cl
 `npm run scenarios` (in the folder above, on a Mac) makes the clips with synthetic voices and
 writes `scenarios/index.ts` here. "Play scenario" sends every step and marks each one ✓ or ✗
 against its expected answer.
+
+The native Expo launcher help uses `npm start` and mentions `npm start light`. Setup
+applies this wording after dependency installs; Build includes it in the native fingerprint
+and rebuilds the phone binary when it changes. A JavaScript reload cannot update this text.

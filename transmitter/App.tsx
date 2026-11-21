@@ -4,24 +4,21 @@ import Constants from "expo-constants";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
-import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
-import { startPcm, stopPcm } from "./src/pcm";
-import { CoordinatorError, fetchMissions, loadSaved, writeSaved, type Saved } from "./src/mission";
-import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
+import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, clipUri, playClipAloud } from "./src/sources";
+import { CoordinatorError, loadSaved, writeSaved, type Saved } from "./src/mission";
 import { positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Resolution, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button } from "./src/ui/controls";
-import { MissionCard } from "./src/ui/MissionCard";
+import { discoverHosts, serverOrigin, type FoundHost } from "./src/hosts";
 import { fmtTime, type Reach, type StepResult } from "./src/ui/model";
 import { ScenarioCard } from "./src/ui/ScenarioCard";
 import { SetupSheet } from "./src/ui/SetupSheet";
 import { TalkButton } from "./src/ui/TalkButton";
 import { TOUCH, color, radius, space, type } from "./src/ui/theme";
 
-const LIVE_SITE = "https://edth-hackathon.vercel.app";
 /** The port the coordinator (the web app in the folder above) runs on with `npm run dev -- -p 3117`. */
 const COORDINATOR_PORT = 3117;
 
@@ -36,7 +33,7 @@ function coordinatorOnThisComputer(): string | null {
 }
 
 const LOCAL_COORDINATOR = coordinatorOnThisComputer();
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? LIVE_SITE;
+const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? "http://127.0.0.1:3117";
 const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
@@ -109,7 +106,11 @@ function Transmitter() {
   const [saved, setSaved] = useState<Saved>(() => loadSaved());
   const [area, setArea] = useState<AreaId>("vincennes");
   const [language, setLanguage] = useState<Lang>("en");
-  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
+  const [serverUrl, setServerUrl] = useState(() => serverOrigin(saved.server) || DEFAULT_SERVER);
+  const [hosts, setHosts] = useState<FoundHost[]>([]);
+  const [connectedHost, setConnectedHost] = useState<string | null>(null);
+  const needsConnect = connectedHost !== serverUrl;
+  const [developer, setDeveloper] = useState(false);
   const [reach, setReach] = useState<Reach>("checking");
   const [setupOpen, setSetupOpen] = useState(false);
   const [busy, setBusy] = useState<Busy>("idle");
@@ -120,13 +121,6 @@ function Transmitter() {
   const [scenarioSummary, setScenarioSummary] = useState<{ scenario: string; text: string } | null>(null);
   const [realTime, setRealTime] = useState(false);
   const [playClips, setPlayClips] = useState(false);
-  const [sttMode, setSttMode] = useState<SttMode>("server");
-  const [useHints, setUseHints] = useState(true);
-  // Tests only: send each recording beside the phone's words, for the coordinator to keep (KEEP_CLIPS=1).
-  const [sendClips, setSendClips] = useState(false);
-  const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
-  const [downloadPct, setDownloadPct] = useState<number | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
   /**
    * The coordinator's missions, with the address they came from, so a list from the last address
    * is never read as this one's. The list is null when it has none to offer (an older deployment).
@@ -137,18 +131,12 @@ function Transmitter() {
   const [missionNote, setMissionNote] = useState<string | null>(null);
 
   const openMissions = missionList?.missions.filter((m) => m.ended == null) ?? [];
-  /** The mission picked on this coordinator, open or not. */
-  const savedCode = saved.mission && saved.mission.server === serverUrl ? saved.mission.code : null;
-  /**
-   * The mission reports go to, like the net a radio is tuned to: the one picked while it is open;
-   * with none picked, the only one open. After a mission ends, the phone waits for a pick, so it
-   * never moves to another mission by itself.
-   */
-  const mission = !missionList?.stored
-    ? null
-    : (openMissions.find((m) => m.code === savedCode) ?? (savedCode == null && missionNote == null && openMissions.length === 1 ? openMissions[0] : null));
-  /** A coordinator that keeps missions takes reports for the command post only in one. */
-  const needsMission = reach === "ok" && !!missionList?.stored && !mission;
+  const newest = openMissions.reduce<(typeof openMissions)[number] | null>((latest, m) => !latest || m.opened > latest.opened || (m.opened === latest.opened && m.code > latest.code) ? m : latest, null);
+  const previousMission = useRef<typeof newest>(null);
+  // Finish an in-flight report/scenario before following a newer mission.
+  const mission = needsConnect ? null : busy !== "idle" && previousMission.current && openMissions.some(m => m.code === previousMission.current?.code) ? previousMission.current : newest;
+  useEffect(() => { previousMission.current = mission; }, [mission]);
+  const needsMission = !mission;
   /** In a mission, its area; the coordinator uses it whatever the phone sends. */
   const effectiveArea: AreaId = mission?.area ?? area;
   const scenarios = mission ? SCENARIOS.filter((s) => s.area === mission.area) : SCENARIOS;
@@ -164,37 +152,30 @@ function Transmitter() {
   const releasedRef = useRef(false);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelScenarioRef = useRef(false);
-  /** Phone speech-to-text times of the current scenario run, for the summary line. */
-  const phoneTimesRef = useRef<number[]>([]);
   const recorder = useAudioRecorder(SPEECH_RECORDING);
 
-  // Is the coordinator answering at this address, and which missions are open? Any HTTP answer
-  // counts as answering; only silence does not. Checked when the address changes and then every
-  // 5 seconds, so the light follows the network and a newly opened or ended mission shows up.
+  useEffect(() => { writeSaved({ ...saved, server: serverUrl }); }, [saved, serverUrl]);
   useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const list = await fetchMissions(serverUrl);
-        if (cancelled) return;
-        setReach("ok");
-        setListed({ server: serverUrl, list });
-      } catch {
-        if (!cancelled) setReach("unreachable");
-      }
+    let stopped = false;
+    const scan = async () => {
+      const found = await discoverHosts([DEFAULT_SERVER, LOCAL_COORDINATOR, serverUrl, saved.server, saved.mission?.server, "http://127.0.0.1:3117"]);
+      if (stopped) return;
+      setHosts(found);
+      const active = found.find(h => h.url === serverUrl);
+      setReach(active ? active.ready ? "ok" : "checking" : "unreachable");
+      setListed(active ? { server: serverUrl, list: active.missions } : null);
     };
-    const first = setTimeout(() => {
-      if (cancelled) return;
-      setReach("checking");
-      check();
-    }, 500);
-    const again = setInterval(check, 5_000);
-    return () => {
-      cancelled = true;
-      clearTimeout(first);
-      clearInterval(again);
-    };
-  }, [serverUrl]);
+    void scan();
+    const timer = setInterval(scan, 5000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [serverUrl, saved.server, saved.mission?.server]);
+  const connectTo = (host: FoundHost) => {
+    if (!host.ready || busyRef.current !== "idle") return;
+    setServerUrl(host.url); setConnectedHost(host.url); setReach("ok");
+    setListed({ server: host.url, list: host.missions }); setMissionNote(null);
+    setSaved({ server: host.url });
+    setStatus("Connected. Following the newest running mission.");
+  };
 
   // Sound should come out of the loudspeaker even when the phone's ring switch is on silent,
   // as it would from a radio.
@@ -211,28 +192,10 @@ function Transmitter() {
     setBusy(b);
   };
 
-  // ---------- missions ----------
-  const saveMission = useCallback((next: Saved) => {
-    setSaved(next);
-    writeSaved(next);
+  const dropMission = useCallback((note: string | null) => {
+    setMissionNote(note); setListed(null); sessionRef.current = null;
+    cancelScenarioRef.current = true;
   }, []);
-
-  /** Off the mission: it ended, or another is wanted. The open ones are offered again. */
-  const dropMission = useCallback(
-    (note: string | null) => {
-      setMissionNote(note);
-      saveMission({});
-    },
-    [saveMission],
-  );
-
-  const pickMission = useCallback(
-    (code: string) => {
-      setMissionNote(null);
-      saveMission({ mission: { server: serverUrl, code } });
-    },
-    [serverUrl, saveMission],
-  );
 
   // The send path reads the mission from here, so a scenario that is running follows a change.
   // Setup shows the mission's area, as the coordinator uses it whatever the phone sends [108].
@@ -244,21 +207,6 @@ function Transmitter() {
     if (missionArea) setArea(missionArea);
   }, [missionArea]);
 
-  // Keep the mission the phone is on, so it is picked again on the next start; that includes
-  // the only open one, picked for you.
-  const missionCode = mission?.code ?? null;
-  useEffect(() => {
-    if (missionCode && missionCode !== savedCode) saveMission({ mission: { server: serverUrl, code: missionCode } });
-  }, [missionCode, savedCode, serverUrl, saveMission]);
-
-  // The mission picked has ended (or was deleted): say so, and offer the open ones.
-  useEffect(() => {
-    if (!missionList?.stored || savedCode == null) return;
-    if (missionList.missions.some((m) => m.code === savedCode && m.ended == null)) return;
-    const name = missionList.missions.find((m) => m.code === savedCode)?.name;
-    dropMission(`${name ?? "Your mission"} has ended.`);
-  }, [missionList, savedCode, dropMission]);
-
   /**
    * The one path every utterance takes, whatever produced it: send it to the coordinator and say
    * on the status line whether it went. The phone does not answer or speak questions; the operator
@@ -269,6 +217,7 @@ function Transmitter() {
       const session = sessionRef.current;
       let out: Sent;
       try {
+        if (!session) throw new Error("Waiting for connection to the newest running mission.");
         const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, language: opts.language, session, lastPosition: positionRef.current });
         const res = reply.resolution;
         // With no mission the phone keeps its own position, so the next report's "north of me" has
@@ -302,24 +251,8 @@ function Transmitter() {
       const now = Date.now();
       // A script speaks for several units, so each step names its own call sign.
       const base = { seq: ++seqRef.current, callsign: step.callsign, source: "scenario" as const, startedAt: now, endedAt: now, scenarioStepId: step.id };
-      let u: Utterance;
-      let phoneMs: number | undefined;
-      // Optional: let the room hear the clip first, as if someone had just said it.
       if (playClips) await playClipAloud(step.audio);
-      if (sttMode === "server") {
-        u = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
-      } else {
-        // Speech-to-text on the phone: only the words travel. Each step says its own language.
-        const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined, language: step.lang });
-        phoneMs = heard.ms;
-        phoneTimesRef.current.push(heard.ms);
-        if (!heard.text) {
-          console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
-          result({ state: "fail", note: "the phone heard nothing" });
-          return false;
-        }
-        u = { ...base, text: heard.text, endedAt: Date.now() };
-      }
+      const u: Utterance = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
       setStatus("Sending…");
       const out = await handleUtterance(u, { area: sc.area, language: step.lang });
       if (!out.ok) {
@@ -334,11 +267,11 @@ function Transmitter() {
       const offered = res.status === "ambiguous" && step.choose ? res.candidates.find((c) => c.id === step.choose) : undefined;
       const verdict = evaluate(step, res, offered);
       // One line per step in the dev-server log, so runs in different modes can be compared.
-      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: sttMode === "server" ? null : useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms?.stt, roundTripMs: out.roundTripMs }));
+      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "coordinator", said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, serverSttMs: out.reply.timings_ms?.stt, roundTripMs: out.roundTripMs }));
       result({ state: verdict.pass ? "pass" : "fail", note: verdict.note });
       return verdict.pass;
     },
-    [handleUtterance, sttMode, useHints, playClips],
+    [handleUtterance, playClips],
   );
 
   const playScenario = useCallback(async () => {
@@ -351,7 +284,6 @@ function Transmitter() {
     setStepResults((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith(`${sc.id}/`))));
     setScenarioSummary(null);
     const started = Date.now();
-    phoneTimesRef.current = [];
     let passed = 0;
     for (const step of sc.steps) {
       if (cancelScenarioRef.current) break;
@@ -362,9 +294,7 @@ function Transmitter() {
       if (await runStep(sc, step)) passed++;
     }
     // Shown on the card so the figure can be read off a phone that is not attached to a computer.
-    const times = [...phoneTimesRef.current].sort((a, b) => a - b);
-    const speed = times.length ? ` Phone speech-to-text: median ${times[Math.floor(times.length / 2)]} ms, slowest ${times[times.length - 1]} ms.` : "";
-    setScenarioSummary({ scenario: sc.id, text: cancelScenarioRef.current ? "Stopped." : `${passed} of ${sc.steps.length} steps as expected.${speed}` });
+    setScenarioSummary({ scenario: sc.id, text: cancelScenarioRef.current ? "Stopped." : `${passed} of ${sc.steps.length} steps as expected.` });
     setBusyBoth("idle");
   }, [effectiveScenarioId, realTime, runStep]);
 
@@ -380,28 +310,6 @@ function Transmitter() {
     [runStep],
   );
 
-  // ---------- speech-to-text on the phone ----------
-  const modelMissing = sttMode !== "server" && !modelReady[sttMode];
-  // Both phones give Whisper a PCM WAV; Android uses our AudioRecord module.
-  const phoneStt = sttMode !== "server";
-  const androidPcm = phoneStt && Platform.OS === "android";
-
-  const fetchModel = useCallback(async () => {
-    if (sttMode === "server" || downloadPct !== null) return;
-    const mode = sttMode;
-    setDownloadPct(0);
-    setDownloadError(null);
-    try {
-      await downloadModel(mode, (f) => setDownloadPct(Math.round(f * 100)));
-      setModelReady((m) => ({ ...m, [mode]: hasModel(mode) }));
-      if (!hasModel(mode)) setDownloadError("The download did not complete. Try again.");
-    } catch (e) {
-      setDownloadError(e instanceof Error ? `The download failed: ${e.message}` : "The download failed.");
-    } finally {
-      setDownloadPct(null);
-    }
-  }, [sttMode, downloadPct]);
-
   // ---------- source: microphone, hold to talk ----------
   const stopAndSend = useCallback(async () => {
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
@@ -410,35 +318,23 @@ function Transmitter() {
     setStatus("Sending…");
     const endedAt = Date.now();
     try {
-      const pcmUri = androidPcm ? await stopPcm() : null;
-      if (!androidPcm) await recorder.stop();
+      await recorder.stop();
       // Hand the audio session back to playback, on the loudspeaker.
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      const uri = androidPcm ? pcmUri : recorder.uri;
+      const uri = recorder.uri;
       if (!uri || endedAt - recordStartRef.current < MIN_CLIP_MS) {
         setStatus("Not sent. Too short: hold the button while you speak.");
         return;
       }
       // No call sign: like a radio, the phone says who it is in its words, and the coordinator reads it [202].
       const base = { seq: ++seqRef.current, source: "mic" as const, startedAt: recordStartRef.current, endedAt };
-      if (phoneStt) {
-        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
-        // With "Send clips" on, a clip the phone heard no words in still goes: a missed whisper is a result.
-        if (!heard.text && !sendClips) {
-          setStatus("Not sent. The phone heard no words.");
-          return;
-        }
-        const clip = sendClips ? { clipUri: uri, segments: heard.segments } : {};
-        await handleUtterance({ ...base, text: heard.text || undefined, ...clip }, { area: effectiveArea, language });
-      } else {
-        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language });
-      }
+      await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language });
     } catch (e) {
       setStatus(e instanceof Error ? `Not sent. Recording failed: ${e.message}` : "Not sent. Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, effectiveArea, language, handleUtterance, phoneStt, androidPcm, sttMode, useHints, sendClips]);
+  }, [recorder, effectiveArea, language, handleUtterance]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -452,12 +348,8 @@ function Transmitter() {
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      if (androidPcm) {
-        await startPcm();
-      } else {
-        await recorder.prepareToRecordAsync(phoneStt ? SPEECH_RECORDING_WAV : SPEECH_RECORDING);
-        recorder.record();
-      }
+      await recorder.prepareToRecordAsync(SPEECH_RECORDING);
+      recorder.record();
       recordStartRef.current = Date.now();
       setBusyBoth("recording");
       setStatus("Listening… release to send.");
@@ -468,36 +360,33 @@ function Transmitter() {
       setStatus(e instanceof Error ? `Not sent. Could not open the microphone: ${e.message}` : "Not sent. Could not open the microphone.");
       setBusyBoth("idle");
     }
-  }, [recorder, stopAndSend, phoneStt, androidPcm]);
+  }, [recorder, stopAndSend]);
 
   const onPressOut = useCallback(() => {
     releasedRef.current = true;
     stopAndSend();
   }, [stopAndSend]);
 
-  const coordinatorName = serverUrl === LOCAL_COORDINATOR ? "This Mac" : serverUrl === LIVE_SITE ? "Live site" : serverUrl.replace(/^https?:\/\//, "");
+  const coordinatorName = serverUrl.replace(/^https?:\/\//, "");
   const areaLabel = AREAS.find((a) => a.id === area)?.label ?? area;
   const languageLabel = LANGUAGES.find((l) => l.id === language)?.label ?? language;
   const openSetup = () => setSetupOpen(true);
   const title = mission?.name ?? "No mission";
 
   // At most one notice, for the thing that would make the next report fail.
-  const notice =
-    reach === "unreachable" ? (
-      <View style={[styles.notice, styles.noticeBad]} accessibilityRole="alert">
-        <Ionicons name="alert-circle" size={20} color={color.bad} />
-        <Text style={styles.noticeText}>Can’t reach the coordinator ({coordinatorName}). Reports will not go through.</Text>
-        <Button label="Setup" kind="quiet" onPress={openSetup} />
-      </View>
-    ) : needsMission ? (
-      <MissionCard missions={openMissions} onPick={pickMission} note={missionNote} commandPostUrl={`${serverUrl.replace(/\/+$/, "")}/cp`} />
-    ) : modelMissing ? (
-      <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
-        <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
-        <Text style={styles.noticeText}>{downloadError ?? "Speech-to-text is set to run on this phone, and its model is not downloaded yet."}</Text>
-        <Button label={downloadPct === null ? `Get ${PHONE_MODELS[sttMode].mb} MB` : `${downloadPct}%`} kind="quiet" busy={downloadPct !== null} onPress={fetchModel} />
-      </View>
-    ) : null;
+  const notice = needsConnect ? (
+    <View style={{ marginHorizontal: space.lg, marginTop: space.md, gap: space.sm }}>
+      <Text style={type.headline}>{hosts.length ? "Choose coordinator" : "Looking for coordinators…"}</Text>
+      {hosts.map(host => <View key={host.id} style={[styles.notice, styles.noticeWarn]}>
+        <Text style={styles.noticeText}>{host.name}{host.ready ? "" : " · Starting…"}{host.missions.missions.some(m => m.ended == null) ? "" : " · No running mission"}</Text>
+        <Button label="Connect" disabled={!host.ready} onPress={() => connectTo(host)} />
+      </View>)}
+    </View>
+  ) : reach !== "ok" ? (
+    <View style={[styles.notice, styles.noticeBad]}><Text style={styles.noticeText}>Coordinator offline.</Text><Button label="Hosts" onPress={() => setConnectedHost(null)} /></View>
+  ) : needsMission ? (
+    <View style={[styles.notice, styles.noticeWarn]}><Text style={styles.noticeText}>{missionNote ?? "No running mission. Waiting for the command post to start one."}</Text><Button label="Waiting for mission" disabled onPress={() => {}} /></View>
+  ) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -518,9 +407,9 @@ function Transmitter() {
               <Text style={type.footnote} numberOfLines={1}>
                 {areaLabel} · {languageLabel}
               </Text>
-              <View style={[styles.dot, { backgroundColor: reach === "ok" ? color.ok : reach === "unreachable" ? color.bad : color.textDim }]} />
+              <View style={[styles.dot, { backgroundColor: reach === "ok" && !needsConnect && mission ? color.ok : reach === "unreachable" ? color.bad : color.textDim }]} />
               <Text style={[type.footnote, styles.contextLast, reach === "unreachable" && styles.badText]} numberOfLines={1}>
-                {coordinatorName}
+                {needsConnect ? "Not connected" : `${coordinatorName} · ${mission ? "Reporting" : "Waiting for mission"}`}
               </Text>
             </View>
           </Pressable>
@@ -529,29 +418,17 @@ function Transmitter() {
           </Pressable>
         </View>
 
-        {mission && openMissions.length > 1 ? (
-          <View style={styles.missionBar}>
-            <Ionicons name="flag" size={16} color={color.ok} />
-            <Text style={[type.footnote, styles.missionMore]} numberOfLines={1}>
-              {openMissions.length - 1} other {openMissions.length === 2 ? "mission" : "missions"} open
-            </Text>
-            <Button label="Change" kind="quiet" muted disabled={busy !== "idle"} onPress={() => dropMission(null)} />
-          </View>
-        ) : reach === "ok" && !missionList?.stored ? (
-          <Text style={[type.footnote, styles.noRecord]}>This coordinator keeps no record, so there are no missions: reports are placed, but no command post shows them.</Text>
-        ) : null}
-
         {notice}
 
         <View style={styles.talk}>
-          <TalkButton state={busy} blocked={modelMissing ? "Model needed" : needsMission ? "Pick a mission" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <TalkButton state={busy} blocked={needsConnect ? "Connect first" : reach !== "ok" ? "Coordinator offline" : needsMission ? "Waiting for mission" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
           <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
             {status}
           </Text>
         </View>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
+      {developer ? <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         <ScenarioCard
           scenarios={scenarios}
           scenarioId={effectiveScenarioId}
@@ -559,37 +436,27 @@ function Transmitter() {
           results={stepResults}
           summary={scenarioSummary?.scenario === effectiveScenarioId ? scenarioSummary.text : null}
           running={busy === "scenario"}
-          blocked={modelMissing || needsMission || (busy !== "idle" && busy !== "scenario")}
+          blocked={needsConnect || reach !== "ok" || needsMission || (busy !== "idle" && busy !== "scenario")}
           onPlay={playScenario}
           onStop={() => (cancelScenarioRef.current = true)}
           onSendStep={sendOneStep}
         />
-      </ScrollView>
+      </ScrollView> : null}
 
       <SetupSheet
         visible={setupOpen}
         onClose={() => setSetupOpen(false)}
         locked={busy !== "idle"}
-        areas={AREAS}
-        area={area}
-        onArea={setArea}
         languages={LANGUAGES}
         language={language}
         onLanguage={setLanguage}
         serverUrl={serverUrl}
-        onServerUrl={setServerUrl}
-        localCoordinator={LOCAL_COORDINATOR}
-        liveSite={LIVE_SITE}
+        hosts={hosts}
+        onConnectHost={connectTo}
+        onServerUrl={(url) => { setConnectedHost(null); setListed(null); setServerUrl(url); }}
         reach={reach}
-        sttMode={sttMode}
-        onSttMode={setSttMode}
-        modelReady={modelReady}
-        downloadPct={downloadPct}
-        onDownload={fetchModel}
-        useHints={useHints}
-        onUseHints={setUseHints}
-        sendClips={sendClips}
-        onSendClips={setSendClips}
+        developer={developer}
+        onDeveloper={setDeveloper}
         playClips={playClips}
         onPlayClips={setPlayClips}
         realTime={realTime}
