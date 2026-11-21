@@ -2,7 +2,7 @@
 
 Which speech-to-text gets place names and languages right? Measured on 21 Nov 2026, 14:50 to 15:20 Paris time, so the team can decide whether to replace Whisper base on the phone. That part measures only, and adds no decision line: the phone's speech-to-text is Brian's call [172].
 
-A second round, 15:30 to 16:30, measured Whisper large-v3-turbo for speech-to-text on the coordinator in offline mode, and led to decision 191: see [Offline on the coordinator](#offline-on-the-coordinator).
+A second round, 15:30 to 16:30, measured Whisper large-v3-turbo for speech-to-text on the coordinator in offline mode, and led to decision 193: see [Offline on the coordinator](#offline-on-the-coordinator).
 
 ## In short
 
@@ -109,7 +109,7 @@ The whisper.rn 0.7.4 README says the package can also run Parakeet (`initParakee
 
 ## Offline on the coordinator
 
-In the field, reports come over a radio, not from a phone, so the coordinator does the speech-to-text, and it can run a larger model than a phone (Alex, 21 Nov). Offline mode had none [83]. Whisper large-v3-turbo (q5_0, 574 MB) was measured beside Parakeet, the best local option above, and now runs there [191].
+In the field, reports come over a radio, not from a phone, so the coordinator does the speech-to-text, and it can run a larger model than a phone (Alex, 21 Nov). Offline mode had none [83]. Whisper large-v3-turbo (q5_0, 574 MB) was measured beside Parakeet, the best local option above, and now runs there [193].
 
 Same 29 clips and the same scoring as above, three hosted scoring runs, 15:30 to 16:00. Base was run again with the report words of decision 189 in its hints. Character error rate is computed the same way for every row of this table; it comes out about a point under the table above.
 

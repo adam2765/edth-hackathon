@@ -133,4 +133,4 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 
 ## Provider interfaces
 
-`Transcriber.transcribe(audio, mime, biasTerms, { language }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`: whisper-server and Ollama on the computer [83, 191]. `language` is the language the device pinned; Whisper listens for it, Mistral ignores it. Whisper takes no bias terms.
+`Transcriber.transcribe(audio, mime, biasTerms, { language }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`: whisper-server and Ollama on the computer [83, 193]. `language` is the language the device pinned; Whisper listens for it, Mistral ignores it. Whisper takes no bias terms.

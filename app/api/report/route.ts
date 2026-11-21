@@ -5,7 +5,7 @@ import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
 import { readVoices } from "@/lib/geo/voices";
 import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/reports/clips";
-import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
+import { AREAS, DEFAULT_AREA, isAreaId, speechHints, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { reportContext, saveReport, type ReportInput } from "@/lib/reports/record";
 import { callsignOf, sessionCode } from "@/lib/reports/types";
@@ -27,9 +27,10 @@ const AREA_DATA = Object.fromEntries(
 ) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
 
 const NO_WORDS: Record<string, string> = {
-  uk: "Не розчув. Повторіть, будь ласка.",
-  fr: "Je n'ai pas compris. Répétez, s'il vous plaît.",
-  en: "I didn't catch that. Try again.",
+  // Bangs, rain or a phone held away gave empty transcripts in the noise tests: say what helps [192].
+  uk: "Не розчув. Говоріть ближче до мікрофона і повторіть.",
+  fr: "Je n'ai rien entendu. Parlez plus près du micro et répétez.",
+  en: "I didn't catch that. Speak closer to the microphone and try again.",
 };
 
 // Per-instance, best effort. Enough to stop a runaway loop in stage 1.
@@ -141,8 +142,9 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
+      // A speaker whose language is not the area's gets phrases in their own language first [190].
       // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias, { language: pinned });
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned), { language: pinned });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
