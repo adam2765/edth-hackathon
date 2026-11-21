@@ -16,6 +16,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 
 - The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, a stated distance in metres, a compass direction of travel, language.
 - `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`, or from the last position moved by a distance and compass direction the speaker stated. The phone's GPS is never used.
+- A report can also be about a **track**: something the speaker sees or knows of ("enemy vehicle in front of the town hall", "drone 300 metres north of me"). The coordinator numbers it and says the number back ("Track 3, hostile vehicle, Mairie de Vincennes."), and the receiver draws it with its NATO symbol. Tracks are for reconnaissance only: who saw what, where, when, and how sure the place is. See [Tracks](#tracks).
 - The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`. Ukrainian questions use an on-device voice instead when it is loaded (`lib/tts/`, test page at `/tts-lab`).
 
 ### Resolver rules
@@ -29,6 +30,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |
+| Two voices in one clip name different places (Whisper marks the change of voice) | `ambiguous`: "I heard more than one voice. Which place is yours?" ([voices](docs/voices.md)) |
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 | No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
@@ -53,6 +55,23 @@ Movement with a distance is dead reckoning from the last position, and is also s
 - "Moved 200 metres towards X": 200 m along the leg, never past X. The circle is the last position's circle plus a quarter of the distance (50 m at least).
 - "Moved 300 metres east on rue X": the reckoned point is moved onto that street.
 - A place that cannot be found does not stop a move that states its distance and direction; the log says the place was ignored.
+
+### Tracks
+
+A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts` holds the rules; none of them is left to the model.
+
+| Situation | Result |
+|---|---|
+| "Enemy vehicle in front of the town hall" | a track at that place, found as for a position report, measured from the observer |
+| "I see a drone about 300 metres north of me" | a track by dead reckoning from the observer, shown as an estimate; the circle is the observer's own plus 0.4 × the distance |
+| "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far, or for a place near it |
+| No word for whose it is ("a vehicle near the church") | unknown. Hostile only when a hostile word was said; "suspicious" or "possible enemy" is a suspect; "our" and "friendly" are friendly; "civilian" is neutral |
+| "Track 3 moved to the station" | a new sighting of Track 3, with a trail from the last one |
+| "Track 3 is hostile" | only what it is changes |
+| "Track 9 …" when the mission has no Track 9 | `unresolved`: "There is no Track 9 in this mission." |
+| The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said | `unresolved`: "Is that where you are, or something you see?" |
+
+A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the receiver a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. After 10 minutes with no report it is shown as old. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone", range rings, and edits by the operator.
 
 Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two named streets share a point in OpenStreetMap; a bridge shares none, so it is not a crossing. In a mission the coordinator remembers the street each unit is on (from a report that named a street, kept through crossings on it) and the way it last moved, and passes both with the last position. A crossing within 20 m is the one the unit is at, never the next one. The pin is the crossing, with a 30 m circle.
 
@@ -265,8 +284,9 @@ npm run dev -- -p 3117                        # hosted; needs MISTRAL_API_KEY
 ```
 
 ```bash
-npm test
-npm run gazetteer -- kyiv   # rebuild place data from Overpass (vincennes, kyiv or izium)
+npm test             # resolver unit tests
+npm run eval:extract # score intent extraction on evals/extraction.cases.json (needs a key, or PROVIDER_MODE=local)
+npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes, kyiv or izium)
 ```
 
 Environment options are in `.env.example`. Hosted mode needs `MISTRAL_API_KEY` in
@@ -322,6 +342,7 @@ app/api/answer/route.ts                    POST the choice tapped for a question
 app/api/sessions/                          list and open missions; [code]: the log, join, end, delete
 app/api/places/route.ts                    GET places by name, to pick a start point
 lib/reports/                               missions and their logs: entry types, store, record, position rule, foldLog
+lib/geo/tracks.ts, lib/geo/trackKinds.ts   tracks: who a report is about, whose a track is, where it is; kinds and symbol codes
 lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text

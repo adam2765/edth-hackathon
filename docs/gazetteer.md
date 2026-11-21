@@ -16,6 +16,40 @@ The app places every report against a local list of named places from OpenStreet
 8. **Military offices are left out.** The gazetteer is streets and civilian landmarks only. A place tagged `military`, `office=military` or `government=military` is dropped, and so is an enlistment office mapped as a plain government office, by its name ("Військкомат", "ТЦК"). A museum piece (`historic`) stays. A street named after a unit is a street name and stays (21 November).
 9. **The file is written only when every query succeeded.** Overpass is often busy; the script retries, alternating with a mirror, and leaves the old file alone if it gives up. With `GAZETTEER_RAW=<file>` the build keeps Overpass's main answer in that file and reads it back on the next run, so changing the build's rules does not query a busy server again.
 
+From OpenStreetMap to the running app. The numbers are the steps above.
+
+```mermaid
+flowchart TB
+    BOX["Area box<br/>lib/geo/areas.ts"]
+    OVP["Overpass<br/>and a mirror"]
+    RAW[("GAZETTEER_RAW file<br/>Overpass's answer, kept")]
+
+    subgraph BUILD["npm run gazetteer"]
+        direction LR
+        Q["Step 1<br/>query"] --> CAT["Step 2<br/>category"] --> NAMES["Step 3<br/>names"] --> MERGE["Step 4<br/>merge"] --> LINES["Step 5<br/>lines"] --> DROP["Steps 6 to 8<br/>leave out"]
+    end
+
+    FILE[("data/gazetteer.*.json<br/>committed")]
+
+    subgraph RUN["At run time"]
+        direction LR
+        RES["Resolver"]
+        BIAS["100 names as spelling hints<br/>for Mistral speech-to-text"]
+        PLACES["GET /api/places<br/>a mission's start point"]
+    end
+
+    HINTS[("transmitter/src/hints.generated.json<br/>24 to 40 names per area<br/>for Whisper on the phone")]
+    SCN[("scenarios/*.json<br/>expected feature ids")]
+
+    BOX --> BUILD
+    OVP <--> BUILD
+    BUILD -. "optional" .-> RAW
+    BUILD -- "step 9: written only when every query succeeded" --> FILE
+    FILE --> RUN
+    FILE -- "npm run scenarios" --> HINTS
+    SCN -. "ids must still exist" .-> FILE
+```
+
 The report endpoint loads the file once on the server (`lib/geo/gazetteer.ts`). Name search scans every entry with a cached index. The 100 place names sent to speech-to-text as spelling hints come from the same file, stations first. Pharmacies, fuel stations and buildings come last, so they never crowd out the landmarks.
 
 **What it still leaves out:** shops, cafés and restaurants, banks, and house numbers. OpenStreetMap has them (about 1,200 shops and cafés in the Vincennes box and 3,500 in Kyiv, counted 20 November), but each needs more than a query line. Many shops belong to chains, so the resolver needs "the Franprix on rue de Fontenay", a place narrowed by a street, before they help more than they ask back. House numbers are a street plus a number, not a name, and need a field in the intent. See [known gaps](known-gaps.md).

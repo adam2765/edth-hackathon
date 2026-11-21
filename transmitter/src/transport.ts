@@ -21,7 +21,11 @@ export interface SendResult {
 
 const TIMEOUT_MS = 20_000;
 
-/** Sends one utterance to the coordinator: audio if there is a clip, otherwise the text. */
+/**
+ * Sends one utterance to the coordinator: audio if there is a clip, otherwise the text. A test clip
+ * ("Send clips") goes beside the text, with Whisper's segments; it may be all there is when the
+ * phone heard no words.
+ */
 export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<SendResult> {
   const form = new FormData();
   if (u.audioUri) {
@@ -30,8 +34,12 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
     form.append("audio", new File(u.audioUri) as unknown as Blob);
   } else if (u.text) {
     form.append("text", u.text);
-  } else {
+  } else if (!u.clipUri) {
     throw new Error("Utterance has neither audio nor text");
+  }
+  if (u.clipUri && !u.audioUri) {
+    form.append("clip", new File(u.clipUri) as unknown as Blob);
+    form.append("segments", JSON.stringify(u.segments ?? []));
   }
   form.append("area", ctx.area);
   form.append("language", ctx.language);

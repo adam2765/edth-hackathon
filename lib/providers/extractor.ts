@@ -5,6 +5,7 @@
  * Otherwise Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
  */
 import type { Category, Direction, Intent, Relation } from "../geo/types";
+import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
 
 export interface ExtractOptions {
@@ -62,7 +63,7 @@ export const MAX_DISTANCE_M = 20_000;
 export const INTENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["kind", "landmark_text", "landmark_name", "landmark_name_lemma", "landmark_category", "relation", "distance_m", "direction", "language", "confidence"],
+  required: ["kind", "landmark_text", "landmark_name", "landmark_name_lemma", "landmark_category", "relation", "distance_m", "direction", "language", "confidence", "track"],
   properties: {
     kind: { type: "string", enum: ["position", "movement", "other"] },
     landmark_text: { type: ["string", "null"] },
@@ -74,11 +75,33 @@ export const INTENT_SCHEMA = {
     direction: { type: ["string", "null"], enum: [...DIRECTIONS, null] },
     language: { type: "string", enum: ["en", "fr", "uk"] },
     confidence: { type: "number" },
+    // Last, and null for a report about the speaker: a position report is then written as before
+    // tracks existed, plus one short key. Six flat keys cost every report about a second on the local model.
+    track: {
+      anyOf: [
+        { type: "null" },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["ref", "kind", "count", "text", "heading"],
+          properties: {
+            ref: { type: ["number", "null"] },
+            kind: { type: "string", enum: TRACK_KINDS },
+            count: { type: ["number", "null"] },
+            text: { type: ["string", "null"] },
+            heading: { type: ["string", "null"], enum: [...DIRECTIONS, null] },
+          },
+        },
+      ],
+    },
   },
 } as const;
 
+/** What every example about the speaker ends with: no track. */
+const SELF_TAIL = ',"track":null}';
+
 export function systemPrompt(place = "Vincennes, France"): string {
-  return `You turn one short spoken position report into JSON. Speakers are on foot in ${place}, and speak English, French or Ukrainian, sometimes mixed (Russian words may slip in).
+  const prompt = `You turn one short spoken position report into JSON. Speakers are on foot in ${place}, and speak English, French or Ukrainian, sometimes mixed (Russian words may slip in).
 
 Rules:
 - Never output coordinates and never invent a place. Only copy what was said. Never translate a name and never change its script.
@@ -94,6 +117,13 @@ Rules:
 - direction: the compass direction the speaker moved or is moving in: "north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west" ("moved 300 metres north", "heading south-east", "vers le nord", "на північ", "на південний захід"). null when none was said, when it is not a compass direction ("left", "forward", "back"), and when the compass word says where the speaker is from a landmark: "north of the church" is relation "north_of" with direction null.
 - A movement measured from where the speaker was before ("from here", "from my last position", "de ma position", "звідси") names no landmark: landmark_text, landmark_name and landmark_category are null.
 - If two places are given, one for where the speaker is and one for where they are going, report the one they are going to, as a movement.
+- track: null when the report is about where the speaker is. An object when it is about something else the speaker sees or knows of: people, a vehicle, a tank, a drone, a drone team, a mortar, a gun, a jammer ("enemy vehicle in front of the town hall", "I see a drone 300 metres north of me", "Track 3 moved to the station", "véhicule ennemi devant la mairie", "ворожий танк біля церкви"). A landmark the speaker sees ("I can see the church") is not a track: null.
+- For a track, kind is "position", and landmark_text, landmark_name, landmark_category, relation and distance_m say where the thing is, by the rules above ("in front of the town hall" is relation "in_front_of"). A named street or place is copied as for a position report ("unknown truck on rue de Fontenay" is landmark_name "rue de Fontenay", relation "at"). "Moved to X", "now at X" and "is at X" are relation "at"; "towards" only while the thing is still on its way there. When it is measured from the speaker ("300 metres north of me", "à 200 mètres à l'est de ma position", "за триста метрів на північ від мене"): no landmark, relation null, distance_m, and direction is that compass direction.
+- track.ref: the number when the speaker names a track ("Track 3", "piste trois", "об'єкт три" → 3), else null.
+- track.kind: from a type word the speaker said: "people" (person, soldiers, infantry, patrol, soldats, піхота, солдати), "vehicle" (car, truck, véhicule, camion, машина, вантажівка), "armour" (tank, APC, char, blindé, танк, БМП, БТР), "drone" (drone, UAV, quadcopter, дрон, БПЛА), "drone_team" (drone team, équipe drone, розрахунок БПЛА), "mortar" (mortier, міномет), "artillery" (gun, howitzer, canon, гармата), "jammer" (jammer, electronic warfare, brouilleur, РЕБ), else "other".
+- track.count: how many, when said ("two vehicles" → 2), else null.
+- track.text: the thing as said, without the place ("two enemy vehicles"), else null.
+- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker.
 - language: "fr" if the report is mostly French, "uk" if it is mostly Ukrainian or Russian, otherwise "en".
 - confidence: 0 to 1, how sure you are of this reading.
 
@@ -113,6 +143,15 @@ Examples:
 "Passing the next intersection" → {"kind":"position","landmark_text":"the next intersection","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"intersection","relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9}
 "Je suis au carrefour avec la rue de Fontenay" → {"kind":"position","landmark_text":"carrefour avec la rue de Fontenay","landmark_name":"rue de Fontenay","landmark_name_lemma":"rue de Fontenay","landmark_category":"intersection","relation":"at","distance_m":null,"direction":null,"language":"fr","confidence":0.9}
 "radio check" → {"kind":"other","landmark_text":null,"landmark_name":null,"landmark_name_lemma":null,"landmark_category":null,"relation":null,"distance_m":null,"direction":null,"language":"en","confidence":0.9}`;
+  // Every example above is about the speaker; the examples about a track are written out in full.
+  return `${prompt.replace(/("confidence":[\d.]+)\}/g, `$1${SELF_TAIL}`)}
+"Enemy vehicle in front of the town hall" → {"kind":"position","landmark_text":"the town hall","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"town_hall","relation":"in_front_of","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":null,"kind":"vehicle","count":null,"text":"enemy vehicle","heading":null}}
+"I see a drone about 300 metres north of me" → {"kind":"position","landmark_text":null,"landmark_name":null,"landmark_name_lemma":null,"landmark_category":null,"relation":null,"distance_m":300,"direction":"north","language":"en","confidence":0.9,"track":{"ref":null,"kind":"drone","count":null,"text":"a drone","heading":null}}
+"Deux véhicules suspects près de l'église, ils roulent vers l'est" → {"kind":"position","landmark_text":"l'église","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"church","relation":"near","distance_m":null,"direction":null,"language":"fr","confidence":0.9,"track":{"ref":null,"kind":"vehicle","count":2,"text":"deux véhicules suspects","heading":"east"}}
+"Ворожий танк біля церкви" → {"kind":"position","landmark_text":"церкви","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"church","relation":"near","distance_m":null,"direction":null,"language":"uk","confidence":0.9,"track":{"ref":null,"kind":"armour","count":null,"text":"ворожий танк","heading":null}}
+"Unknown truck on rue de Fontenay" → {"kind":"position","landmark_text":"rue de Fontenay","landmark_name":"rue de Fontenay","landmark_name_lemma":"rue de Fontenay","landmark_category":"street","relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":null,"kind":"vehicle","count":null,"text":"unknown truck","heading":null}}
+"Track 3 moved to Bérault" → {"kind":"position","landmark_text":"Bérault","landmark_name":"Bérault","landmark_name_lemma":"Bérault","landmark_category":null,"relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":3,"kind":"other","count":null,"text":null,"heading":null}}
+"Track 2 is hostile" → {"kind":"other","landmark_text":null,"landmark_name":null,"landmark_name_lemma":null,"landmark_category":null,"relation":null,"distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":2,"kind":"other","count":null,"text":null,"heading":null}}`;
 }
 
 function pick<T extends string>(v: unknown, allowed: readonly T[]): T | null {
@@ -143,6 +182,9 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const hint = languageHint === "fr" ? "fr" : languageHint === "en" ? "en" : languageHint === "uk" || languageHint === "ru" ? "uk" : null;
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0.5;
+  const tr = o.track && typeof o.track === "object" ? (o.track as Record<string, unknown>) : null;
+  /** A whole number from 1 to 999: a track's number, or how many were seen. */
+  const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1000 ? v : null);
   const dist = typeof o.distance_m === "number" && Number.isFinite(o.distance_m) && o.distance_m > 0 && o.distance_m <= MAX_DISTANCE_M ? Math.round(o.distance_m) : null;
   const said = pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en";
   return {
@@ -156,6 +198,13 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
     direction: pick(o.direction, DIRECTIONS),
     language: transcript === undefined ? said : checkLanguage(said, transcript, hint),
     confidence: conf,
+    // The model writes one `track` object, or null; the intent carries it as flat fields.
+    subject: tr ? "track" : "self",
+    track_ref: whole(tr?.ref),
+    track_kind: pick(tr?.kind, TRACK_KINDS),
+    track_count: whole(tr?.count),
+    track_text: str(tr?.text),
+    track_heading: pick(tr?.heading, DIRECTIONS),
   };
 }
 
@@ -182,7 +231,7 @@ class ChatJsonExtractor implements IntentExtractor {
       body: JSON.stringify({
         model: this.model,
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [
           { role: "system", content: systemPrompt(opts.place) },
           { role: "user", content: text },

@@ -8,22 +8,108 @@ One speaker's path works end to end on the live site, in two areas and three lan
 - **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It keeps missions: each report in a mission goes to that mission's log, and the unit's last position comes from that log [99, 107, 108].
 - **Receiver**: the shared map at the base station, with every call sign and a replay. `/receiver`; it opens and ends missions and otherwise only shows [98, 113].
 - **Mission**: one run, with a code, an area and an optional start point. Phones join it before they report [107, 114].
+- **Track**: something on the map that is not a reporting unit. A unit sees it and reports it by voice; the coordinator numbers it and the receiver draws it with its standard symbol. For reconnaissance only [145 to 152].
 - **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`, and since 21 November `izium`). All three are on the live site.
 
+## Block diagrams
+
+Drawn from the code on Saturday 21 November. In these diagrams a dashed box or line is optional or not built yet; the text under each diagram says which. The contracts on each line are in [contracts.md](contracts.md).
+
+### The blocks
+
+```mermaid
+flowchart TB
+    subgraph TX["Transmitters"]
+        WEB["Phone web page<br/>components/VoiceMapApp.tsx"]
+        NAT["Native app<br/>transmitter/"]
+    end
+
+    subgraph CO["Coordinator"]
+        API["API routes<br/>app/api/"]
+        PIPE["Report pipeline<br/>speech-to-text, extraction, resolver"]
+        GAZ[("Gazetteers<br/>data/gazetteer.*.json")]
+        LOG[("Mission logs<br/>one file per mission")]
+    end
+
+    subgraph RX["Receiver at the base"]
+        PANEL["Mission panel<br/>open, end, delete"]
+        VIEW["Shared map, feed, replay<br/>/receiver"]
+    end
+
+    MIS["Mistral API, Paris"]
+    OLL["Ollama, on the same computer"]
+
+    WEB -- "report, with its own last position" --> API
+    NAT -- "join, report, answer" --> API
+    API --> PIPE
+    GAZ --> PIPE
+    API <--> LOG
+    PIPE -- "hosted mode" --> MIS
+    PIPE -. "local mode" .-> OLL
+    LOG -- "the log, every second" --> VIEW
+    API <-- "open a mission, find a start point" --> PANEL
 ```
-transmitters                 coordinator (Next.js, Vercel cdg1 or the Mac)           receiver (/receiver)
-────────────                 ─────────────────────────────────────────────           ────────────────────
-phone web page ──┐           POST /api/report
-native app ──────┼─ audio ──►  1. speech-to-text   Mistral voxtral-mini-transcribe-3,
-scenario clip ───┘  or text      (skipped for text)  place names sent as context_bias
-                    + area     2. extraction       Mistral mistral-small-latest, strict JSON schema
-                    + last     3. resolver         pure code + data/gazetteer.<area>.json
-                    position   4. save             session log, one file per session
-                    + session ◄─ { transcript, language, intent, resolution, timings_ms, report_id }
-native app ── POST /api/answer (tapped choice) ──►  saved to the same log
-                                                   GET /api/sessions/<code> ──►  shared map, feed, replay
-                                                                                 (polls every second)
+
+The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed line is local mode, `PROVIDER_MODE=local`, which has no speech-to-text on the computer yet [83]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
+
+### A report through the coordinator
+
+```mermaid
+flowchart TB
+    IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
+    CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
+    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, place names as context_bias"]
+    subgraph VOICES["For each voice"]
+        EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
+        SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
+        RES["Step 3b: resolver<br/>resolve in lib/geo/resolver.ts<br/>pure code, no AI, no outside calls"]
+        EXT --> SUB --> RES
+    end
+    GAZ[("Gazetteer<br/>data/gazetteer.*.json")]
+    SAVE["Step 4: save, only with a session<br/>saveReport in lib/reports/record.ts<br/>numbers a new track, drops a report sent twice"]
+    OUT["Reply<br/>transcript, language, intent, resolution,<br/>timings_ms, report_id"]
+    LOG[("Mission log<br/>.data/sessions/")]
+    ANS["POST /api/answer<br/>the tapped choice"]
+    READ["GET /api/sessions/:code?after=n<br/>to the receiver"]
+
+    IN --> CTX --> STT --> VOICES --> SAVE --> OUT
+    GAZ --> RES
+    LOG --> CTX
+    SAVE --> LOG
+    ANS --> LOG
+    LOG --> READ
 ```
+
+Each box names the function or interface that does the step. Steps 2 and 3 run once for each voice in the clip that names a place, which is nearly always one; `readVoices` in `lib/geo/voices.ts` splits them, and two voices that name different places give a question [154]. See [voices.md](voices.md).
+
+### Inside the transmitter
+
+```mermaid
+flowchart TB
+    MIC["Hold to talk"]
+    CLIP["Scenario clip<br/>transmitter/scenarios/"]
+    OPEN["Open microphone"]:::todo
+    STT{"Speech-to-text<br/>setting"}
+    WH["Whisper on the phone<br/>whisper.rn, base or small<br/>place names as a hint"]
+    UTT["Utterance: audio or text<br/>transmitter/src/types.ts"]
+    SEND["Send<br/>transmitter/src/transport.ts"]
+    JOIN["Join a mission<br/>transmitter/src/mission.ts"]
+    CO["Coordinator"]
+    SAY["Speak the question,<br/>or the track's number<br/>expo-speech"]
+    TAP["Tap a choice"]
+
+    MIC & CLIP & OPEN --> STT
+    STT -- "server" --> UTT
+    STT -- "phone" --> WH -- "text" --> UTT
+    UTT --> SEND -- "POST /api/report" --> CO
+    JOIN -- "POST /api/sessions/:code/join" --> CO
+    CO -- "reply" --> SAY -- "if it asked" --> TAP
+    TAP -- "POST /api/answer" --> CO
+
+    classDef todo stroke-dasharray: 5 5
+```
+
+The open microphone is not built ([plan](plan.md#transmitter)). Every source ends in the same utterance and the same send path, so a scenario clip goes the way a recording does [60, 61]. The transmitter has no map; the receiver shows it.
 
 ## Where each step runs
 
@@ -54,6 +140,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices. A third, `izium-demo.json` (9 steps, 21 November), has no clips yet: `npm run scenarios` makes them. |
 | Shared map, call signs, replay | `app/receiver/page.tsx`, `components/Receiver.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. A Galaxy S10 sent two live reports on 21 Nov; not yet checked on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
 | Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/JoinCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. |
+| Tracks: what a unit sees, numbered and drawn with APP-6 symbols | `lib/geo/tracks.ts`, `lib/geo/trackKinds.ts`, `lib/reports/fold.ts`, `components/Receiver.tsx`, `tests/tracks.test.ts` | Built Saturday 21 November, steps 1 to 3 of five [145 to 152]: a unit reports a thing by a place or by a distance and direction from itself, the app says its number back, and "Track 3 moved to the station" or "Track 3 is hostile" updates it. Checked with typed reports through hosted Mistral and the local model, on the receiver in a desktop browser. Not yet with a phone or a voice. Not built: a question when a sighting is close to an old track, "gone", range rings, operator edits. |
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 
@@ -63,7 +150,39 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 
 ## The resolver in brief
 
-The full rule table is in the [README](../README.md#resolver-rules). A report resolves only when one place clearly fits; otherwise the app asks. The main rules:
+The full rule table is in the [README](../README.md#resolver-rules). A report resolves only when one place clearly fits; otherwise the app asks.
+
+```mermaid
+flowchart TB
+    INT["Intent<br/>from the model"]
+    WORDS["The words"]
+    TRK["The mission's tracks"]
+    LAST["Last position<br/>and its age"]
+    GAZ[("Gazetteer")]
+
+    WHO{"Who is it about?"}
+    FIND["Find candidates<br/>by name, by category near the last position,<br/>a street crossing, or a stated move"]
+    FIT{"How many<br/>fit?"}
+    PLACE["Place it<br/>relation, stated distance, circle"]
+
+    OK["resolved<br/>a pin and a circle"]
+    ASK["ambiguous<br/>a question with up to three choices"]
+    NO["unresolved<br/>a prompt to say it again"]
+
+    INT & WORDS & TRK --> WHO
+    WHO -- "the speaker" --> FIND
+    WHO -- "a track: measured from the observer,<br/>the speaker does not move" --> FIND
+    WHO -- "unclear" --> NO
+    LAST & GAZ --> FIND
+    FIND --> FIT
+    FIT -- "one, clearly" --> PLACE --> OK
+    FIT -- "several, or a category<br/>with a name not found" --> ASK
+    FIT -- "none" --> NO
+```
+
+The model's output stops at the intent. Every box after it is plain code in `lib/geo/resolver.ts` and `lib/geo/tracks.ts`, so the same intent, last position and time always give the same answer.
+
+The main rules:
 
 - A named place with one good match is resolved. Several good matches give a question, unless a category word said outside the name narrows it ("the Château de Vincennes **metro station**") [15].
 - A category alone ("the church") looks within 1.5 km of the last position. Several candidates resolve only if the last position is under 10 minutes old and the nearest is under 0.4 times the distance of the second; otherwise the app asks.
@@ -74,3 +193,4 @@ The full rule table is in the [README](../README.md#resolver-rules). A report re
 - Movement towards a place moves the marker to the middle of the leg, with a circle spanning the leg and an arrow [46]. A stated distance moves it that far along the leg instead [55].
 - Dead reckoning ("moved 300 metres north") moves from the last position; the circle grows with each leg until a report names a place again [54].
 - A position that is an estimate only wins "nearest" if that still holds when it is off by its full radius [47].
+- A report about a track is placed by the same rules, measured from the observer, and never moves the speaker. Who the report is about and whose the track is are read from the words in code; when the model and the words disagree, the app asks [147 to 149].

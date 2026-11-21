@@ -458,7 +458,13 @@ export default function VoiceMapApp() {
       setLastTranscript(data.transcript || "(no words heard)");
       setLastTimings(fmtTimings(data.timings_ms, roundTripMs));
       let outcome = "";
-      if (res.status === "resolved") {
+      if (res.status === "resolved" && res.track) {
+        // A report about a track, something the speaker saw: the speaker's own marker does not move.
+        outcome = res.track.say ?? "Track marked.";
+        setPending(null);
+        setStatus(outcome);
+        if (res.track.say) speak(res.track.say, lang);
+      } else if (res.status === "resolved") {
         const target = res.candidates.find((c) => c.id === res.evidence.feature_id);
         const i = data.intent;
         // A move with no place named: say what it was worked out from.
@@ -501,7 +507,8 @@ export default function VoiceMapApp() {
       const c = pending.candidates[i];
       if (!c) return;
       stopSpeaking();
-      const out = applyPlacement(c.placement, c.name);
+      // A question about a track: the choice places the track, and the speaker's own marker stays.
+      const out = c.track_placement ? `Track placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)` : applyPlacement(c.placement, c.name);
       updateReport(pending.reportId, { outcome: `Chose ${i + 1}: ${c.name}. ${out}`, evidence: `user_choice [${c.id}]` });
       setStatus(out);
       setPending(null);

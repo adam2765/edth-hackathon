@@ -5,15 +5,22 @@
  * position. Safe to import on the client.
  */
 import type { AreaId } from "@/lib/geo/areas";
-import type { Candidate, Resolution } from "@/lib/geo/types";
+import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
-import type { JoinEntry, LogEntry, ReportEntry, StartPoint, UnitPosition } from "./types";
+import { describeTrack } from "../geo/trackKinds";
+import type { JoinEntry, LogEntry, ReportEntry, StartPoint, TrackSighting, UnitPosition } from "./types";
 
 /** One colour per call sign, in the order they first report. Distinct on the light map, each with a label as well. */
 export const UNIT_COLOURS = ["#ff6b2c", "#2c7fff", "#16a34a", "#b04ad8", "#e0367a", "#0d9488", "#a16207", "#475569"];
 
 /** A marker dims once its speaker has said nothing for this long. */
 export const FADE_AFTER_MS = 3 * 60_000;
+
+/**
+ * A track is shown as old once nobody has reported it for this long. Longer than a unit's silence:
+ * a unit is expected to report, a track is only seen when someone looks.
+ */
+export const TRACK_OLD_AFTER_MS = 10 * 60_000;
 
 const TRAIL_MAX = 30;
 
@@ -46,6 +53,38 @@ export interface UnitState {
   street: string | null;
 }
 
+/**
+ * A track: something on the map that is not a reporting unit, as the reports about it leave it.
+ * What it is comes from the latest report that said so; where it is, from the latest sighting.
+ */
+export interface TrackState {
+  /** Its number in the mission ("Track 3"). */
+  n: number;
+  /** Whose it is. `unknown` until a report says. */
+  affiliation: Affiliation;
+  kind: TrackKind;
+  count: number | null;
+  /** The thing as last said. */
+  text: string | null;
+  /** The way it was moving at its latest sighting, when that was said. */
+  heading: Direction | null;
+  area: AreaId;
+  /** Null while the first report's question about where it is still waits. */
+  position: UnitPosition | null;
+  positionTs: number | null;
+  /** Earlier sightings, oldest first. */
+  trail: { lat: number; lon: number; ts: number }[];
+  /** Who reported it last, and when. */
+  seenBy: string;
+  seenTs: number;
+  /** Where the observer was at the latest sighting, for the line of sight. */
+  from: { lat: number; lon: number } | null;
+  openedBy: string;
+  openedTs: number;
+  /** The report whose question about where the track is still waits for an answer. */
+  pendingReport: string | null;
+}
+
 export interface FeedItem {
   /** A report, or a call sign joining. */
   kind: "report" | "join";
@@ -58,8 +97,10 @@ export interface FeedItem {
   transcript: string;
   status: Resolution["status"];
   outcome: string;
-  /** Where the report, or the answer to its question, put the speaker. */
+  /** Where the report, or the answer to its question, put the speaker, or the track it was about. */
   position: UnitPosition | null;
+  /** The number of the track the report was about; null for a report about the speaker. */
+  track: number | null;
   /** The choices offered, while a question is open or after it was answered. */
   candidates: Candidate[];
   answer: { ts: number; choice: string | null; name: string | null } | null;
@@ -80,6 +121,8 @@ export interface SessionState {
   /** Null for a session from before missions. */
   mission: MissionState | null;
   units: UnitState[];
+  /** By number. */
+  tracks: TrackState[];
   /** Newest first. */
   feed: FeedItem[];
   /** Time of the first and last entry included. */
@@ -107,6 +150,20 @@ function joinOutcome(e: JoinEntry, again: boolean): string {
   if (again) return "Joined again from another phone.";
   const how = e.device ? "Joined" : "Joined with its first report";
   return e.position ? `${how}. ${describePosition(e.position)}` : `${how}. Not placed yet: waiting for a check-in.`;
+}
+
+/** "±80 m", with "estimated" in front for a place worked out from where the observer was. */
+function trackWhere(p: UnitPosition): string {
+  return `${p.estimated ? "estimated " : "at "}${p.label} (±${p.radius_m} m)`;
+}
+
+/** What a report did to a track, in words, once the track has taken it in. */
+function trackOutcome(e: ReportEntry, s: TrackSighting, t: TrackState, opened: boolean): string {
+  const what = describeTrack(t);
+  if (e.resolution.status === "ambiguous") return `Asked: ${e.resolution.question ?? "which one?"}`;
+  if (opened) return s.position ? `Marked Track ${t.n}: ${what} ${trackWhere(s.position)}` : `Marked Track ${t.n}: ${what}. Not placed yet.`;
+  if (s.position) return `Track ${t.n} now ${trackWhere(s.position)}`;
+  return `Track ${t.n} is now: ${what}`;
 }
 
 function reportOutcome(e: ReportEntry): string {
@@ -141,6 +198,7 @@ export function headingOf(u: UnitState): number | null {
 /** The picture after every entry up to and including `upTo` (epoch ms). */
 export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, colours = colourMap(entries)): SessionState {
   const units = new Map<string, UnitState>();
+  const tracks = new Map<number, TrackState>();
   const feed = new Map<string, FeedItem>();
   let first: number | null = null;
   let last: number | null = null;
@@ -161,6 +219,59 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     u.atStart = false;
     u.position = p;
     u.positionTs = ts;
+  };
+
+  const placeTrack = (t: TrackState, p: UnitPosition, ts: number) => {
+    if (t.position && t.positionTs != null) t.trail = [...t.trail, { lat: t.position.lat, lon: t.position.lon, ts: t.positionTs }].slice(-TRAIL_MAX);
+    t.position = p;
+    t.positionTs = ts;
+    t.pendingReport = null;
+  };
+
+  /** Takes a report about a track in. Returns the track, and whether this report opened it. */
+  const seeTrack = (e: ReportEntry, s: TrackSighting): { track: TrackState; opened: boolean } => {
+    let t = tracks.get(s.n);
+    const opened = !t;
+    if (!t) {
+      t = {
+        n: s.n,
+        // Nothing is hostile until a speaker says so.
+        affiliation: s.affiliation ?? "unknown",
+        kind: s.kind ?? "other",
+        count: s.count,
+        text: s.text,
+        heading: null,
+        area: e.area,
+        position: null,
+        positionTs: null,
+        trail: [],
+        seenBy: e.callsign,
+        seenTs: e.ts,
+        from: null,
+        openedBy: e.callsign,
+        openedTs: e.ts,
+        pendingReport: null,
+      };
+      tracks.set(s.n, t);
+    } else {
+      if (s.affiliation) t.affiliation = s.affiliation;
+      if (s.kind) t.kind = s.kind;
+      if (s.count) t.count = s.count;
+      if (s.text) t.text = s.text;
+      t.seenBy = e.callsign;
+      t.seenTs = e.ts;
+    }
+    if (s.position) {
+      placeTrack(t, s.position, e.ts);
+      // The way it was moving belongs to the sighting: an older one says nothing about now.
+      t.heading = s.heading;
+      t.from = s.from;
+    } else if (e.resolution.status === "ambiguous") {
+      t.pendingReport = e.id;
+      t.heading = s.heading;
+      t.from = s.from;
+    } else if (s.heading) t.heading = s.heading;
+    return { track: t, opened };
   };
 
   for (const e of entries) {
@@ -185,6 +296,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         }
         u.pending = null;
       }
+      for (const t of tracks.values()) t.pendingReport = null;
       continue;
     }
 
@@ -215,6 +327,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         candidates: [],
         answer: null,
         expired: false,
+        track: null,
       });
       continue;
     }
@@ -225,13 +338,15 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       u.area = e.area;
       u.lastHeard = e.ts;
       const r = e.resolution;
-      if (e.position) {
+      // A report about a track: the unit was heard, and does not move. It owes the answer to any question.
+      const seen = e.track ? seeTrack(e, e.track) : null;
+      if (e.position && !seen) {
         move(u, e.position, e.ts);
         u.street = streetAfter(u.street, r.candidates.find((c) => c.id === r.evidence.feature_id));
         u.pending = null;
       } else if (r.status === "ambiguous") {
         u.pending = { reportId: e.id, ts: e.ts, question: r.question ?? "Which one?", candidates: r.candidates };
-      } else if (r.status === "resolved") {
+      } else if (r.status === "resolved" && !seen) {
         u.pending = null;
       }
       feed.set(e.id, {
@@ -243,11 +358,12 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         area: e.area,
         transcript: e.transcript,
         status: r.status,
-        outcome: reportOutcome(e),
-        position: e.position,
+        outcome: seen && e.track ? trackOutcome(e, e.track, seen.track, seen.opened) : reportOutcome(e),
+        position: seen ? (e.track?.position ?? null) : e.position,
         candidates: r.status === "ambiguous" ? r.candidates : [],
         answer: null,
         expired: false,
+        track: seen ? seen.track.n : null,
       });
       continue;
     }
@@ -260,6 +376,19 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     const chosen = e.choice ? (item?.candidates.find((c) => c.id === e.choice) ?? null) : null;
     // A newer fix since the question beats a late answer to it.
     const reportTs = item?.ts ?? e.ts;
+    if (e.track) {
+      // The answer places the track; the speaker stays where they are.
+      const t = tracks.get(e.track.n);
+      const p = e.track.position;
+      if (t?.pendingReport === e.report_id) t.pendingReport = null;
+      if (t && p && (t.positionTs == null || t.positionTs <= reportTs)) placeTrack(t, p, e.ts);
+      if (item) {
+        item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null };
+        item.position = p;
+        item.outcome = e.choice ? `Chose ${chosen?.name ?? e.choice}. ${p ? `Track ${e.track.n} ${trackWhere(p)}` : "Nothing to place"}` : `None of the choices was right. Track ${e.track.n} is not placed.`;
+      }
+      continue;
+    }
     if (e.position && (u.positionTs == null || u.positionTs <= reportTs)) {
       move(u, e.position, e.ts);
       u.street = streetAfter(u.street, chosen ?? undefined);
@@ -274,6 +403,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   return {
     mission,
     units: [...units.values()],
+    tracks: [...tracks.values()].sort((a, b) => a.n - b.n),
     feed: [...feed.values()].sort((a, b) => b.ts - a.ts),
     first,
     last,

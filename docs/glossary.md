@@ -2,6 +2,7 @@
 
 | Term | Meaning |
 |---|---|
+| Affiliation | Whose a track is: hostile, suspect, unknown, neutral (civilian) or friendly. Read from the speaker's words in code; unknown when no word was said |
 | Ask-back | The question the app asks, aloud and on screen, when a report could mean more than one place |
 | Area | A region with its own gazetteer: `vincennes`, `kyiv` or `izium` |
 | Bias terms | Up to 100 place names sent to speech-to-text so it spells them right (`context_bias`) |
@@ -17,7 +18,11 @@
 | Mission | A run of the demo or an exercise: a code (`vincennes-1`), a name, an area, an optional start point, open or ended. One log. The code calls it a session |
 | Receiver | The shared map at the base, with every call sign and a replay, at `/receiver` (`?session=<code>` for one mission). It opens and ends missions |
 | Session | The code's word for a mission: one code, one append-only log |
+| Sighting | One report about a track: what, where, by whom, from where, and when |
 | Start point | A gazetteer place, picked at the base, where units are assumed to be when they join; shown with ≈ |
+| Suspect | A track thought to be hostile and still to be looked into. Drawn as a dashed hostile frame |
 | Town | The admin area inside which street names are unique (the commune in France, the city for Kyiv); it tells two same-name streets apart |
+| Track | Something on the map that is not a reporting unit: seen or known of by a unit, reported by voice, numbered by the coordinator ("Track 3"). For reconnaissance only. Drawn with its APP-6 symbol |
 | Transmitter | Anything that sends a spoken report: the web page, the native app, a scenario clip |
 | Wrong-pin rate | Share of reports placed confidently in the wrong place; the headline quality figure |
+| Voice turn | A stretch of a transcript spoken by one voice. Whisper on the phone marks where the voice changes with a dash [154] |

@@ -7,7 +7,7 @@ Eight questions are for the team to settle; seventeen are for Lysk's mentors. Wh
 To settle at the Saturday 08:00 kickoff ([kickoff.md](kickoff.md)) where we can.
 
 1. **Priority for Saturday.** The shared map and replay are built, so the old choice is gone. Now: local mode (mandatory for the demo) against runs with real phones, evidence, and the pitch. A proposal is in [work-split.md](work-split.md).
-2. **Who owns the pitch.** One person on presentation and pitch from Saturday midday, or shared. Pre-selection starts on Saturday evening ([work-split.md](work-split.md#stream-5-pitch-and-presentation)).
+2. **Who owns the pitch.** One person on presentation and pitch from Saturday midday, or shared. Pre-selection starts on Saturday evening ([work-split.md](work-split.md#role-4-evidence-then-pitch)).
 3. **Demo area.** Vincennes, central Kyiv, or Izium, the town near the front built on Saturday night ([gazetteer.md](gazetteer.md#izium-added-saturday-21-november)). Izium is a real town under attack and the repo is public: the same section says what that means for a demo. Lysk may also test somewhere else: a new area is one command and about a minute once we know where ([gazetteer.md](gazetteer.md#adding-an-area)).
 4. **Deploy access.** Connect the Vercel project to GitHub so pushes deploy, or keep CLI deploys from Alex's account.
 5. **Mistral key.** One shared team key, or each person their own.
@@ -102,5 +102,5 @@ History, and the rest:
 ### After the talk
 
 - Write each answer down in their words, then add one line per answer to [DECISIONS.md](../DECISIONS.md) and remove the question here.
-- Tell the team the answer to question 1 at once: it moves people between streams ([work-split.md](work-split.md)).
+- Tell the team the answer to question 1 at once: it moves people between roles ([work-split.md](work-split.md#when-to-switch-people)).
 - Note what they reacted to when they saw the receiver. That goes into the pitch.

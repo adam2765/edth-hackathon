@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { ExpressionSpecification, GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
-import { colourMap, FADE_AFTER_MS, foldLog, type FeedItem, type UnitState } from "@/lib/reports/fold";
+import { AFFILIATION_COLOUR, AFFILIATION_LABEL, describeTrack, HEADING_DEG, trackSymbolCode } from "@/lib/geo/trackKinds";
+import { colourMap, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { sessionCode, type LogEntry, type MissionListReply, type SessionLogReply } from "@/lib/reports/types";
 import MissionPanel from "./MissionPanel";
 import styles from "./Receiver.module.css";
@@ -114,6 +115,42 @@ function showSession(code: string | null, replace = false) {
 
 type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
 
+type MilSymbol = typeof import("milsymbol").default;
+
+/** The size of a track's symbol on the map, before the big-screen steps. The frame is about 1.5 times this. */
+const TRACK_SYMBOL_SIZE = 24;
+
+/**
+ * A track's standard symbol (APP-6) as SVG, for the lists. The frame says whose it is and the
+ * icon what it is; a neutral track keeps the standard's green, not its purple for civilians, so
+ * one colour means one thing on this page.
+ */
+const trackSvgs = new Map<string, string>();
+function trackSvg(lib: MilSymbol, t: TrackState, size: number): string {
+  // The list is drawn again every second, so each symbol is made once.
+  const key = `${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
+  let svg = trackSvgs.get(key);
+  if (svg === undefined) {
+    svg = new lib.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false }).asSVG();
+    trackSvgs.set(key, svg);
+  }
+  return svg;
+}
+
+/**
+ * A track in two lines: what it is and where, then who saw it. An open question comes first, as
+ * for a unit. A track is a sighting, so the second line always names the unit that reported it.
+ */
+function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; tone: UnitTone } {
+  // "hostile vehicle ×2" without its first word: the pill beside the name already says whose it is.
+  const what = describeTrack(t).replace(/^\S+\s*/, "") || "kind not said";
+  if (t.pendingReport) return { main: `${what} · where it is waits for an answer`, sub: `asked ${t.seenBy}`, tone: "ask" };
+  const p = t.position;
+  if (!p) return { main: `${what} · not placed`, sub: `reported by ${t.seenBy}`, tone: "none" };
+  const moving = t.heading ? ` · moving ${t.heading.replace("_", "-")}, as said` : "";
+  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `seen by ${t.seenBy}${moving}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
+}
+
 /**
  * A unit's state as one word (so it is never told by colour alone) and one line of detail.
  * An open question comes first, even for a silent unit: it is the one that needs the operator.
@@ -166,6 +203,10 @@ export default function Receiver() {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const mlRef = useRef<typeof import("maplibre-gl") | null>(null);
+  /** The symbol library (milsymbol), loaded on its own so the map does not wait for it. */
+  const [symbols, setSymbols] = useState<MilSymbol | null>(null);
+  /** How far each symbol image on the map is drawn from its middle, so its anchor sits on the point. */
+  const trackIcons = useRef(new Map<string, [number, number]>());
   const candMarkers = useRef<Marker[]>([]);
   const countRef = useRef(0);
   const replayRef = useRef({ t: 0, end: 0 });
@@ -281,6 +322,8 @@ export default function Receiver() {
   const rangeStart = full.first != null ? full.first - 2000 : 0;
   const rangeEnd = full.last != null ? full.last + 2000 : 0;
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
+  /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
+  const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
 
   useEffect(() => {
     replayRef.current = { t: replayT, end: rangeEnd };
@@ -350,7 +393,7 @@ export default function Receiver() {
         setMapSize(`${c.clientWidth}x${c.clientHeight}`);
       });
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -370,9 +413,40 @@ export default function Receiver() {
         map.addLayer({ id: "acc-line", type: "line", source: "accuracy", filter: ["!=", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": ["*", 0.85, op] } });
         // An estimate (from a movement) has a dashed circle, like the ≈ before its time.
         map.addLayer({ id: "acc-line-est", type: "line", source: "accuracy", filter: ["==", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [3, 2], "line-opacity": ["*", 0.85, op] } });
+        // Tracks: what a unit saw. Their circles and trails lie under every unit's own markings.
+        map.addLayer({ id: "track-acc-fill", type: "fill", source: "track-acc", paint: { "fill-color": ["get", "color"], "fill-opacity": ["*", 0.12, op] } });
+        map.addLayer({ id: "track-acc-line", type: "line", source: "track-acc", filter: ["!=", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": ["*", 0.85, op] } });
+        map.addLayer({ id: "track-acc-line-est", type: "line", source: "track-acc", filter: ["==", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [3, 2], "line-opacity": ["*", 0.85, op] } });
+        map.addLayer({ id: "track-trail-line", type: "line", source: "track-trail", paint: { "line-color": ["get", "color"], "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": ["*", 0.7, op] } });
+        // The line of sight: from where the observer was to what they saw, dotted in the observer's
+        // colour. It has no arrowhead: it says who saw it from where, and nothing else.
+        map.addLayer({ id: "track-sight-line", type: "line", source: "track-sight", layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 2.5, "line-dasharray": [0.1, 2.2], "line-opacity": 0.85 } });
         map.addLayer({ id: "arrow-shaft", type: "line", source: "arrow", filter: ["==", "part", "shaft"], layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": op } });
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
+        // A track's standard symbol, with its number, what it is, and when and by whom it was seen.
+        map.addLayer({
+          id: "track-sym",
+          type: "symbol",
+          source: "track",
+          layout: {
+            "icon-image": ["get", "icon"],
+            "icon-offset": ["array", "number", 2, ["get", "off"]],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "text-field": ["format", ["get", "name"], { "text-font": ["literal", ["Noto Sans Bold"]] }, "\n", {}, ["get", "when"], { "font-scale": 0.9 }],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 14,
+            "text-line-height": 1.25,
+            // Above the symbol: a unit's label hangs below its dot, so the two do not overprint
+            // when a unit reports something at the landmark it stands at.
+            "text-offset": [0, -1.9],
+            "text-anchor": "bottom",
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: { "icon-opacity": op, "text-color": "#16212c", "text-halo-color": "#ffffff", "text-halo-width": 2.5, "text-opacity": ["get", "labelOp"] },
+        });
         map.addLayer({ id: "pos", type: "circle", source: "pos", paint: { "circle-radius": 9, "circle-color": ["get", "color"], "circle-opacity": op, "circle-stroke-color": "#fff", "circle-stroke-width": 3, "circle-stroke-opacity": op } });
         // Call sign and time of the last update next to each marker, as in Lysk's brief. The call
         // sign is bold; the label keeps its own opacity, so a silent unit's name stays readable.
@@ -401,6 +475,21 @@ export default function Receiver() {
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
+    };
+  }, []);
+
+  // The symbol library is only needed once a track is reported, so it loads beside the map.
+  useEffect(() => {
+    let cancelled = false;
+    import("milsymbol")
+      .then((m) => {
+        if (!cancelled) setSymbols(() => m.default);
+      })
+      .catch(() => {
+        // Without it tracks still show in the lists, with their circles and labels on the map.
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -461,6 +550,61 @@ export default function Receiver() {
     set("target", targets);
   }, [view, isSilent, mapReady]);
 
+  // Draw every track: its symbol and label, its circle, where it was seen before, and the line of
+  // sight from the unit that reported it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const k = screenScale();
+    const sym: GeoJSON.Feature[] = [];
+    const acc: GeoJSON.Feature[] = [];
+    const trail: GeoJSON.Feature[] = [];
+    const sight: GeoJSON.Feature[] = [];
+    for (const t of view.tracks) {
+      const p = t.position;
+      if (!p || t.positionTs == null) continue;
+      const old = isOld(t);
+      const op = old ? 0.45 : 1;
+      const color = AFFILIATION_COLOUR[t.affiliation];
+      const pts = [...t.trail, p];
+      if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
+      acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
+      if (t.from && !old && distanceM(t.from, p) > 5) {
+        sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [p.lon, p.lat]] } });
+      }
+      // The symbol image: one per code, heading and size. The arrow for "moving east" makes the
+      // image lopsided, so it is shifted to keep the frame's own anchor on the point.
+      let icon = "";
+      let off: [number, number] = [0, 0];
+      if (symbols) {
+        const heading = t.heading ? HEADING_DEG[t.heading] : null;
+        const size = Math.round(TRACK_SYMBOL_SIZE * k);
+        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${heading ?? ""}:${size}`;
+        if (!map.hasImage(icon)) {
+          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff", ...(heading != null ? { direction: heading } : {}) });
+          const canvas = s.asCanvas(2);
+          const ctx = canvas.getContext("2d");
+          if (ctx && canvas.width && canvas.height) {
+            map.addImage(icon, ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 });
+            const { width, height } = s.getSize();
+            const a = s.getAnchor();
+            trackIcons.current.set(icon, [width / 2 - a.x, height / 2 - a.y]);
+          }
+        }
+        off = trackIcons.current.get(icon) ?? [0, 0];
+      }
+      const what = describeTrack(t);
+      const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
+      sym.push({ type: "Feature", properties: { icon, off, op, labelOp: old ? 0.75 : 1, name: `T${t.n} · ${what}`, when }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
+    }
+    const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+    set("track", sym);
+    set("track-acc", acc);
+    set("track-trail", trail);
+    set("track-sight", sight);
+    map.setLayoutProperty("track-sym", "text-size", Math.round(14 * k));
+  }, [view, isOld, effNow, colours, symbols, mapReady, mapSize]);
+
   // On a projector or a wall screen, the map's labels and markers grow with the panels.
   useEffect(() => {
     const map = mapRef.current;
@@ -489,6 +633,8 @@ export default function Receiver() {
   // Open questions: each choice numbered on the map, ringed in its unit's colour and named with
   // its call sign, so two units' choices are not told apart by colour alone.
   const pendings = useMemo(() => view.units.filter((u) => u.pending), [view]);
+  /** Questions that are about a track, not about where the speaker is: report id to track number. */
+  const trackQuestions = useMemo(() => new Map(view.tracks.filter((t) => t.pendingReport).map((t) => [t.pendingReport!, t.n])), [view]);
   useEffect(() => {
     const map = mapRef.current;
     const ml = mlRef.current;
@@ -497,12 +643,15 @@ export default function Receiver() {
     if (!map || !ml || !mapReady) return;
     // Two units asked about the same place share one marker with both names; drawn apart, the
     // second would hide the first.
-    const spots = new Map<string, { n: number; name: string; lat: number; lon: number; units: UnitState[] }>();
+    const spots = new Map<string, { n: number; name: string; lat: number; lon: number; units: UnitState[]; who: string[] }>();
     for (const u of pendings) {
+      // "ALPHA 1?" asks where the unit is; "ALPHA 1: T3?" asks where the track it reported is.
+      const about = trackQuestions.get(u.pending!.reportId);
       u.pending!.candidates.forEach((c, i) => {
         const k = `${i}|${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
-        const spot = spots.get(k) ?? { n: i + 1, name: c.name, lat: c.lat, lon: c.lon, units: [] };
+        const spot = spots.get(k) ?? { n: i + 1, name: c.name, lat: c.lat, lon: c.lon, units: [], who: [] };
         spot.units.push(u);
+        spot.who.push(about != null ? `${u.callsign}: T${about}?` : `${u.callsign}?`);
         spots.set(k, spot);
       });
     }
@@ -514,13 +663,13 @@ export default function Receiver() {
       el.title = `${s.units.map((u) => u.callsign).join(", ")}, choice ${s.n}: ${s.name}`;
       const who = document.createElement("span");
       who.className = styles.candWho;
-      who.textContent = s.units.map((u) => `${u.callsign}?`).join(" · ");
+      who.textContent = s.who.join(" · ");
       el.appendChild(who);
       candMarkers.current.push(new ml.Marker({ element: el }).setLngLat([s.lon, s.lat]).addTo(map));
     }
-  }, [pendings, mapReady]);
+  }, [pendings, trackQuestions, mapReady]);
 
-  // Follow: keep every unit in this area (and its open choices) in view as reports come in.
+  // Follow: keep every unit and track in this area (and any open choices) in view as reports come in.
   const followPoints = useMemo(() => {
     const pts: LatLon[] = [];
     for (const u of view.units) {
@@ -528,6 +677,9 @@ export default function Receiver() {
       if (u.position) pts.push(u.position);
       if (u.position?.heading_to) pts.push(u.position.heading_to);
       u.pending?.candidates.forEach((c) => pts.push(c));
+    }
+    for (const t of view.tracks) {
+      if (t.area === area && t.position) pts.push(t.position);
     }
     return pts;
   }, [view, area]);
@@ -580,6 +732,17 @@ export default function Receiver() {
       setFollow(false);
       if (u.area !== area) setManualArea(u.area);
       map.flyTo({ center: [u.position.lon, u.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
+    },
+    [area],
+  );
+
+  const flyToTrack = useCallback(
+    (t: TrackState) => {
+      const map = mapRef.current;
+      if (!map || !t.position) return;
+      setFollow(false);
+      if (t.area !== area) setManualArea(t.area);
+      map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
     },
     [area],
   );
@@ -693,7 +856,7 @@ export default function Receiver() {
       </header>
 
       <main className={styles.mapCol}>
-        <div ref={mapEl} className={styles.map} aria-label="Map of all units" />
+        <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
         {!follow ? (
           <button type="button" className={styles.followBtn} onClick={() => setFollow(true)}>
             Follow units
@@ -786,7 +949,7 @@ export default function Receiver() {
         </div>
       </main>
 
-      <aside className={styles.side}>
+      <aside className={styles.side} data-tracks={view.tracks.length ? "" : undefined}>
         <section className={styles.section} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
@@ -843,6 +1006,55 @@ export default function Receiver() {
           )}
         </section>
 
+        {/* Tracks: what the units have seen. Shown only once there is one, so a mission without
+            them looks as it always did. */}
+        {view.tracks.length ? (
+          <section className={styles.section} aria-labelledby="tracks-h">
+            <h2 id="tracks-h" className={styles.h2}>
+              Tracks <span className={styles.count}>{view.tracks.length}</span>
+            </h2>
+            <ul className={`${styles.units} ${styles.tracks}`}>
+              {view.tracks.map((t) => {
+                const old = isOld(t);
+                const st = trackStatus(t, old);
+                return (
+                  <li key={t.n}>
+                    <button type="button" className={styles.unit} data-tone={st.tone} onClick={() => flyToTrack(t)} disabled={!t.position} title={t.position ? "Show on the map" : undefined}>
+                      {/* The same standard symbol as on the map. Drawn by milsymbol from a code this page builds. */}
+                      <span className={styles.trackSym} aria-hidden="true" dangerouslySetInnerHTML={symbols ? { __html: trackSvg(symbols, t, 18) } : undefined} />
+                      <span className={styles.unitMain}>
+                        <span className={styles.unitTop}>
+                          <span className={styles.unitName}>Track {t.n}</span>
+                          <span className={styles.pill} data-status={t.affiliation}>
+                            {AFFILIATION_LABEL[t.affiliation]}
+                          </span>
+                          {t.pendingReport ? (
+                            <span className={styles.pill} data-status="ask">
+                              Awaiting answer
+                            </span>
+                          ) : old ? (
+                            <span className={styles.pill} data-status="silent">
+                              Old sighting
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className={styles.unitStatus}>{st.main}</span>
+                        <span className={styles.trackWhere}>{st.sub}</span>
+                      </span>
+                      {t.seenTs && effNow ? (
+                        <span className={styles.unitTime}>
+                          {atEnd ? null : <span className={styles.unitAge}>{fmtAgo(effNow - t.seenTs)} ago</span>}
+                          <span>{fmtTime(t.seenTs)}</span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
         <section className={`${styles.section} ${styles.feedSection}`} aria-labelledby="feed-h">
           <h2 id="feed-h" className={styles.h2}>
             Reports <span className={styles.count}>{view.feed.filter((f) => f.kind === "report").length}</span>
@@ -873,7 +1085,10 @@ export default function Receiver() {
                   ? { tone: "none", tag: "Not answered" }
                   : f.status === "ambiguous"
                     ? { tone: "answered", tag: "Answered" }
-                    : estimate
+                    : f.track != null && f.status === "resolved"
+                      ? // A report about a track: it placed or changed the track, not the speaker.
+                        { tone: "track", tag: `Track ${f.track}` }
+                      : estimate
                       ? { tone: "estimate", tag: "≈ Estimate" }
                       : f.status === "resolved" && f.position
                         ? { tone: "placed", tag: "Placed" }

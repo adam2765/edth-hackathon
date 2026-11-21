@@ -110,6 +110,8 @@ function Transmitter() {
   const [playClips, setPlayClips] = useState(false);
   const [sttMode, setSttMode] = useState<SttMode>("server");
   const [useHints, setUseHints] = useState(true);
+  // Tests only: send each recording beside the phone's words, for the coordinator to keep (KEEP_CLIPS=1).
+  const [sendClips, setSendClips] = useState(false);
   const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
   /** The coordinator's missions; null when it has none to offer (an older deployment). */
@@ -268,9 +270,16 @@ function Transmitter() {
         const res = reply.resolution;
         const lang = langOf(reply, opts.language);
         const t = reply.timings_ms;
-        const timings = `${opts.phoneMs != null ? `phone STT ${opts.phoneMs} · ` : ""}${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms`;
+        const timings = `${opts.phoneMs != null ? `phone STT ${opts.phoneMs} · ` : ""}${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms${reply.clip ? " · clip kept" : ""}`;
         const base = { id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: reply.transcript || "(no words heard)", timings };
-        if (res.status === "resolved") {
+        if (res.status === "resolved" && res.track) {
+          // A report about a track, something this unit saw: this unit does not move. The
+          // coordinator numbers the track, and the number is said back so it can be named later.
+          const outcome = res.track.say ?? "Track marked.";
+          setEntries((es) => [{ ...base, outcome, status: "resolved" }, ...es]);
+          setStatus(outcome);
+          if (res.track.say && !opts.quiet) await speak(res.track.say, lang);
+        } else if (res.status === "resolved") {
           const name = res.candidates.find((c) => c.id === res.evidence.feature_id)?.name ?? "position";
           const pl = { pin: res.pin, radius_m: res.radius_m, heading_to: res.heading_to, estimated: res.estimated };
           const outcome = describePlacement(pl, name, positionRef.current);
@@ -319,6 +328,14 @@ function Transmitter() {
   const choose = useCallback(
     (entryId: string, c: Candidate) => {
       stopSpeaking();
+      if (c.track_placement) {
+        // The question was about a track: the choice places the track on the shared map, not this unit.
+        const outcome = `Track placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)`;
+        patchEntry(entryId, { pending: false, outcome });
+        setStatus(outcome);
+        reportAnswer(entryId, c.id);
+        return;
+      }
       const outcome = describePlacement(c.placement, c.name, positionRef.current);
       setPositionBoth(positionAfter(positionRef.current, c.placement, c.name, Date.now()));
       // For a position the place is the whole story; for a movement, say where it leaves the unit.
@@ -456,12 +473,14 @@ function Transmitter() {
       if (phoneStt) {
         setStatus("Transcribing on the phone…");
         const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
-        if (!heard.text) {
+        // With "Send clips" on, a clip the phone heard no words in still goes: a missed whisper is a result.
+        if (!heard.text && !sendClips) {
           setStatus("The phone heard nothing. Try again.");
           return;
         }
         setStatus("Sending…");
-        await handleUtterance({ ...base, text: heard.text }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
+        const clip = sendClips ? { clipUri: uri, segments: heard.segments } : {};
+        await handleUtterance({ ...base, text: heard.text || undefined, ...clip }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
       } else {
         setStatus("Sending…");
         await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language, quiet: !speakReplies });
@@ -471,7 +490,7 @@ function Transmitter() {
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, androidPcm, sttMode, useHints]);
+  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, androidPcm, sttMode, useHints, sendClips]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -688,6 +707,8 @@ function Transmitter() {
         onDownload={fetchModel}
         useHints={useHints}
         onUseHints={setUseHints}
+        sendClips={sendClips}
+        onSendClips={setSendClips}
         speakReplies={speakReplies}
         onSpeakReplies={setSpeakReplies}
         playClips={playClips}

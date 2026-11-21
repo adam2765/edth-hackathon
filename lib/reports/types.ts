@@ -6,7 +6,7 @@
  */
 // Relative, not "@/", so the transmitter can import these types too (decision 67).
 import type { AreaId } from "../geo/areas";
-import type { HeadingTo, Intent, LastPosition, Resolution } from "../geo/types";
+import type { Affiliation, Direction, HeadingTo, Intent, LastPosition, Resolution, TrackKind } from "../geo/types";
 
 export type Timings = { stt: number; extract: number; resolve: number; total: number };
 
@@ -21,6 +21,28 @@ export interface UnitPosition {
   estimated?: boolean;
   /** For a movement: where the speaker is heading. */
   heading_to?: HeadingTo;
+}
+
+/**
+ * What a report says about a track, something on the map that is not a reporting unit: a first
+ * sighting, a later one, or only a change to what it is. For reconnaissance: it keeps who saw it,
+ * from where, and how sure the place is.
+ */
+export interface TrackSighting {
+  /** The track's number in this mission, given by the coordinator. A number is never reused. */
+  n: number;
+  /** Whose it is, as said in this report; null when the report had no word for it. */
+  affiliation: Affiliation | null;
+  kind: TrackKind | null;
+  count: number | null;
+  /** The thing as said ("two armoured vehicles"). */
+  text: string | null;
+  /** The way it is moving, as said. */
+  heading: Direction | null;
+  /** Where the report puts the track; null while its question is open, or when it only says what the track is. */
+  position: UnitPosition | null;
+  /** Where the observer was, for the line of sight on the map; null when not known. */
+  from: { lat: number; lon: number } | null;
 }
 
 export interface ReportEntry {
@@ -40,8 +62,10 @@ export interface ReportEntry {
   resolution: Resolution;
   /** The last position the transmitter sent with the report: the start of a movement arrow. */
   lastPosition: LastPosition | null;
-  /** Where the report puts the speaker; null when it does not move them (a question, could not place). */
+  /** Where the report puts the speaker; null when it does not move them (a question, could not place, a track). */
   position: UnitPosition | null;
+  /** Set when the report is about a track. `position` is then null: the speaker does not move. */
+  track?: TrackSighting | null;
   timings_ms: Timings;
 }
 
@@ -56,6 +80,8 @@ export interface AnswerEntry {
   /** The candidate tapped, or null for "none of these". */
   choice: string | null;
   position: UnitPosition | null;
+  /** For a question about a track: where the choice puts the track. `position` is then null. */
+  track?: { n: number; position: UnitPosition | null } | null;
 }
 
 /** A place from the gazetteer where units are assumed to be when they join. Picked at the base, never by the model. */

@@ -43,6 +43,16 @@ export type Relation =
 /** Compass direction of travel, eight points. */
 export type Direction = "north" | "north_east" | "east" | "south_east" | "south" | "south_west" | "west" | "north_west";
 
+/**
+ * Whose a track is, as the speaker said it. Worked out in code from the words, never by the model
+ * (lib/geo/tracks.ts). `suspect` is a track thought to be hostile and still to be looked into.
+ * `unknown` when no word for it was said.
+ */
+export type Affiliation = "hostile" | "suspect" | "unknown" | "neutral" | "friendly";
+
+/** What kind of thing a track is. A fixed list: code maps each kind to a standard symbol. */
+export type TrackKind = "people" | "vehicle" | "armour" | "drone" | "drone_team" | "mortar" | "artillery" | "jammer" | "other";
+
 export interface GazetteerFeature {
   id: string;
   name: string;
@@ -81,6 +91,22 @@ export interface Intent {
   direction?: Direction | null;
   language: "en" | "fr" | "uk";
   confidence: number;
+  /**
+   * Who the report is about: the speaker, or a track, something else the speaker sees or knows of.
+   * Absent means the speaker. The model's reading is checked against the words in code.
+   * For a track, the landmark, relation, distance and direction say where the track is.
+   */
+  subject?: "self" | "track";
+  /** The number of a track the speaker named ("Track 3"). */
+  track_ref?: number | null;
+  /** The kind of thing, from a type word the speaker said ("vehicle", "drone"). */
+  track_kind?: TrackKind | null;
+  /** How many, when said ("two vehicles"). */
+  track_count?: number | null;
+  /** The thing as said, without the place ("two armoured vehicles"). */
+  track_text?: string | null;
+  /** The compass direction the track itself is moving in, when said. */
+  track_heading?: Direction | null;
 }
 
 export interface LastPosition {
@@ -135,7 +161,35 @@ export interface Candidate {
   score?: number;
   /** A crossing: the ids of the streets that meet there. */
   streets?: string[];
+  /** Where the report puts the speaker if this candidate is meant. Empty for a report about a track. */
   placement: Placement;
+  /** For a report about a track: where the track is if this candidate is meant. */
+  track_placement?: Placement;
+}
+
+/** What a report says about a track: a new one, or one the speaker named by its number. */
+export interface TrackResolution {
+  /** The track's number: the one named, or the one given when the report is saved. Null until then. */
+  n: number | null;
+  /** True when the report opens a track; false when it adds to one the speaker named. */
+  opened: boolean;
+  /** From the speaker's words; null when none said whose it is. A new track is then `unknown`. */
+  affiliation: Affiliation | null;
+  kind: TrackKind | null;
+  count: number | null;
+  /** The thing as said. */
+  text: string | null;
+  /** The way the track is moving, as said. */
+  heading: Direction | null;
+  /**
+   * Where the track is, when the report settles that. Absent while a question is open, and when
+   * the report only says what the track is ("Track 3 is hostile").
+   */
+  placement?: Placement;
+  /** What it was placed at, for the map and the lists ("Mairie de Vincennes", "300 m north of ALPHA 1"). */
+  label?: string;
+  /** What to say back to the speaker, in their language: "Track 3, unknown vehicle, Mairie de Vincennes." */
+  say?: string;
 }
 
 export interface Resolution {
@@ -148,6 +202,11 @@ export interface Resolution {
   candidates: Candidate[];
   /** Ask-back question (ambiguous) or prompt (unresolved). */
   question?: string;
+  /**
+   * Set when the report is about a track. `pin`, `radius_m` and every candidate's `placement` are
+   * then empty: a report about a track never moves the speaker.
+   */
+  track?: TrackResolution;
   evidence: {
     rule: string;
     feature_id?: string;
