@@ -98,3 +98,16 @@ Not covered: real voices, wind on the microphone itself, and noise that starts o
 - The area's place names, sent to Mistral as hints, pull the clip towards the area's language: the Ukrainian-then-French clip sent in the Vincennes area came back with its French intact. So a speaker who does not speak the area's language is the one at risk.
 - The two halves are two synthetic voices, so diarization usually marks them as two speakers (">>"). A real speaker switching language is one voice; not tested.
 
+### Hints in the speaker's language [190]
+
+When the speaker's language button is not the area's language, ten report phrases in the speaker's language ("je suis devant", "la mairie", "I'm near", "я біля"...) go first in the hints, ahead of the area's report words and place names (`SPEAKER_PHRASES` in `lib/geo/areas.ts`). Measured on 21 November with the same clips, before and after, one run each:
+
+| Clips | Before | After |
+|---|---|---|
+| French with Ukrainian, Kyiv map, button on FR | 0 of 6 | 4 of 6 |
+| Ukrainian or French alone, button left on EN (the default) | 6 of 6 | 6 of 6 |
+| Ukrainian then English, button on EN | 3 of 3 | 3 of 3 |
+| French or English alone, Kyiv and Izium maps | 8 of 8 | 8 of 8 |
+
+The two left both start with "Voiture civile devant la mairie", which has no phrase from the list and no place name of the area. The button is on EN by default, so most reports on the Ukrainian maps now carry the English phrases; no clip got worse, but 23 clips are few.
+

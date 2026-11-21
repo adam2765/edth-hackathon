@@ -5,7 +5,7 @@ import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
 import { readVoices } from "@/lib/geo/voices";
 import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/reports/clips";
-import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
+import { AREAS, DEFAULT_AREA, isAreaId, speechHints, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { reportContext, saveReport, type ReportInput } from "@/lib/reports/record";
 import { callsignOf, sessionCode } from "@/lib/reports/types";
@@ -141,7 +141,8 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias);
+      // A speaker whose language is not the area's gets phrases in their own language first [190].
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned));
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
