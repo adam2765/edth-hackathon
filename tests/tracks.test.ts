@@ -7,7 +7,7 @@ import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
 import { resolve } from "../lib/geo/resolver";
 import { AFFILIATIONS, describeTrack, TRACK_KINDS, trackSymbolCode } from "../lib/geo/trackKinds";
-import { affiliationSaid, kindSaid, readSubject, resolveReport, TRACK_ON_LINE_M, trackNumberSaid, withTrackNumber } from "../lib/geo/tracks";
+import { affiliationSaid, contactSaid, kindSaid, readSubject, resolveReport, TRACK_ON_LINE_M, trackNumberSaid, withTrackNumber } from "../lib/geo/tracks";
 import type { Intent, LastPosition } from "../lib/geo/types";
 import { sanitizeIntent, systemPrompt } from "../lib/providers/extractor";
 import { foldLog, TRACK_OLD_AFTER_MS } from "../lib/reports/fold";
@@ -114,6 +114,50 @@ describe("who the report is about", () => {
   it("the model does not decide whose a track is", () => {
     const r = readSubject(track({ track_kind: "vehicle" }), "Vehicle at Bérault");
     expect(r).toMatchObject({ subject: "track", affiliation: null });
+  });
+});
+
+describe("a contact is something seen", () => {
+  // Hosted Mistral's reading of this report in mission vincennes-21, 21 November: the speaker moving east.
+  const heard = "Unknown Contact, two blocks east.";
+  const modelRead = intent({ kind: "movement", relation: "towards", direction: "east", distance_m: null, confidence: 0.8 });
+
+  it("as the first word, or next to whose it is, doubt, unknown, new or a count", () => {
+    for (const said of [heard, "Contact, two blocks east", "Enemy contact behind the castle", "Possible contact near the bridge", "Two contacts near the church", "Contact ennemi devant la mairie", "Nouveau contact au nord", "Невідомий контакт біля мосту", "BRAVO 2, contact front"]) {
+      expect(contactSaid(said), said).toBe(true);
+    }
+  });
+
+  it("not when contact means keeping in touch", () => {
+    for (const said of ["Lost contact with BRAVO 2", "I'm in contact with the base", "Pas de contact radio", "Moving to the contact point at Bérault", "I am at Bérault"]) {
+      expect(contactSaid(said), said).toBe(false);
+    }
+  });
+
+  it("is a track whatever the model said, unknown unless a word says whose", () => {
+    expect(readSubject(modelRead, heard)).toMatchObject({ subject: "track", affiliation: null, kind: null, ref: null });
+    expect(readSubject(intent({ landmark_category: "church" }), "Enemy contact at the church")).toMatchObject({ subject: "track", affiliation: "hostile" });
+    expect(readSubject(intent({ landmark_name: "Bérault" }), "Lost contact with BRAVO 2 at Bérault").subject).toBe("self");
+  });
+
+  it('"two blocks" is no distance (decision 51), so the app asks how far in the way said, and the speaker stays put', () => {
+    const r = resolveReport({ ...base, intent: modelRead, transcript: heard, lastPosition: at(CASTLE) });
+    expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "move_incomplete" }, question: "How far east is it? Or name a place near it." });
+    expect(r.track).toMatchObject({ affiliation: null, kind: null });
+    expect(r.track?.placement).toBeUndefined();
+    expect(r.pin).toBeUndefined();
+    const fr = resolveReport({ ...base, intent: intent({ kind: "movement", direction: "east", language: "fr" }), transcript: "Contact ennemi à l'est", lastPosition: at(CASTLE) });
+    expect(fr.question).toBe("À quelle distance à l'est ? Ou donnez un lieu proche.");
+  });
+
+  it("with a distance it is placed from the observer, and the speaker stays put", () => {
+    const last = at(CASTLE);
+    const r = resolveReport({ ...base, intent: { ...modelRead, distance_m: 200 }, transcript: "Unknown contact, 200 metres east", lastPosition: last });
+    expect(r.status).toBe("resolved");
+    expect(r.pin).toBeUndefined();
+    expect(r.track).toMatchObject({ affiliation: null, label: "200 m east of ALPHA 1" });
+    expect(Math.round(distanceM(last, r.track!.placement!.pin!))).toBe(200);
+    expect(r.track!.placement!.pin!.lon).toBeGreaterThan(last.lon);
   });
 });
 
