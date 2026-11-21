@@ -584,6 +584,35 @@ describe("cemeteries", () => {
   });
 });
 
+describe("a type said outright against a lone name of another type [185]", () => {
+  const izium = loadGazetteer("izium");
+  const IZIUM_STATION = izium.find((f) => f.name === "Ізюм" && f.category === "metro_station")!;
+  const METEO = izium.find((f) => f.name === "Ізюмська метеорологічна станція")!;
+
+  it("asks among the stations when 'Vincent station' finds only a school", () => {
+    const r = resolve({ intent: intent({ landmark_text: "Vincent station", landmark_name: "Vincent", landmark_category: "metro_station" }), transcript: "I'm at Vincent station.", now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("ambiguous");
+    expect(r.evidence.rule).toBe("named_type_mismatch");
+    expect(r.candidates.slice(0, -1).every((c) => c.category === "metro_station")).toBe(true);
+    expect(r.candidates.at(-1)!.category).toBe("school");
+  });
+
+  it("does not pin the weather station for a station heard through rain", () => {
+    // "I'm at Izium station" under rain as loud as the voice came back in Ukrainian (21 Nov).
+    const r = resolve({ intent: intent({ landmark_text: "Ізюмській станції", landmark_name: "Ізюмській станції", landmark_name_lemma: "Ізюмська станція", landmark_category: "metro_station", language: "uk" }), transcript: "А на Ізюмській станції.", now: NOW, gazetteer: izium });
+    expect(r.status).toBe("ambiguous");
+    expect(r.candidates.map((c) => c.id)).toEqual([IZIUM_STATION.id, METEO.id]);
+  });
+
+  it("still pins a name of the type said, and a road whose name holds another type's word", () => {
+    const station = resolve({ intent: intent({ landmark_text: "Bérault metro", landmark_name: "Bérault", landmark_category: "metro_station" }), transcript: "I'm at Bérault metro.", now: NOW, gazetteer: gaz });
+    expect(station.status).toBe("resolved");
+    expect(station.evidence.feature_id).toBe(BERAULT.id);
+    const road = resolve({ intent: intent({ landmark_text: "Route du Donjon", landmark_name: "Route du Donjon", landmark_category: "street" }), transcript: "I'm on Route du Donjon.", now: NOW, gazetteer: gaz });
+    expect(road.status).toBe("resolved");
+  });
+});
+
 describe("roads in the Bois closed to cars", () => {
   // OpenStreetMap maps them as tracks and paths. Until 21 Nov the build left those out: Route de
   // la Dame Blanche was its 102 m open to cars, not its 418 m, and Route du Donjon was not there.
