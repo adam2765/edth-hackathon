@@ -12,7 +12,7 @@ To settle at the Saturday 08:00 kickoff ([kickoff.md](kickoff.md)) where we can.
 4. **Deploy access.** Connect the Vercel project to GitHub so pushes deploy, or keep CLI deploys from Alex's account.
 5. **Mistral key.** One shared team key, or each person their own.
 6. **Licence.** The repo is public with no licence file. The hackathon's FAQ says all IP stays with the team, and that a partner company may set other terms for its own challenge; Lysk's are unknown (question 15 below).
-7. **The receiver's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Several wait on question 1 below.
+7. **The command post's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Decision 1, who answers an open question, is settled: the command post can [178]. Several of the rest wait on question 1 below.
 
 ## For Lysk
 
@@ -22,7 +22,7 @@ Mentors: Henry Heinemann and Florent Ogès (edth@lysk.ai). Alex looks for them f
 
 > We are on Voice-to-Map. It works today: you speak, and a marker with your call sign moves on a shared map in one to three seconds, with a replay of the whole mission. When a report could mean two places it asks which one instead of guessing. It runs in English, French and Ukrainian, and the model never makes a coordinate. Three answers from you decide what we build today.
 
-Have the receiver open on the laptop: a mission with three call signs and one question waiting. Show it before you describe it.
+Have the command post open on the laptop: a mission with three call signs and one question waiting. Show it before you describe it.
 
 ### If there are two minutes
 
@@ -44,7 +44,7 @@ The people:
 
 4. **Who looks at the map, and what is on that screen today?** A paper map, a battle-management system? Do the speakers ever see it? Would a feed into the existing system matter more than our own map?
    - *Today:* one operator at a base station watches our map on a laptop or projector. Speakers do not see it.
-   - *It decides:* how much goes into the receiver, and whether an export (GeoJSON, Cursor-on-Target) is worth a few hours.
+   - *It decides:* how much goes into the command post, and whether an export (GeoJSON, Cursor-on-Target) is worth a few hours.
 
 5. **How many units report on one net, and how often?** How old can a position be before it is useless?
    - *Today:* checked with three call signs. A unit fades after 3 minutes of silence.
@@ -102,4 +102,4 @@ History, and the rest:
 
 - Write each answer down in their words, then add one line per answer to [DECISIONS.md](../DECISIONS.md) and remove the question here.
 - Tell the team the answer to question 1 at once: it moves people between roles ([work-split.md](work-split.md#when-to-switch-people)).
-- Note what they reacted to when they saw the receiver. That goes into the pitch.
+- Note what they reacted to when they saw the command post. That goes into the pitch.

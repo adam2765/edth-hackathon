@@ -6,7 +6,7 @@
  *   coordinator runs on the Mac, so this is the store the demo uses, online or not. A deleted
  *   mission's file moves to `deleted/` beside them.
  * - `none`: keeps nothing (default on Vercel, where files are neither kept nor shared between
- *   instances). Reports still get their answer; the receiver says the site keeps no record.
+ *   instances). Reports still get their answer; the command post says the site keeps no record.
  */
 import { appendFile, mkdir, open, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,7 +46,7 @@ const SESSION_FILE = /^([a-z0-9][a-z0-9_-]*)\.jsonl$/;
 
 /**
  * The file is the record; each instance keeps what it has parsed and reads only the bytes added
- * since, so a receiver polling every second costs one `stat` when nothing changed.
+ * since, so a command post polling every second costs one `stat` when nothing changed.
  */
 export class FileStore implements ReportStore {
   readonly kind = "file" as const;

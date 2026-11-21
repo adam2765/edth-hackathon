@@ -3,7 +3,7 @@
 EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map updates.
 When a report could mean more than one place, the app asks back instead of guessing.
 
-Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no reports, so its receiver stays empty). Three areas, switched at the top of the page or with `?area=kyiv`: Vincennes (English, French), central Kyiv (Ukrainian, English) and Izium (Ukrainian, English), a town near the front in Kharkiv Oblast (`?area=izium`). Deployed from `main` on 21 November.
+Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no reports, so its command post stays empty). Three areas, switched at the top of the page or with `?area=kyiv`: Vincennes (English, French), central Kyiv (Ukrainian, English) and Izium (Ukrainian, English), a town near the front in Kharkiv Oblast (`?area=izium`). Deployed from `main` on 21 November.
 
 ## How it works
 
@@ -16,7 +16,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 
 - The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, a stated distance in metres, a compass direction of travel, language.
 - `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`, or from the last position moved by a distance and compass direction the speaker stated. The phone's GPS is never used.
-- A report can also be about a **track**: something the speaker sees or knows of ("enemy vehicle in front of the town hall", "drone 300 metres north of me"). The coordinator numbers it and says the number back ("Track 3, hostile vehicle, Mairie de Vincennes."), and the receiver draws it with its NATO symbol. Tracks are for reconnaissance only: who saw what, where, when, and how sure the place is. See [Tracks](#tracks).
+- A report can also be about a **track**: something the speaker sees or knows of ("enemy vehicle in front of the town hall", "drone 300 metres north of me"). The coordinator numbers it and says the number back ("Track 3, hostile vehicle, Mairie de Vincennes."), and the command post draws it with its NATO symbol. Tracks are for reconnaissance only: who saw what, where, when, and how sure the place is. See [Tracks](#tracks).
 - The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`. Ukrainian questions use an on-device voice instead when it is loaded (`lib/tts/`, test page at `/tts-lab`).
 
 ### Resolver rules
@@ -71,7 +71,7 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 | "Track 9 …" when the mission has no Track 9 | `unresolved`: "There is no Track 9 in this mission." |
 | The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said, or when the words name a thing and whose it is ("our drone team is at the station") | `unresolved`: "Is that where you are, or something you see?" |
 
-A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the receiver a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone", range rings, and edits by the operator. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
+A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the command post a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. The command post can also place, change, move and take off a track by hand [177]. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone" said by a unit, and range rings. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
 
 Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two named streets share a point in OpenStreetMap; a bridge shares none, so it is not a crossing. In a mission the coordinator remembers the street each unit is on (from a report that named a street, kept through crossings on it) and the way it last moved, and passes both with the last position. A crossing within 20 m is the one the unit is at, never the next one. The pin is the crossing, with a 30 m circle.
 
@@ -155,14 +155,14 @@ and an emulator are not needed. Connect the phone to the Mac with a **USB data c
 OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 /opt/homebrew/bin/ollama serve
 ```
 
-**2. Coordinator — runs the receiver and processes reports.** In the second window:
+**2. Coordinator — runs the command post and processes reports.** In the second window:
 
 ```bash
 cd ~/Projects/edth-hackathon
 PROVIDER_MODE=local npm run start -- -p 3117
 ```
 
-Wait for `Ready`, then open **http://localhost:3117/receiver** in the Mac's browser.
+Wait for `Ready`, then open **http://localhost:3117/cp** in the Mac's browser.
 
 **3. Phone connection — serves the transmitter over USB.** In the third window:
 
@@ -176,14 +176,14 @@ CI=1 EXPO_PUBLIC_SERVER_URL=http://127.0.0.1:3117 npm run start -- --dev-client 
 
 Open **Transmitter** on the phone. If asked for a development server, enter
 `http://127.0.0.1:8082`. In Setup choose **This Mac**. Speech recognition is always on the phone;
-its model is installed automatically from the setup-provided app asset. Create a mission on the receiver and join it on the phone. Hold the talk
-button, wait for red, speak, then release. The report appears on the receiver.
+its model is installed automatically from the setup-provided app asset. Create a mission on the command post and join it on the phone. Hold the talk
+button, wait for red, speak, then release. The report appears on the command post.
 
 To stop, press **Ctrl+C** in each Terminal window. If a port is already in use, stop its
 old server before starting another. After reconnecting USB, repeat the two `adb reverse`
 commands in a free terminal.
 
-This uses the built coordinator to avoid the receiver flicker seen with `next dev`.
+This uses the built coordinator to avoid the command post flicker seen with `next dev`.
 After coordinator code changes, stop its server, run `npm run build` at the repo root,
 and start it again. After phone JavaScript changes, restart window 3 and reopen the app.
 
@@ -195,7 +195,7 @@ versions checked against the project on 21 November 2026.
 | Part | Install once |
 |---|---|
 | Everyone | Git, Node.js 24.3+ in the 24.x line (recommended; 22.13+ in 22.x or 26.x also work), and npm (included with Node). |
-| Web app and receiver | A current browser. All JavaScript libraries and development tools are installed by the npm commands below. |
+| Web app and command post | A current browser. All JavaScript libraries and development tools are installed by the npm commands below. |
 | Offline coordinator | Current [Ollama](https://ollama.com/download) with `ministral-3:3b` (`ollama pull ministral-3:3b`, about 3 GB). |
 | Hosted coordinator | A Mistral API key in `.env.local`; no Ollama needed. |
 | Android transmitter | [Android Studio](https://developer.android.com/studio) with its bundled JDK. In SDK Manager: SDK Platform **37**, Build-Tools **37.0.0**, Platform-Tools, Command-line Tools, NDK **27.1.12297006**, CMake **3.22.1**. For an emulator, also Android Emulator and a system image (ARM64 on Apple Silicon). Accept SDK licenses. |
@@ -293,7 +293,7 @@ npx expo run:android       # build, install and start Metro
 # npm run start -- --dev-client
 ```
 
-The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/receiver`, create a mission and join it in the app.
+The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/cp`, create a mission and join it in the app.
 
 ### Web development and checks
 
@@ -340,17 +340,21 @@ Both local models miss "I'm at the Golden Gate." (8B leaves the name out, 3B tra
 
 `scenarios/*.json` are scripted reports with the answer each one should get. `npm run scenarios` (on a Mac) makes the clips with synthetic English, French and Ukrainian voices. In the app, "Play scenario" sends every step and marks it ✓ or ✗; tapping one step sends it alone and leaves any question for you to answer.
 
-Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. The full scenario suite has not been checked on Android. On 21 Nov a Galaxy S10 sent two live town-hall reports through the offline Mac coordinator; both appeared at Mairie de Vincennes on the receiver.
+Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. The full scenario suite has not been checked on Android. On 21 Nov a Galaxy S10 sent two live town-hall reports through the offline Mac coordinator; both appeared at Mairie de Vincennes on the command post.
 
-## Receiver
+## Command post
 
-The shared map for the base station: open `http://localhost:3117/receiver` on the computer that runs the coordinator, ideally on a big screen.
+The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [176].
 
 A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
 Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
 
-The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its receiver stays empty [101].
+**Tracks by hand** [177]. **Place track** (or P) opens a palette: whose (it starts on Unknown), what, how many and how sure. Click the map or find a place by name, drag the symbol if needed, add a source if you have one, and press Place. The track gets the next number. Click any track for its card: Change, Move, Gone (off the map, kept in the list and the log) and Put back. Every change is a `plot` line in the log, marked CP in the feed. The command post never places a unit.
+
+**Answering for a unit** [178]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The first answer stands, the phone's or the command post's.
+
+The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers, tracks placed by hand and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its command post stays empty [101].
 
 ## Layout
 
@@ -358,12 +362,12 @@ The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening
 transmitter/                               native transmitter app (own package.json and tooling)
 scenarios/, scripts/build-scenarios.mjs    scripted reports and the clip generator
 app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk button, ask-back card, log
-app/receiver/, components/Receiver.tsx     the receiver: shared map, units, feed, replay; MissionPanel.tsx opens missions
+app/cp/, components/CommandPost.tsx        the command post: shared map, units, tracks, feed, replay; TrackTools.tsx, MissionPanel.tsx
 app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs, session
-app/api/answer/route.ts                    POST the choice tapped for a question
-app/api/sessions/                          list and open missions; [code]: the log, join, end, delete
-app/api/places/route.ts                    GET places by name, to pick a start point
-lib/reports/                               missions and their logs: entry types, store, record, position rule, foldLog
+app/api/answer/route.ts                    POST the choice for a question, tapped or chosen at the command post
+app/api/sessions/                          list and open missions; [code]: the log, join, end, delete, tracks by hand
+app/api/places/route.ts                    GET places by name, for a start point or a track; or the name of a point
+lib/reports/                               missions and their logs: entry types, store, record, position rule, plot, foldLog
 lib/geo/tracks.ts, lib/geo/trackKinds.ts   tracks: who a report is about, whose a track is, where it is; kinds and symbol codes
 lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema

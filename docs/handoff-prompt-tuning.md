@@ -13,7 +13,7 @@ The goal is fewer **wrong pins**: a pin or a heading on the map at a place the s
 1. [evals/README.md](../evals/README.md): the eval, the case format, how to read a run, the scores so far, the open questions.
 2. [evals/journal.md](../evals/journal.md): every attack and tune so far, what it found, what was accepted.
 3. [.agents/skills/prompt-attack/SKILL.md](../.agents/skills/prompt-attack/SKILL.md) and [.agents/skills/prompt-tune/SKILL.md](../.agents/skills/prompt-tune/SKILL.md): the two procedures. A coding agent loads them as skills (`prompt-attack`, `prompt-tune`); a person follows them by hand.
-4. Decisions [153], [159], [169] and [176] in [DECISIONS.md](../DECISIONS.md): why the eval works the way it does, and the two tunes.
+4. Decisions [153], [159], [169] and [179] in [DECISIONS.md](../DECISIONS.md): why the eval works the way it does, and the two tunes.
 
 ## Where things are
 

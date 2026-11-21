@@ -91,7 +91,7 @@ In Vincennes (rebuilt 20 November), 16 names are two streets each, every pair in
 1. Add the area to `lib/geo/areas.ts`: id, label, place description, centre, zoom, box, hint text and `townAdminLevel`. For the town level, use OpenStreetMap's `admin_level` of the municipality in that country, the level at which street names are unique. In Ukraine outside Kyiv that is the settlement, level 8. The hromada is level 7 and holds many villages, each with its own вулиця Шевченка. Use a central square as the centre, not the middle of the box: "the church" with no last position is looked for around it.
 2. Run `npm run gazetteer -- <id>` (needs network).
 3. Import the new file in `lib/geo/gazetteer.ts`.
-4. Add the id to the transmitter: `AreaId` in `transmitter/src/types.ts`, the list in `transmitter/App.tsx`, and `MAX_NAMES` in `scripts/build-transmitter-hints.ts`. Then run `npx tsx scripts/build-transmitter-hints.ts`. The web page and the receiver list the areas themselves.
+4. Add the id to the transmitter: `AreaId` in `transmitter/src/types.ts`, the list in `transmitter/App.tsx`, and `MAX_NAMES` in `scripts/build-transmitter-hints.ts`. Then run `npx tsx scripts/build-transmitter-hints.ts`. The web page and the command post list the areas themselves.
 5. Run `npm test`, and try a few typed reports in the web page.
 
 A coordinator that is running picks up a new area only when the import and the file are both there. Create the file first, then the import, then the area.
@@ -161,7 +161,7 @@ One street name is two streets: Василя Стуса вулиця, 1.9 km apa
 
 **Two build rules came from this town.** Its bus station is called "Ізюм", like the railway station 3 km away, and was a station too; near the centre "the station" would have meant the bus station, without a question. Its enlistment office was in the file as a government office. See steps 2 and 8 above. Neither rule changes the files we have: the same name check finds nothing in Vincennes or Kyiv, and the three places there that touch a military tag are kept (the Bégin hospital, a museum tractor, a state office on military land). At Kyiv's next rebuild, Автостанція «Київ» becomes a stop. In Vincennes the bus station at Château de Vincennes is already folded into the metro station and would be dropped as a stop named after it.
 
-**Checked.** The 9 reports of `scenarios/izium-demo.json` were typed into the running coordinator (hosted Mistral, no mission) four times, carrying the last position forward as the web page does. The first run gave 8 of 9: step 5 said «до річки» and was asked which of three waterways, rightly. It now names the river, and the next three runs gave 9 of 9. Step 8 came back as a pin on the crossing once and as a move towards it three times; both are the same crossing. `tests/izium.test.ts` pins the same answers against the built file. Not checked: speech, a native speaker, the phone app, the receiver.
+**Checked.** The 9 reports of `scenarios/izium-demo.json` were typed into the running coordinator (hosted Mistral, no mission) four times, carrying the last position forward as the web page does. The first run gave 8 of 9: step 5 said «до річки» and was asked which of three waterways, rightly. It now names the river, and the next three runs gave 9 of 9. Step 8 came back as a pin on the crossing once and as a move towards it three times; both are the same crossing. `tests/izium.test.ts` pins the same answers against the built file. Not checked: speech, a native speaker, the phone app, the command post.
 
 **What Izium shows is missing.**
 

@@ -2,39 +2,39 @@
 
 What is left, by part. Status as of Friday 20 November, evening. When you start or finish something here, change this file in the same commit.
 
-## Receiver: shared map and replay
+## Command post: shared map and replay
 
 First priority on Friday evening, because it is the judged item we miss. About one evening for one person. Agreed with Alex on Friday: view-only to start, laid out for a laptop or projector first.
 
-What the jury would see: a laptop shows the receiver, two or three phones are speakers with call signs, someone speaks and their marker moves on the big screen within seconds. An ambiguous report shows as "awaiting answer" until the speaker taps a choice. Then we drag a slider and replay the last five minutes.
+What the jury would see: a laptop shows the command post, two or three phones are speakers with call signs, someone speaks and their marker moves on the big screen within seconds. An ambiguous report shows as "awaiting answer" until the speaker taps a choice. Then we drag a slider and replay the last five minutes.
 
 In scope:
 
 - **Shared record:** the coordinator saves every report as one entry in an append-only log, tagged with a session code and call sign.
-- **Receiver page:** one coloured marker per call sign, with its name and last-update time, confidence circle, trail and movement arrow.
+- **Command post page:** one coloured marker per call sign, with its name and last-update time, confidence circle, trail and movement arrow.
 - **Live feed:** a side list of reports (time, call sign, transcript, outcome); clicking one flies the map to it.
-- **Pending questions:** an open ask-back shows on the receiver, with its candidates numbered on the map.
+- **Pending questions:** an open ask-back shows on the command post, with its candidates numbered on the map.
 - **Replay:** a time slider and play button that rebuild the map from the log up to any moment.
 - **Fading:** a marker dims when its speaker has been silent for a few minutes.
 - **Speaker side:** pick a call sign once and join a session by link; nothing else changes.
 
-Out of scope: logins and roles, editing or deleting reports, the receiver talking back, GPS ground truth, grid references, drawing tools.
+Out of scope: logins and roles, editing or deleting reports, the command post talking back (it may answer a unit's open question [178]), GPS ground truth, grid references, drawing tools.
 
 Design choices:
 
-- **Polling, not push.** The receiver asks for new entries every second. Simpler than a live channel, and it works the same hosted and offline.
+- **Polling, not push.** The command post asks for new entries every second. Simpler than a live channel, and it works the same hosted and offline.
 - **Storage behind one interface.** A hosted database (Supabase, per the original brief) and a local file for offline mode. A cloud-only store would break the offline demo.
 - **Call sign from the words as a fallback.** If Lysk's audio turns out to come from a shared radio channel, the speaker has to be identified from what they say ("Alpha 2, I'm south of the church"), not from the device.
 
-It splits three ways: storage and endpoint, receiver map and feed, replay.
+It splits three ways: storage and endpoint, command post map and feed, replay.
 
-**Status, Friday evening:** built [98 to 103]. Open it at `/receiver` on the coordinator the phones send to. The speaker side followed with missions, below [107 to 114]. Also done: tapped choices now reach the server, which the plan had missed [100], and the local file store from track E below [101].
+**Status, Friday evening:** built [98 to 103]. Open it at `/cp` on the coordinator the phones send to. The speaker side followed with missions, below [107 to 114]. Also done: tapped choices now reach the server, which the plan had missed [100], and the local file store from track E below [101].
 
 Still to do:
 
-- **Run it with phones.** Two or three phones sending to the Mac, the receiver on a second screen or projector. So far it is checked only with typed reports.
-- **Hosted store.** The live site keeps no record, so its receiver stays empty. Supabase in its Paris region is the brief's suggestion; it needs a new project (Alex's call).
-- **Remove the phone web page** at `/` and make the receiver the home page, once Alex says so [98]. That also drops the Ukrainian Piper voice, which only the web page uses; the native app speaks with the phone's own voice.
+- **Run it with phones.** Two or three phones sending to the Mac, the command post on a second screen or projector. So far it is checked only with typed reports.
+- **Hosted store.** The live site keeps no record, so its command post stays empty. Supabase in its Paris region is the brief's suggestion; it needs a new project (Alex's call).
+- **Remove the phone web page** at `/` and make the command post the home page, once Alex says so [98]. That also drops the Ukrainian Piper voice, which only the web page uses; the native app speaks with the phone's own voice.
 - **Starting, joining and ending a session:** see [Missions](#missions-start-join-check-in-end) below.
 
 ## Missions: start, join, check in, end
@@ -47,7 +47,7 @@ A mission is what the code already calls a session: one code, one log. The scree
 
 | Term | Meaning |
 |---|---|
-| Base station | The computer that runs the coordinator, with the receiver on its screen or a projector |
+| Base station | The computer that runs the coordinator, with the command post on its screen or a projector |
 | Mission | A code, an area, a name, an optional start point, and whether it is open or ended. One log. |
 | Start point | A place from the gazetteer where units are assumed to be when they join. The operator picks it. |
 | Check-in | A unit's first spoken report that names a place. It replaces the start point. |
@@ -58,7 +58,7 @@ A mission is what the code already calls a session: one code, one log. The scree
 sequenceDiagram
     autonumber
     actor Op as Operator at the base
-    participant R as Receiver page
+    participant R as Command post page
     participant C as Coordinator (the Mac)
     actor A as Phone, ALPHA 1
 
@@ -107,7 +107,7 @@ stateDiagram-v2
 ```
 
 - **Open:** phones can join and send reports. Several missions can be open at once, for example one per area.
-- **Ended:** the log is closed. A report to it gets "this mission has ended", and the phone offers the open missions. The receiver can still replay it.
+- **Ended:** the log is closed. A report to it gets "this mission has ended", and the phone offers the open missions. The command post can still replay it.
 - **Reset** is ending a mission and opening a new one. The old log stays, because the log is never edited [99]. Deleting a mission is a separate button with a confirmation, for rehearsals.
 
 ### A unit's life
@@ -146,7 +146,7 @@ A unit with no start point can still report. The resolver already copes with no 
 | GPS on the phone | No | The app never reads GPS (a project rule): jamming must not matter. |
 | A start point the base sets | Yes, optional | Missions start somewhere known: the base, a meeting point, a vehicle drop-off. The operator picks a place from the gazetteer by name, or by clicking a place on the map, so no coordinates are typed and the model makes none. Every unit that joins starts there as an estimate: ≈, a circle of 300 m or the place's own size if larger. Because it is an estimate, it does not settle a choice between nearby places on its own [47]. |
 | A spoken check-in | Yes, always | The phone asks for one on joining. The first report that names a place replaces the start point. |
-| The operator drags a unit on the receiver | Later | Useful for corrections, but it makes the receiver more than view-only. |
+| The operator drags a unit on the command post | Later | Useful for corrections. The command post places and moves tracks by hand [177], but a unit's position still comes only from what it says. |
 
 ### Who keeps the last position
 
@@ -165,7 +165,7 @@ Why:
 
 - A start point set at the base reaches the resolver without the phone having to learn it.
 - A phone that restarts, or a second phone that takes over a call sign, does not lose the position.
-- The receiver and the resolver always agree on where a unit is.
+- The command post and the resolver always agree on where a unit is.
 
 This changes the contract with the transmitter: `lastPosition` becomes a fallback. It gets a decision line when it is built.
 
@@ -190,7 +190,7 @@ Three new kinds of entry, in the same append-only log as reports and answers, so
 
 ### Screens
 
-Receiver:
+Command post:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -222,7 +222,7 @@ No QR code for now: scanning needs a camera module, which means rebuilding the a
 | Piece | Size |
 |---|---|
 | Coordinator: mission, join and end entries; open, list, join and end endpoints; the resolver takes the last position from the log; ended missions refuse reports; tests | 3 h |
-| Receiver: new mission with area, name and start point; end mission; open and past missions; units that joined but are not placed | 2 h |
+| Command post: new mission with area, name and start point; end mission; open and past missions; units that joined but are not placed | 2 h |
 | Transmitter: join step, check-in prompt, "mission ended" notice; plain JavaScript, no rebuild | 2 h |
 | Docs, contracts and decision lines | 0.5 h |
 
@@ -247,7 +247,7 @@ Built on Saturday 21 November: steps 1 to 3. The rules are in the [README](../RE
 
 | Step | What | Status |
 |---|---|---|
-| 1 | Types, the log, the receiver's symbols and list | Built |
+| 1 | Types, the log, the command post's symbols and list | Built |
 | 2 | Extraction, and placing by a place or from the observer | Built |
 | 3 | The number said back; "Track 3 moved", "Track 3 is hostile" | Built |
 | 4 | A new sighting close to an open track asks "Is this Track 3, or a new one?"; "Track 3 is gone" | Not started. Until then every unnumbered sighting opens a new track. |
@@ -257,7 +257,7 @@ Still open, for Alex:
 
 - **The word.** "Track" is in. "Object" was the other candidate. The French "Piste" and the Ukrainian "Об'єкт" need a native check.
 - **Where a range comes from** (step 5): only when said, set at the base, or a table by kind in code.
-- **Operator edits:** whether the operator may change or close a track by click. It makes the receiver editable, the same question as decision 1 of the [receiver review](receiver-review.md).
+- **Operator edits:** built [177, 178]. The command post places a track (click, drag or a place by name), changes what it is, moves it, marks it gone and puts it back, and can answer a unit's open question. This settles decision 1 of the [receiver review](receiver-review.md). See [tracks](tracks.md#placed-by-the-command-post).
 - **Unit colours:** the fifth unit colour is a pink-red (`#e0367a`). Hostile tracks are red, so a fifth call sign would be a red-ish friendly dot. Not changed yet.
 - **A demo script with tracks.** Written: `scenarios/vincennes-tracks.json`, 11 made-up steps in Vincennes ([README](../README.md#vincennes-with-tracks)). Still to choose: whether it, or a short version of it, goes into the Demo Day run.
 
@@ -279,7 +279,7 @@ flowchart LR
             OLL["Ollama<br/>ministral-3:3b"]
             WHS["Whisper large-v3-turbo<br/>speech-to-text on the Mac"]:::todo
             ST[("File store<br/>.data/sessions/")]
-            RX["Receiver<br/>on the Mac's screen"]
+            RX["Command post<br/>on the Mac's screen"]
             TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
         end
     end
@@ -296,7 +296,7 @@ flowchart LR
     classDef todo stroke-dasharray: 5 5
 ```
 
-Until track C is done, the receiver's map still loads from OpenFreeMap and needs the internet.
+Until track C is done, the command post's map still loads from OpenFreeMap and needs the internet.
 
 | Track | Item | Size |
 |---|---|---|
@@ -309,7 +309,7 @@ Until track C is done, the receiver's map still loads from OpenFreeMap and needs
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
 | D | `scripts/bench-local.ts`: run the clips through both modes, print per-step timings and whether the place matched; rehearse in the hall | 3 h |
-| E. Receiver | A local file store behind the storage interface. Built: `FileStore` in `lib/reports/store.ts`, in `.data/sessions/` | done |
+| E. Command post | A local file store behind the storage interface. Built: `FileStore` in `lib/reports/store.ts`, in `.data/sessions/` | done |
 
 A, B and C can run in parallel.
 
@@ -330,7 +330,7 @@ Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localho
 | Our own certificate authority installed on the phone | Installs a profile once | Our phones only | 1 to 2 h |
 | Real certificate for a domain we own, router points it at the MacBook | Nothing | Any phone, including a judge's | 2 to 3 h, needs a domain and a travel router |
 
-The native transmitter sidesteps this: it may use plain `http://` on the local network, and with on-device speech-to-text (see [Transmitter](#transmitter)) the MacBook only runs extraction and the resolver. The receiver on the MacBook's own screen and typed reports need no certificate at all.
+The native transmitter sidesteps this: it may use plain `http://` on the local network, and with on-device speech-to-text (see [Transmitter](#transmitter)) the MacBook only runs extraction and the resolver. The command post on the MacBook's own screen and typed reports need no certificate at all.
 
 Open calls for Alex: whose phones (ours only, or any phone); travel router or the Mac's hotspot; Ukrainian offline or English and French only (a small model may handle Ukrainian dictionary forms poorly); Mistral's open models first for the European story, or whichever is fastest.
 
