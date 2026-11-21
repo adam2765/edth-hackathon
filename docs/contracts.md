@@ -110,7 +110,7 @@ A clip with more than one voice that names a place: `evidence.rule` is `voices_d
 
 A track is something on the map that is not a reporting unit: a unit sees it, or knows of it, and reports it by voice. For reconnaissance only [145]. The rules are in `lib/geo/tracks.ts`:
 
-- **Who the report is about** is the model's reading checked against the words. When they disagree, the app asks [147].
+- **Who the report is about** is the model's reading checked against the words. When they disagree, the app asks [147]. A track number or a contact ("Unknown contact, two blocks east") makes it a track whatever the model said [180].
 - **Whose it is** comes from the words alone. Nothing is hostile unless a hostile word was said; with no word it is unknown [148].
 - **Where it is:** by a place, or by a distance and a compass direction from the observer. A track report never moves the speaker [149].
 - **Its number** is given when the report is saved, one count per mission. The speaker names it later: "Track 3 moved to the station" [150].
