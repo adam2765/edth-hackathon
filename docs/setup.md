@@ -100,9 +100,14 @@ component. The three normal commands above remain the daily procedure.
 | Phone code server | `npm run start:phone` |
 | Web development server | `npm run dev -- -p 3117` |
 
-Direct coordinator commands can use `.env.local`. For managed hosted inference, export
-`PROVIDER_MODE=hosted` and your provider key before Start; after changing the environment,
-Stop and Start again. Keys never belong in chat, launcher configuration or Git.
+For temporary development on a computer short of RAM, set `mode` to `hosted` once in
+`.run/config.json`. Keep `MISTRAL_API_KEY` in the environment or `.env.local`, then run
+`npm start`. Start stops the local Whisper/Ollama services and uses Mistral for speech and
+extraction; it still runs the coordinator and phone code server here. No rebuild or phone
+reinstall is needed. This requires internet and sends report audio/text to Mistral. Set
+`mode` back to `local` and Start again to return to local inference. An exported
+`PROVIDER_MODE` overrides the remembered setting. Keys never belong in chat, launcher
+configuration or Git. Direct coordinator commands can also use `.env.local`.
 
 For local-only Ollama in a macOS console:
 
