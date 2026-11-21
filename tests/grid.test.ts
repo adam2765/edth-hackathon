@@ -40,6 +40,13 @@ describe("a grid reference said out loud [223]", () => {
     expect(readGrid("Квадрат UA два чотири один дев'ять один шість", KYIV)?.text).toBe("UA 241 916");
   });
 
+  it("reads a French or Ukrainian transcript's spelling [226]", () => {
+    expect(readGrid("Grille Delta Québec cinq huit six un zéro un", VINCENNES)?.text).toBe("DQ 586 101");
+    expect(readGrid("Квадрат Юніформ Альфа два чотири один дев'ять один шість", KYIV)?.text).toBe("UA 241 916");
+    expect(readGrid("Квадрат юніформ альфа 241 916", KYIV)?.text).toBe("UA 241 916");
+    for (const said of ["Я біля готелю", "Готель Україна, 5 поверх"]) expect(readGrid(said, KYIV), said).toBeNull();
+  });
+
   it("leaves distances, counts and names alone", () => {
     for (const said of ["two vehicles at three o'clock", "I see one two three", "I'm 200 metres north of the church", "Track 2, two vehicles at 300 metres", "Maidan Palace Hotel", "I'm at the château de Vincennes", "586 101"]) {
       expect(readGrid(said, VINCENNES), said).toBeNull();
