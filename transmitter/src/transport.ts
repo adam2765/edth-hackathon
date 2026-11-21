@@ -8,7 +8,7 @@ export interface SendContext {
   area: AreaId;
   /** The language the speaker uses; the question comes back in it (decision 106). */
   language: Lang;
-  /** The mission joined; null when the coordinator keeps no record (then nothing is saved for a receiver). */
+  /** The mission joined; null when the coordinator keeps no record (then nothing is saved for a command post). */
   session: string | null;
   /** Used only with no mission: in a mission the coordinator keeps each unit's last position itself. */
   lastPosition: Position | null;
@@ -33,7 +33,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
   form.append("area", ctx.area);
   form.append("language", ctx.language);
   form.append("clientTs", String(u.endedAt));
-  // The coordinator saves the report under this session and call sign for the receiver;
+  // The coordinator saves the report under this session and call sign for the command post;
   // `seq` with the client time lets it drop a report sent twice.
   if (ctx.session) form.append("session", ctx.session);
   form.append("callsign", u.callsign);
@@ -59,7 +59,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
 
 /**
  * Tells the coordinator which choice the speaker tapped (a candidate id, or null for "none of
- * these"), so the receiver's question closes and the marker moves there too. The phone has already
+ * these"), so the command post's question closes and the marker moves there too. The phone has already
  * applied the choice itself, so a failure is reported, not retried.
  */
 export async function sendAnswer(serverUrl: string, session: string, reportId: string, choice: string | null): Promise<void> {

@@ -50,7 +50,7 @@ It needs no key: nothing in it calls Mistral or Overpass. See the runs on the re
 - **Record every choice in [DECISIONS.md](DECISIONS.md):** one numbered line, appended at the end. If two people add one at the same time, keep both lines and renumber yours.
 - **Update the docs in the same commit as the change.** [docs/README.md](docs/README.md) says which file covers what.
 - **Secrets live in env vars only.** The repo is public, and so are commit author emails.
-- **Contracts change on purpose.** Changing `lib/geo/types.ts` or the fields of `POST /api/report` changes what the transmitter and the receiver rely on: say so in the decision line, and tell whoever works on the other side ([contracts](docs/contracts.md)).
+- **Contracts change on purpose.** Changing `lib/geo/types.ts` or the fields of `POST /api/report` changes what the transmitter and the command post rely on: say so in the decision line, and tell whoever works on the other side ([contracts](docs/contracts.md)).
 - **Leave the `prior-work-fri-1800` tag alone.** It marks the work done before the event.
 - **Deploys go through Alex** until the deploy question is settled ([open questions](docs/open-questions.md)).
 - **Keep `.claude/launch.json` to entries everyone can use.** Do not commit a preview entry for one worktree.

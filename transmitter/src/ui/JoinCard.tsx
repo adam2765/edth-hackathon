@@ -17,7 +17,7 @@ export function JoinCard({
   onJoin,
   busy,
   error,
-  receiverUrl,
+  commandPostUrl,
 }: {
   /** Open missions only. */
   missions: MissionSummary[];
@@ -29,7 +29,7 @@ export function JoinCard({
   busy: boolean;
   error: string | null;
   /** Where the operator opens a mission, to say so when none is open. */
-  receiverUrl: string;
+  commandPostUrl: string;
 }) {
   if (!missions.length) {
     return (
@@ -38,7 +38,7 @@ export function JoinCard({
           <Ionicons name="flag-outline" size={20} color={color.warn} />
           <Text style={type.headline}>No mission is open</Text>
         </View>
-        <Text style={type.footnote}>The base opens one on the receiver ({receiverUrl}). This list updates by itself.</Text>
+        <Text style={type.footnote}>The base opens one on the command post ({commandPostUrl}). This list updates by itself.</Text>
       </View>
     );
   }

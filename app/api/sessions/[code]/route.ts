@@ -4,8 +4,8 @@ import { getStore } from "@/lib/reports/store";
 import { sessionCode, type SessionLogReply } from "@/lib/reports/types";
 
 /**
- * A session's log for the receiver: `GET /api/sessions/<code>?after=<n>` returns the entries after
- * the first n and the total, so a receiver polling every second gets only what is new.
+ * A session's log for the command post: `GET /api/sessions/<code>?after=<n>` returns the entries after
+ * the first n and the total, so a command post polling every second gets only what is new.
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/sessions/[code]">) {
   const { code } = await ctx.params;

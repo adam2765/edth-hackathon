@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "../components/declutter";
 
-// The receiver's sizes at scale 1: a 24 px symbol (about 36 px framed), a label above it, a unit
+// The command post's sizes at scale 1: a 24 px symbol (about 36 px framed), a label above it, a unit
 // dot of radius 12 with its label below.
 const symbol = centred(0, 0, 36, 36);
 const label = (w: number): Rect => ({ x0: -w / 2, y0: -61, x1: w / 2, y1: -26 });

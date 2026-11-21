@@ -35,8 +35,8 @@ The main screen is only for reporting. Top to bottom:
   recording it turns red, counts the seconds, and a bar shows how much of the 15 seconds is used.
 - **A question card**, when the coordinator asks back. It sits directly under the talk button,
   with the choices and "None of these". The choice tapped is sent to the coordinator
-  (`POST /api/answer`), so the receiver's question closes too. Reports go to the mission joined;
-  the receiver at `/receiver` on the same coordinator shows it.
+  (`POST /api/answer`), so the command post's question closes too. Reports go to the mission joined;
+  the command post at `/cp` on the same coordinator shows it.
 - **Two tabs:** Scenarios (those for the mission's area: pick one, play it all, or tap one report) and Sent (every report
   from this phone with the coordinator's answer and timings).
 
@@ -149,7 +149,7 @@ the existing report path. Rebuild the Android development app after adding the n
 
 Checked on 21 Nov on a Samsung Galaxy S10 (SM-G973U): microphone audio reaches the offline
 coordinator as text (`timings_ms.stt: 0`). Two live reports, "I am at the town hall in Vincennes",
-placed the unit at Mairie de Vincennes (±31 m) on the receiver. This verifies build and connections;
+placed the unit at Mairie de Vincennes (±31 m) on the command post. This verifies build and connections;
 recognition accuracy, old question cards and transcription speed remain separate runtime work.
 The iOS path was not tested in this Android change.
 

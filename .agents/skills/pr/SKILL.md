@@ -39,7 +39,7 @@ Choose the smallest view that makes the point. One is usually enough.
 - **A call tree** for control flow: `POST /api/report` → transcribe → extract → resolve → record.
 - **A component tree** for a screen, with the state that matters.
 - **A shallow file tree** for what each file does after a move or a split.
-- **A Mermaid sequence diagram** for who talks to whom: transmitter, coordinator, receiver.
+- **A Mermaid sequence diagram** for who talks to whom: transmitter, coordinator, command post.
 - **A `diff` block** when the point is what changes in a shape that already exists. Diff the tree, the call stack or the rule, not the raw patch.
 - **The whole block** only when most of it is new, or a reader needs to copy it.
 
@@ -47,7 +47,7 @@ Put each picture next to the sentence it supports. Show only the calls, files, f
 
 ## Evidence
 
-Show that it works, before and after. A screenshot is best for a change you can see (the receiver, the transmitter). Otherwise, test output or a command's output: name the test that failed and now passes. For a change to extraction, give the eval scores. Say what was not checked: a real phone, hosted mode, the live site.
+Show that it works, before and after. A screenshot is best for a change you can see (the command post, the transmitter). Otherwise, test output or a command's output: name the test that failed and now passes. For a change to extraction, give the eval scores. Say what was not checked: a real phone, hosted mode, the live site.
 
 ## Merge danger
 
