@@ -63,7 +63,7 @@ Metro/USB host browses LAN advertisements and the phone verifies each candidate.
 
 Microphone and scenario utterances send audio through the same report path. The phone
 records 16 kHz mono AAC/m4a and sends it with the selected language; it does not load a
-speech model or transcribe. In local mode, the coordinator uses Whisper large-v3-turbo
+speech model or transcribe. In local mode, the coordinator uses Whisper base (temporary RAM workaround)
 through whisper-server with Silero VAD and ffmpeg conversion. Hosted mode uses Mistral.
 A report counts as successful only after the coordinator acknowledges saving it.
 

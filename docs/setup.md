@@ -9,7 +9,7 @@ Agents never read `.env` files or print keys. Setup does not push or deploy the 
 | Needed for | Tools |
 |---|---|
 | Everyone | Git, Node.js 24.3+ and npm; a current browser |
-| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper large-v3-turbo and Silero VAD (about 575 MB, checksum-verified by Build) |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper base (temporary RAM workaround) and Silero VAD (about 61 MB, checksum-verified by Build) |
 | Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
 | iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
@@ -40,10 +40,10 @@ prepared or downloaded on the phone. Its existing setup command is now a quick r
 notice. Existing native libraries stay compatible, so this change needs a JavaScript reload,
 not a native rebuild. Scenarios use their compressed audio through the same report path.
 
-For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper turbo and VAD models on the host, about 575 MB.
+For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper base and VAD models on the host, about 61 MB.
 Ask before these system installs and large downloads. Start validates existing models and
 starts whisper-server; it does not download them. `WHISPER_MODEL_FILE` can provide a local
-copy of the pinned turbo model instead of a download.
+copy of the pinned base model instead of a download.
 
 The web build prepares the map worker and browser speech runtime, and tries to fetch a
 77 MB Ukrainian reply voice. If unavailable, the browser uses its system voice. Setup
@@ -100,14 +100,13 @@ component. The three normal commands above remain the daily procedure.
 | Phone code server | `npm run start:phone` |
 | Web development server | `npm run dev -- -p 3117` |
 
-For temporary development on a computer short of RAM, set `mode` to `hosted` once in
-`.run/config.json`. Keep `MISTRAL_API_KEY` in the environment or `.env.local`, then run
-`npm start`. Start stops the local Whisper/Ollama services and uses Mistral for speech and
-extraction; it still runs the coordinator and phone code server here. No rebuild or phone
-reinstall is needed. This requires internet and sends report audio/text to Mistral. Set
-`mode` back to `local` and Start again to return to local inference. An exported
-`PROVIDER_MODE` overrides the remembered setting. Keys never belong in chat, launcher
-configuration or Git. Direct coordinator commands can also use `.env.local`.
+For this temporary RAM workaround, the coordinator uses Whisper base and keeps Ollama’s
+3B model resident. There is no idle unload/reload cycle. The phone still sends audio;
+Build, Start and Stop stay the same. Base may recognize speech less accurately than turbo.
+The larger turbo model remains on disk for later use; it is not loaded.
+
+The remembered provider mode is local. Keys never belong in chat, launcher configuration
+or Git. Direct coordinator commands can use `.env.local` if needed.
 
 For local-only Ollama in a macOS console:
 

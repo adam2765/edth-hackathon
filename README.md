@@ -178,7 +178,7 @@ Unrelated processes are left alone.
 
 ### Offline: models on this computer
 
-`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs locally through whisper.cpp’s whisper-server with Whisper large-v3-turbo and Silero VAD. The phone sends audio, with its language; typed reports still work. Build prepares the checksum-verified host models once (about 575 MB); Start runs the service and waits for readiness.
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs locally through whisper.cpp’s whisper-server with Whisper base (temporary RAM workaround) and Silero VAD. The phone sends audio, with its language; typed reports still work. Build prepares the checksum-verified host models once (about 61 MB); Start runs the service and waits for readiness.
 
 Install the host tools and Ollama model using [setup](docs/setup.md#install-once). On macOS the tools are `brew install ollama whisper.cpp ffmpeg`. Then use Build followed by Start above; Build prepares the Whisper models once.
 

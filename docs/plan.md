@@ -277,7 +277,7 @@ flowchart LR
         subgraph MAC["MacBook, M1 Pro"]
             CO["Coordinator<br/>PROVIDER_MODE=local"]
             OLL["Ollama<br/>ministral-3:3b"]
-            WHS["Whisper large-v3-turbo<br/>speech-to-text on the coordinator"]
+            WHS["Whisper base (temporary RAM workaround)<br/>speech-to-text on the coordinator"]
             ST[("File store<br/>.data/sessions/")]
             RX["Receiver<br/>on the Mac's screen"]
             TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
@@ -304,7 +304,7 @@ Until track C is done, the receiver's map still loads from OpenFreeMap and needs
 | A | Serve the app from the MacBook over HTTPS the phones accept | 1 to 3 h |
 | A | Prove on iOS and Android, mobile data off, that the microphone opens | 0.5 h |
 | B. Models | The `PROVIDER_MODE` switch | done |
-| B | Local speech-to-text: whisper-server with quantized large-v3-turbo, VAD and ffmpeg, about 575 MB of host models | integrated; live validation pending setup |
+| B | Local speech-to-text: whisper-server with quantized base (temporary RAM workaround), VAD and ffmpeg, about 61 MB of host models | integrated; live validation pending setup |
 | B | Local extraction: Ministral 3 3B through Ollama with the same schema, 3 GB. Built; the prompt is not tuned for it yet | done |
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |

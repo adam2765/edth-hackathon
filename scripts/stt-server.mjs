@@ -1,4 +1,4 @@
-// Speech-to-text on the coordinator in offline mode (decision 182): fetches Whisper large-v3-turbo
+// Speech-to-text on the coordinator in offline mode (decisions 182, 185): prepares Whisper base (temporary RAM workaround)
 // and the Silero voice-activity model once into models/ (git-ignored), checksums checked, then runs
 // whisper.cpp's whisper-server on this computer only.
 // Build: npm run build. Start/stop: managed with the other servers.
@@ -13,12 +13,13 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
+// Temporary default for the 8 GB development Mac (decision 185); transcription stays on the host.
 const WHISPER = {
-  name: "Whisper large-v3-turbo",
-  file: "ggml-large-v3-turbo-q5_0.bin",
-  bytes: 574041195,
-  sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
-  url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+  name: "Whisper base",
+  file: "ggml-base-q5_1.bin",
+  bytes: 59707625,
+  sha256: "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+  url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
   from: process.env.WHISPER_MODEL_FILE,
 };
 // Finds the speech in a clip, so silence comes back as no words instead of Whisper's "Thank you."
@@ -84,7 +85,7 @@ try {
   if (preparing) { console.log("Coordinator speech models ready (checksums verified)."); process.exit(0); }
   if (!has("whisper-server", "--help")) throw new Error("whisper-server not found. Install whisper.cpp (macOS: brew install whisper.cpp); see docs/setup.md.");
   if (!has("ffmpeg", "-version")) throw new Error("ffmpeg not found. Install ffmpeg (macOS: brew install ffmpeg); see docs/setup.md.");
-  console.log(`Whisper large-v3-turbo and Silero VAD ready (checksums verified). Starting whisper-server on 127.0.0.1:${port}.`);
+  console.log(`Whisper base and Silero VAD ready (checksums verified). Starting whisper-server on 127.0.0.1:${port}.`);
   // --convert: ffmpeg turns the browser's webm and the phone's m4a into the WAV Whisper reads.
   const args = ["-m", whisper, "--host", "127.0.0.1", "--port", port, "--convert", "--vad", "--vad-model", vad];
   const server = spawn("whisper-server", args, { stdio: "inherit" });

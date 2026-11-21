@@ -3,7 +3,7 @@
  *   hosted  Mistral, with MISTRAL_API_KEY. Mistral is asked to tell speakers apart (diarization):
  *           where the speaker changes, the transcript gets a ">>" mark, the same mark
  *           lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
- *   local   Whisper large-v3-turbo in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
+ *   local   Whisper in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
  *           (decision 182). Audio never leaves the computer. It does not tell speakers apart.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  */
@@ -141,7 +141,8 @@ export function withoutSoundMarks(text: string): string {
  * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
  * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
  * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
- * scenario clips and twice put a prompt word in the transcript (upstream PR #23).
+ * scenario clips and twice put a prompt word in the transcript (upstream PR #23). The temporary
+ * base-model workaround keeps this request format; its recognition accuracy is not remeasured.
  */
 class WhisperServerTranscriber implements Transcriber {
   name = "whisper-server";

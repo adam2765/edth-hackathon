@@ -16,8 +16,8 @@ Unrelated remote main changes (command-post UI, resolver, extraction prompt and 
 are excluded. This is a selective functional integration, not a merge of all remote main.
 No upstream extraction prompt is changed or evaluated as part of this task.
 
-Local transcription needs whisper.cpp’s whisper-server, ffmpeg and about 575 MB of pinned
-host models. They are not installed or downloaded without approval. Focused provider and
+The original turbo integration needed whisper.cpp’s whisper-server, ffmpeg and about
+575 MB of pinned host models. They are not installed or downloaded without approval. Focused provider and
 start/stop checks use stubs; a live phone-to-coordinator microphone check follows setup.
 
 Setup on Brian’s Mac, 21 November: host tools installed and turbo/VAD model checksums
@@ -29,3 +29,10 @@ Build/Start then succeeded with GPU Whisper and extraction warm-up; coordinator 
 returned `ready: true`. The updated phone app loaded and its old model directory stayed
 empty. A real microphone report is still unmeasured. An unexpected
 Whisper signal exit now reports failure instead of exit code zero.
+
+Temporary RAM workaround [185]: use the already available Whisper base model on the
+coordinator (about 61 MB of model files including VAD), retain Ollama’s resident model,
+and restore remembered local mode. Hosted inference was declined. A live model reload
+succeeded and health stayed ready. Whisper’s reported model/working buffers fell from
+about 891 MB to 267 MB; these figures are not total process memory. The existing base
+file was checksum-verified and copied on the Mac, with no download or phone model install.
