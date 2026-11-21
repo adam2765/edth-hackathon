@@ -140,9 +140,9 @@ describe("a contact is something seen", () => {
     expect(readSubject(intent({ landmark_name: "Bérault" }), "Lost contact with BRAVO 2 at Bérault").subject).toBe("self");
   });
 
-  it('"two blocks" is no distance (decision 51), so the app asks how far in the way said, and the speaker stays put', () => {
+  it('"two blocks" is no distance (decision 51): at the castle no street runs east to count along, so the app asks how far in the way said, and the speaker stays put', () => {
     const r = resolveReport({ ...base, intent: modelRead, transcript: heard, lastPosition: at(CASTLE) });
-    expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "move_incomplete" }, question: "How far east is it? Or name a place near it." });
+    expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "blocks_uncounted" }, question: "How far east is it? Or name a place near it." });
     expect(r.track).toMatchObject({ affiliation: null, kind: null });
     expect(r.track?.placement).toBeUndefined();
     expect(r.pin).toBeUndefined();

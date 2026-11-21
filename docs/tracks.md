@@ -120,7 +120,7 @@ flowchart TD
 | Said | Model reads | Result |
 |---|---|---|
 | "Track 3 moved to the station." | anything | a track |
-| "Unknown contact, two blocks east." | anything | a track [180]; "two blocks" is no distance [51], so it asks "How far east is it?" |
+| "Unknown contact, two blocks east." | anything | a track [180]; the two blocks are counted along the observer's street [184], or it asks "How far east is it?" |
 | "Enemy vehicle in front of the town hall." | a track | a track |
 | "I can see the church." | a track | asks: no word names a thing |
 | "Enemy at the station." | the speaker | asks: a hostile word was said |
@@ -130,7 +130,9 @@ flowchart TD
 
 The question is "Is that where you are, or something you see? Say 'I am at' or 'I see'." The last check was added with the script [157]: hosted Mistral read "Our drone team is at Vincennes station" as the speaker's own position and moved the unit.
 
-**A contact** [180]. "Contact" is the radio word for something seen. It counts when it opens the report or stands next to a word for whose it is, a doubt word, unknown, new, visual or a count: "Contact, two blocks east", "enemy contact behind the castle", "contact ennemi", "невідомий контакт". "Lost contact with BRAVO 2", "in contact with the base" and "the contact point" do not count. Hosted Mistral read "Unknown Contact, two blocks east" as the speaker moving east; code now makes it a track whatever the model says. A track never moves the speaker, so this is the safe reading when it is wrong. With no distance the app asks how far, in the way the speaker gave: "How far east is it? Or name a place near it."
+**A contact** [180]. "Contact" is the radio word for something seen. It counts when it opens the report or stands next to a word for whose it is, a doubt word, unknown, new, visual or a count: "Contact, two blocks east", "enemy contact behind the castle", "contact ennemi", "невідомий контакт". "Lost contact with BRAVO 2", "in contact with the base" and "the contact point" do not count. Hosted Mistral read "Unknown Contact, two blocks east" as the speaker moving east; code now makes it a track whatever the model says. A track never moves the speaker, so this is the safe reading when it is wrong.
+
+**Blocks** [184]. "Two blocks east" is counted along the street lines, in code; the model gives no distance for it [51]. From the observer, the count runs along the street they are on that runs east; from a street they name ("two blocks east of rue X"), along rue X if it runs east, or from where a street that runs east crosses it. "Two blocks" is the second crossing counting every street that meets this one, or the second counting only the streets that cross it right through. On Rue de Fontenay going east both counts land on Avenue de Vorges, so the track goes there. On Avenue de Paris, Rue Segond joins from one side at 79 m and Rue de Colmar crosses at 147 m, so the second crossing is Rue de Colmar or Rue de Montreuil (368 m), and the app asks which. The circle reaches back half a block. When the blocks cannot be counted, the app asks how far, in the way the speaker gave: "How far east is it? Or name a place near it.", or from a street, "How far east of Rue de Fontenay?"
 
 ## Where the track goes
 
@@ -161,14 +163,14 @@ flowchart TD
 | "Suspicious vehicle near the church." | Placed | "Track 3, suspect vehicle, Église Notre-Dame." The nearest church to the observer |
 | "Enemy patrol near the cemetery." | Ask which | "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?" |
 | "I see a drone about 300 metres north of me." | Placed, ≈ | "Track 2, unknown drone, 300 metres north of you." |
-| "Hostile drone, 1 km east, heading north." | Placed, ≈ | "Track 5, hostile drone, 1000 metres east of you." Its symbol points north [184] |
+| "Hostile drone, 1 km east, heading north." | Placed, ≈ | "Track 5, hostile drone, 1000 metres east of you." Its symbol points north [186] |
 | The same, from a unit with no position yet | Ask for a place | "I don't know where you are. Name a place near what you see." |
 | "Enemy vehicle to the east." | Ask how far | "How far east is it? Or name a place near it." [180] |
-| "Hostile drone 1 km away, heading north." | Ask which way | "Which way is it from you? Give a compass direction, or name a place near it." [184] |
+| "Hostile drone 1 km away, heading north." | Ask which way | "Which way is it from you? Give a compass direction, or name a place near it." [186] |
 
 A track on a street or along a river gets a circle of at least 150 m. "Track 1 moved to Avenue de Nogent" is read as "at Avenue de Nogent": the model often reads "moved to" as "towards", so only a word such as "heading" or "on its way" makes it a direction [149]. A compass word said with a place, as in "moving east", is the way the track was moving, not where it is.
 
-**Where it is, and the way it is going** [184]. A report can hold two compass words: "Hostile drone, 1 km east, heading north." The offline model drops one, swaps them or merges them; the swap pinned the drone 1 km north with no question. So code reads them from the words, as it reads the subject:
+**Where it is, and the way it is going** [186]. A report can hold two compass words: "Hostile drone, 1 km east, heading north." The offline model drops one, swaps them or merges them; the swap pinned the drone 1 km north with no question. So code reads them from the words, as it reads the subject:
 
 | The compass word comes | It says | Example |
 |---|---|---|

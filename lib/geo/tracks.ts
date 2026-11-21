@@ -12,6 +12,7 @@
  * A report about a track never moves the speaker.
  */
 import { resolve, type ResolveInput } from "./resolver";
+import { blocksSaid } from "./blocks";
 import type { Affiliation, Candidate, Direction, Intent, Placement, Resolution, TrackKind, TrackResolution } from "./types";
 
 /** A track seen "on" a street or along a river is somewhere along it, not at the point nearest the observer. */
@@ -356,14 +357,15 @@ const only = <T>(xs: T[]): T | null => (new Set(xs).size === 1 ? xs[0] : null);
  * the swap put the pin 1 km north with no question. The words decide when they are clear:
  *   - a heading is the compass word after a verb of moving; with none, the model's heading stands
  *     only on a compass word whose role is not clear, never on one that says where the thing is;
- *   - with no place named, where it is is the compass word after a distance or before "of"; with
- *     none, the model's direction stands only on a compass word whose role is not clear.
+ *   - with no place named, or blocks counted from one, where it is is the compass word after a
+ *     distance or before "of"; with none, the model's direction stands only on a compass word
+ *     whose role is not clear.
  * One compass word is not both. Two different ones for the same role are not a reading: that one
  * is left out, and the app asks.
  * When no compass word is found at all, the model's reading is kept: the word lists may miss one.
  * Returns the intent to place with, and what changed, for the evidence.
  */
-export function compassChecked(intent: Intent, transcript: string, hasPlace: boolean): { intent: Intent; why: string | null } {
+export function compassChecked(intent: Intent, transcript: string, placeAlone: boolean): { intent: Intent; why: string | null } {
   const words = compassWordsSaid(transcript);
   if (words.length === 0) return { intent, why: null };
   const by = (role: CompassRole) => words.filter((w) => w.role === role).map((w) => w.dir);
@@ -371,8 +373,8 @@ export function compassChecked(intent: Intent, transcript: string, hasPlace: boo
   const going = by("going");
   const where = by("where");
 
-  const modelBearing = hasPlace ? null : bearingSaid(intent);
-  const bearing = hasPlace ? null : where.length ? only(where) : backed(modelBearing) ? modelBearing : null;
+  const modelBearing = placeAlone ? null : bearingSaid(intent);
+  const bearing = placeAlone ? null : where.length ? only(where) : backed(modelBearing) ? modelBearing : null;
 
   const modelHeading = intent.track_heading ?? null;
   let heading = going.length ? (only(going) ?? (modelHeading && going.includes(modelHeading) ? modelHeading : null)) : backed(modelHeading) ? modelHeading : null;
@@ -385,7 +387,7 @@ export function compassChecked(intent: Intent, transcript: string, hasPlace: boo
     out.track_heading = heading;
     changes.push(`moving ${heading ?? "not said"} (read ${modelHeading ?? "none"})`);
   }
-  if (!hasPlace && bearing !== modelBearing) {
+  if (!placeAlone && bearing !== modelBearing) {
     out.direction = bearing;
     if (intent.relation && /_of$/.test(intent.relation)) out.relation = null;
     changes.push(`${bearing ? `${bearing} of the observer` : "no way from the observer"} (read ${modelBearing ?? "none"})`);
@@ -438,8 +440,10 @@ function describeSaid(t: TrackResolution, lang: Lang): string {
   return words.filter(Boolean).join(" ");
 }
 
-/** A place, by name or by kind: then a compass word is not where the thing is from the speaker. */
+/** A place, by name or by kind. */
 const placeSaid = (intent: Intent) => !!(intent.landmark_name?.trim() || intent.landmark_name_lemma?.trim() || intent.landmark_category);
+/** A place with no blocks counted from it: then a compass word is not where the thing is. */
+const placeAlone = (intent: Intent, transcript: string) => placeSaid(intent) && !blocksSaid(transcript);
 
 /**
  * What the phone says back: "Track 3, unknown vehicle, Mairie de Vincennes." The compass words are
@@ -448,7 +452,7 @@ const placeSaid = (intent: Intent) => !!(intent.landmark_name?.trim() || intent.
 export function sayBack(res: Resolution, read: Intent, transcript: string): string | undefined {
   const t = res.track;
   if (!t || res.status !== "resolved") return undefined;
-  const intent = compassChecked(read, transcript, placeSaid(read)).intent;
+  const intent = compassChecked(read, transcript, placeAlone(read, transcript)).intent;
   const lang: Lang = intent.language === "fr" || intent.language === "uk" ? intent.language : "en";
   const w = WORDS[lang];
   const said = describeSaid(t, lang);
@@ -558,7 +562,8 @@ export function resolveReport(input: ReportResolveInput): Resolution {
     return { status: "unresolved", candidates: [], question: prompt(lang, "subject"), evidence: { rule: "subject_unclear", detail: reading.why } };
   }
   const hasPlace = placeSaid(said);
-  const checked = compassChecked(said, transcript, hasPlace);
+  const alone = placeAlone(said, transcript);
+  const checked = compassChecked(said, transcript, alone);
   const intent = checked.intent;
   const why = checked.why ? `${reading.why}; ${checked.why}` : reading.why;
 
@@ -602,15 +607,21 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   }
 
   // Where the thing is, read as a position: a place with a relation, or a distance and a bearing
-  // from the observer. With a place, a compass word is not where the thing is: `track_heading` has
-  // the way it is moving.
-  const where: Intent = { ...intent, kind: "position", relation, direction: hasPlace ? null : intent.direction };
+  // from the observer. With a place, a compass word is not where the thing is (`track_heading` has
+  // the way it is moving), unless blocks are counted that way: "two blocks east on Avenue de Paris".
+  const where: Intent = { ...intent, kind: "position", relation, direction: alone ? null : intent.direction };
   const r = resolve({ ...input, intent: where });
   const evidence = { ...r.evidence, detail: `${why}; ${r.evidence.detail}` };
 
   if (r.status === "ambiguous") return { status: "ambiguous", candidates: r.candidates.map(forTrack), question: r.question, evidence, track };
+  // Blocks that could not be counted: how far. From a place, the resolver's question names it.
+  if (r.evidence.rule === "blocks_uncounted") {
+    const q = ask(r.evidence.rule, r.evidence.detail, "how_far");
+    return hasPlace && r.question ? { ...q, question: r.question } : q;
+  }
   if (r.status === "unresolved" || !r.pin) {
-    const which: TrackPrompt = r.evidence.rule === "dead_reckoning_no_start" || r.evidence.rule === "crossing_no_start" ? "no_observer" : r.evidence.rule === "move_incomplete" ? (intent.distance_m != null ? "which_way" : "how_far") : "where";
+    const noStart = ["dead_reckoning_no_start", "crossing_no_start", "blocks_no_start"].includes(r.evidence.rule);
+    const which: TrackPrompt = noStart ? "no_observer" : r.evidence.rule === "move_incomplete" ? (intent.distance_m != null ? "which_way" : "how_far") : "where";
     return ask(r.evidence.rule, r.evidence.detail, which);
   }
 

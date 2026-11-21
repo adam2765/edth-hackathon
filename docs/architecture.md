@@ -165,7 +165,7 @@ flowchart TB
     GAZ[("Gazetteer")]
 
     WHO{"Who is it about?"}
-    FIND["Find candidates<br/>by name, by category near the last position,<br/>a street crossing, or a stated move"]
+    FIND["Find candidates<br/>by name, by category near the last position,<br/>a street crossing, blocks counted, or a stated move"]
     FIT{"How many<br/>fit?"}
     PLACE["Place it<br/>relation, stated distance, circle"]
 

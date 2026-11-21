@@ -41,6 +41,9 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | The same, street not known | the nearest crossings around the last position, in different directions; a compass direction said in the report picks the one ahead |
 | "At the corner of rue X" | the crossings of rue X, those with the unit's own street first, then as for a named place |
 | A crossing with no last position | `unresolved`: asks for the streets that cross there |
+| "Two blocks east", "deux rues à l'est", "два квартали на схід" | counted in code along the street the unit is on that runs east, never turned into metres by the model [51]. "Two blocks" is the second crossing counting every street that meets it, or the second counting only streets that cross it right through. Both the same crossing: placed there, with a ≈; two crossings: `ambiguous` between them [184] |
+| "Two blocks east of rue X" | the same, along rue X if it runs east, or from where a street that runs east crosses rue X: the unit's own street if it is one, else the nearest when it is much nearer than the next, else `ambiguous` |
+| Blocks that cannot be counted: "a few blocks", more than six, no street running that way, fewer crossings than blocks, or counted from a place that is not a street | `unresolved`: asks how far ("How far east of Rue de Fontenay? Or name a place near it.") [184] |
 
 Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations (eight points) offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
 
@@ -66,7 +69,7 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 | "Enemy vehicle in front of the town hall" | a track at that place, found as for a position report, measured from the observer |
 | "I see a drone about 300 metres north of me" | a track by dead reckoning from the observer, shown as an estimate; the circle is the observer's own plus 0.4 × the distance |
 | "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far ("How far east is it?"), or for a place near it |
-| "Unknown contact, two blocks east" | a track whatever the model reads: "contact" opening the report, or next to whose it is, unknown, new or a count, is something seen [180]. "Two blocks" is no distance [51], so the app asks how far east. "Lost contact with BRAVO 2" stays about the speaker |
+| "Unknown contact, two blocks east" | a track whatever the model reads: "contact" opening the report, or next to whose it is, unknown, new or a count, is something seen [180]. "Two blocks" is counted along the observer's street [184]; when it cannot be, the app asks how far east. "Lost contact with BRAVO 2" stays about the speaker |
 | No word for whose it is ("a vehicle near the church") | unknown. Hostile only when a hostile word was said; "suspicious" or "possible enemy" is a suspect; "our" and "friendly" are friendly; "civilian" is neutral |
 | "Track 3 moved to the station" | a new sighting of Track 3, with a trail from the last one |
 | "Track 3 is hostile" | only what it is changes |
