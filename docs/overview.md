@@ -1,6 +1,6 @@
 # Overview
 
-EDTH Paris 2026, challenge 01 (Lysk). Two of Lysk's three judged items are met on the live site. The third, a shared map with a history anyone can replay, is our biggest gap.
+EDTH Paris 2026, challenge 01 (Lysk). Two of Lysk's three judged items are met on the live site. The third, a shared map with a history anyone can replay, was built on Friday night and runs on a laptop; it is not on the live site yet and has not been run with real phones.
 
 ## The challenge
 
@@ -12,7 +12,7 @@ What the jury will look at, from Lysk's deck ([PDF on Drive](https://drive.googl
 |---|---|
 | It works live: speak, and the map updates within seconds | Met on the live site: about 1 to 3 s from release to pin |
 | Natural phrasing is understood ("south of the church", "towards 35th street") | Met for both deck sentences, with a real street in place of "35th street" |
-| Marker and path, with timestamps and a browsable history | Partly met. One phone shows a marker, a trail, times and a log. The deck shows a *shared* map, a marker labelled with a call sign (ALPHA 2), and a history "anyone can replay". None of that exists yet. This is our biggest gap. |
+| Marker and path, with timestamps and a browsable history | Built on Friday 20 November, evening, where the coordinator runs on a computer [98 to 103, 107 to 114]. The deck shows a *shared* map, a marker labelled with a call sign (ALPHA 2), and a history "anyone can replay"; the receiver at `/receiver` has all three. Checked with typed reports and in the iPhone simulator, not yet with real phones or a projector. The live site keeps no reports, so its receiver is empty [101]. |
 
 Our own differentiators (asking back, Ukrainian, no invented coordinates) come on top of these three, not instead of them. The deck mentions none of them.
 
@@ -33,10 +33,13 @@ Times are Paris.
 |---|---|
 | Fri, before 18:00 | Prior work: the stage-1 web app. The tag `prior-work-fri-1800` marks it; leave the tag where it is. The jury counts only work done during the event. |
 | Fri evening | Shared map and replay ([plan](plan.md#receiver-shared-map-and-replay)). On-device speech-to-text in the transmitter (built). |
-| Sat morning | Two new teammates join. Local mode starts and needs at least two people. |
+| Sat 08:00 | Two new teammates join ([kickoff.md](kickoff.md)). Alex looks for Lysk's mentors ([questions](open-questions.md#for-lysk)). Local mode starts and needs at least two people. |
 | Sat midday | Local mode working and tested in the hall |
 | Sat afternoon | Field walk for an error figure; show Lysk's mentors a working version |
+| Sat 18:00 | Presentable: a timed run-through of the demo and a first deck ([work-split.md](work-split.md)) |
+| Sat evening, Sun morning | Pre-selection: the organisers pick the teams that pitch on Demo Day (their email of 20 Nov; exact times to come) |
 | Sat 22:00 | Feature freeze |
 | Sun 10:00 | Demo video done |
-| Sun 11:00 | Deck done |
+| Sun 11:00 | Deck done, as a PDF or PPTX with clickable links |
 | Sun 11:30 | Submit (deadline 12:00), file named with the team number |
+| Sun 13:00 | Demo Day, until 16:00 |

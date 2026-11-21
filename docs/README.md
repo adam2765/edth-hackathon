@@ -4,6 +4,8 @@ Everything the team needs to know about Voice-to-Map, as plain Markdown in this 
 
 ## Start here
 
+Joining on Saturday 21 November? Start with the [kickoff](kickoff.md): it is the fifteen-minute version of everything below.
+
 New to the project? Read these in order:
 
 1. [Overview](overview.md): the challenge, what the jury looks at, our approach, the timeline.
@@ -25,6 +27,8 @@ New to the project? Read these in order:
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
+| [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
+| [work-split.md](work-split.md) | A proposal, not a decision: five streams of work for four people, with one for the pitch | The team agrees a split, or the mentors' answers move it |
 | [receiver-review.md](receiver-review.md) | The Saturday-night review of the receiver: what was fixed, and the decisions left for Alex | A decision in it is made; delete it when none are left |
 | [handoff-android-microphone.md](handoff-android-microphone.md) | Handoff: the Android microphone transcribed on the phone, so it needs no key | Delete it when the work is done |
 
