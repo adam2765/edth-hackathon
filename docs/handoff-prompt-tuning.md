@@ -77,6 +77,8 @@ Done: the eval, the skills, one attack and one tune (two places in one report).
 4. **"Copy that, moving out" read as a movement** (`o-moving-out`): the rule for `other`.
 5. **Attack the rules with few cases:** tracks (7 cases), crossings, lemmas on the 3B model, distances in words.
 
+Not a prompt cycle, but waiting on one: "I'm at Vincent station." pins a school named Vincent d'Indy through the resolver ([known-gaps.md](known-gaps.md)). Add it as a case once the resolver asks back there ([evals/README.md](../evals/README.md#open) has the details).
+
 Questions for Alex before they are acted on, also in [evals/README.md](../evals/README.md#open):
 - May the model repair a misheard name ("bear oh" to "Bérault")?
 - Should `p-two-places` and `fr-leaving` get a start position, which changes their expected outcome?
