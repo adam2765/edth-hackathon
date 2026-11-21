@@ -45,7 +45,8 @@ The one sentence: speak, and a marker with your call sign moves on a shared map;
 | The final demo script, and who holds which phone | 4 | Role 4, at the 18:00 run-through |
 | Seconds from speech to marker on a real phone | 3, 5 | Role 4's timings. The 1 to 3 s today is hosted mode. |
 | "Built" becomes "Met" for marker, path and history | 5 | A mission with three real phones and a projector |
-| Each coordination card: built, or cut | 9 | At the freeze. Answering from the command post is merged [178]; call signs from the words and spoken answers are on branches today. |
+| Who is asked back | 7 | Since the phone became a radio [208], a question goes to the operator, not the phone. The slide still shows the phone's question: swap in the command post's question card or the Unassigned tray [203], and say the operator is asked. |
+| Each coordination card: built, or cut | 9 | At the freeze. Merged: answering from the command post [178], call signs from the words against a roster [200], and the Unassigned tray [203]. Spoken answers are measured, not built [199]: swap that card for the tray unless they land. |
 | The eval, run again; the field-walk error in metres | 11 | `npm run eval:extract -- --resolve --repeat 3` on both models; the field walk |
 | The effector line | 12 | What we show by Sunday. Tracks are for reconnaissance only today [145]; the line, and the tracks slide's wording, change only with a decision that changes 145. |
 | Video link | 13 | The backup video, recorded after the freeze |
