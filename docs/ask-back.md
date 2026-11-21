@@ -1,6 +1,6 @@
 # Asking back by voice
 
-Today a question waits for the operator: the command post shows its choices and answers for the unit (`POST /api/answer`, [178]). Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [207]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
+Today a question waits for the operator: the command post shows its choices and answers for the unit (`POST /api/answer`, [178]). Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
 
 Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199].
 
@@ -67,7 +67,7 @@ Local, every round:
 
 ## Open
 
-- **Who asks back.** Heard third hand on 21 November: the speakers have radios, and a live operator is on the other end. If the mentors confirm it, the question goes to the operator, who asks it over the radio, and the reader at most suggests a choice on the command post for the operator to confirm. A wrong suggestion then costs a click, not a wrong marker. The command post can already answer for a unit [178], and since decision 207 the phone leaves every question to it.
+- **Who asks back.** Heard third hand on 21 November: the speakers have radios, and a live operator is on the other end. If the mentors confirm it, the question goes to the operator, who asks it over the radio, and the reader at most suggests a choice on the command post for the operator to confirm. A wrong suggestion then costs a click, not a wrong marker. The command post can already answer for a unit [178], and since decision 208 the phone leaves every question to it.
 - The Ukrainian and French replies were written without a native speaker, like the other cases [known gaps](known-gaps.md).
 - All replies are typed; none went through speech-to-text.
 - Follow-ups to the prompts that have no choices ("How far east is it?", "Where is it?") are not in the eval yet. For a track they lose the track today: "by the church" in reply to "Where is it?" is read as a new report about the speaker (from reading the code, not run).

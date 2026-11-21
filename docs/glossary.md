@@ -17,7 +17,7 @@
 | Estimate (≈) | A position worked out from a movement, not from a named place; shown with ≈ |
 | Gazetteer | Our local list of named places from OpenStreetMap, one file per area ([gazetteer.md](gazetteer.md)) |
 | Gone | A track the command post took off the map. It stays in the list and the log, and comes back when the command post puts it back or a unit reports it again |
-| Join | A phone entering a mission with a call sign and its own device id. The transmitter no longer joins: it picks a mission and sends its code, like a radio tuned to a net [207] |
+| Join | A phone entering a mission with a call sign and its own device id. The transmitter no longer joins: it picks a mission and sends its code, like a radio tuned to a net [208] |
 | Local mode | Running the whole pipeline on a laptop with no internet ([plan.md](plan.md#local-mode)) |
 | Mission | A run of the demo or an exercise: a code (`vincennes-1`), a name, an area, an optional start point, open or ended. One log. The code calls it a session |
 | Plot | A change to a track made by hand at the command post: place, change, move, gone or back. One `plot` line in the log; no model is involved |

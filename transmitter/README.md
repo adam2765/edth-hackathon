@@ -3,7 +3,7 @@
 A small native app (Expo, React Native) that stands in for a field radio: it sends spoken
 position reports to the coordinator (`POST /api/report` on the web app in the folder above).
 Like a radio on a net, it does not join or name itself, and it does not answer questions
-([decision 207](../DECISIONS.md)). The speaker says the call sign ("Alpha 1, at the château"),
+([decision 208](../DECISIONS.md)). The speaker says the call sign ("Alpha 1, at the château"),
 the coordinator reads it from the words against the mission's roster, and the operator on the
 command post (`/cp`) places what it is unsure of and answers questions.
 
@@ -33,7 +33,7 @@ The main screen is only for reporting. Top to bottom:
   each report. With other missions open, "Change" offers them. When the base ends the mission,
   the phone says so within 5 seconds and offers the open ones; it waits for a pick, so it never
   moves to another mission by itself. A coordinator that keeps no record (the live site) has no
-  missions: the phone reports without one [114, 207].
+  missions: the phone reports without one [114, 208].
 - **A notice**, only when the next report would fail: the coordinator is not answering, or
   speech-to-text is set to the phone and its model is not downloaded.
 - **The talk button** and, under it, one status line: listening, sending, sent, held for the
@@ -72,9 +72,39 @@ Android: `npx expo run:android`. This is a native build, so Expo Go cannot run i
 For the Mac USB workflow with Studio closed, use the root README's
 [command-line build and rebuild steps](../README.md#build-and-try-changes-without-android-studio).
 
-On a phone, sign with your own Apple ID: set `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
-before `npx expo run:ios --device`, because `dev.voicetomap.transmitter` belongs to Alex's team
-(`app.config.ts`). Every step, with checks: [../docs/setup.md](../docs/setup.md).
+On a phone, sign with your own Apple ID: put `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
+in `transmitter/.env.local` (ignored by git), because `dev.voicetomap.transmitter` belongs to
+Alex's team (`app.config.ts`). Expo's commands and `npm run phones` read that file; a value set in
+the shell wins. Every step, with checks: [../docs/setup.md](../docs/setup.md).
+
+## Updating the phones
+
+One command on the Mac, with Metro and the coordinator running:
+
+```bash
+cd transmitter && npm run phones
+```
+
+It updates every iPhone connected to the Mac, by cable or on the same network, and opens the
+app on Metro there. A development build loads its code from Metro, so most updates need no
+install: after a change to `App.tsx` or `src/`, or a pull, the script only reopens the app. While
+Metro runs, saved changes also reach the open apps by themselves.
+
+The app is built and installed again only when its native side changed: a native package,
+`app.json`, `app.config.ts` and the variables it reads, or Expo itself. Expo's fingerprint of
+those is kept in `.expo/phones.json`, so the script knows. After such a change it runs
+`npx expo prebuild --platform ios --clean` once, then builds for each phone (decision 207). The
+first build takes several minutes; each further phone takes less. A phone that does not have
+the app yet gets it the same way, so a teammate's iPhone only needs to be plugged in, unlocked,
+trusted, and in Developer Mode.
+
+| Option | Does |
+|---|---|
+| `--check` | Says what it would do for each phone, and changes nothing |
+| `--rebuild` | Builds and installs again. With a free Apple ID the app stops opening after 7 days; the script warns a day before |
+| `--device "<name or UDID>"` | One phone only |
+
+Android phones are not covered yet: use the root README's steps.
 
 ## Which coordinator it talks to
 
@@ -189,7 +219,7 @@ Small and the iOS path were not tested in this Android change.
 
 A scenario sends its clips as data, so by default nothing is played: that is what makes it
 usable in a quiet room. The phone speaks nothing: a radio hears the operator, not the
-coordinator, and the operator's calls do not reach the phone yet [207]. "Play clips aloud"
+coordinator, and the operator's calls do not reach the phone yet [208]. "Play clips aloud"
 (Setup, Scenarios) plays each clip through the phone's speaker before it is sent, for an audience. Sound comes out even with the ring switch on silent.
 
 ## Scenarios

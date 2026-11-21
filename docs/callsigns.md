@@ -89,9 +89,9 @@ What this does not show: every transcript is written by hand, in the way speech-
 
 Built on 21 Nov (Alex: "Yes, start step 2"). The code is `lib/reports/radio.ts` (who sent it, the guards), `lib/reports/record.ts` (saving), `app/api/report/route.ts` and `app/api/sessions/[code]/held/[id]/route.ts`. The fields are in [contracts.md](contracts.md).
 
-**The roster [201].** The operator types the call signs on the radio net when opening a mission, split by commas. The operator can add one later from the tray. A phone that joins puts its call sign on the roster too; the transmitter no longer joins, so this is only for older phones [207]. The units list shows each roster unit from the start, "On roster, not heard yet". Only the operator adds a call sign: **a transcript never creates a unit.**
+**The roster [201].** The operator types the call signs on the radio net when opening a mission, split by commas. The operator can add one later from the tray. A phone that joins puts its call sign on the roster too; the transmitter no longer joins, so this is only for older phones [208]. The units list shows each roster unit from the start, "On roster, not heard yet". Only the operator adds a call sign: **a transcript never creates a unit.**
 
-**A radio report [202]** is a report to a mission with no `callsign` field. Every report from the transmitter's microphone is one: like a radio, the phone does not join or name itself [207]. The coordinator reads the sender from the words:
+**A radio report [202]** is a report to a mission with no `callsign` field. Every report from the transmitter's microphone is one: like a radio, the phone does not join or name itself [208]. The coordinator reads the sender from the words:
 
 | The reader answers | What happens |
 |---|---|

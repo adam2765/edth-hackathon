@@ -41,7 +41,7 @@ Still to do:
 
 **Status:** built on Friday 20 November, evening, with the four choices as proposed [107 to 114]. Checked with curl, in a desktop browser and in the iPhone simulator; not yet with two phones at once, and rejoining after the app restarts is not tried yet ([architecture.md](architecture.md#what-is-built)).
 
-**Changed on 21 November [207]:** the transmitter no longer joins, names itself, prompts a check-in or answers. It picks a mission from the list (the only one by itself) and sends its code, like a radio tuned to a net; the speaker says the call sign, and the coordinator reads it against the mission's roster [201, 202]. Joining stays on the coordinator for older phones. The flow and screens below are the design as built on Friday.
+**Changed on 21 November [208]:** the transmitter no longer joins, names itself, prompts a check-in or answers. It picks a mission from the list (the only one by itself) and sends its code, like a radio tuned to a net; the speaker says the call sign, and the coordinator reads it against the mission's roster [201, 202]. Joining stays on the coordinator for older phones. The flow and screens below are the design as built on Friday.
 
 Before this, every report went to session `demo`, the call sign was typed on the phone, and nothing started or ended a run. To rehearse and to demo, the base station has to open a mission, see who joins, and end it. Every unit also needs a first position, and the app never reads GPS.
 
@@ -338,7 +338,7 @@ Open calls for Alex: whose phones (ours only, or any phone); travel router or th
 
 ## Transmitter
 
-- **A radio, not a unit [207]:** the phone picks a mission and sends reports to it with no call sign, so the coordinator reads the sender from the words. It shows only whether a report went, or waits for the operator; questions are answered on the command post [178].
+- **A radio, not a unit [208]:** the phone picks a mission and sends reports to it with no call sign, so the coordinator reads the sender from the words. It shows only whether a report went, or waits for the operator; questions are answered on the command post [178].
 - **Built:** on-device speech-to-text with Whisper (`whisper.rn`), switchable on screen between the server, `ggml-base-q5_1` (56 MB) and `ggml-small-q5_1` (181 MB). The phone sends text, and the server skips its own speech-to-text. Android's microphone now records PCM WAV through a local Expo module; a Galaxy S10 sent a microphone report to the offline coordinator on 21 Nov. Results and remaining recognition checks are in [transmitter/README.md](../transmitter/README.md). Still to do: measure warm phone transcription times with base and small, and check recognition on live speech.
 - **Later, about one day:** an open microphone with no button, cutting at pauses. Tuning against hall noise is the risk. The microphone is muted while the app speaks a question, and the coordinator learns to drop non-reports and duplicates. Screen-off listening is another half day and not planned.
 - **Stress scenarios** to build as data files: eight to ten call signs at once; late, out-of-order and duplicate reports; several open questions at once; implausible jumps (3 km in 20 s); units that go silent; radio-style audio with static and clipping; mixed languages; a spoken call sign that does not match the device. A laptop script can play many units at once with no phones.
