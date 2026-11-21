@@ -243,7 +243,7 @@ Confirmed by Alex on 20 Nov: the first option each time [107].
 
 ## Tracks: what a unit sees
 
-Built on Saturday 21 November: steps 1 to 3. The rules are in the [README](../README.md#tracks) and the contract in [contracts.md](contracts.md#tracks) [145 to 152].
+Built on Saturday 21 November: steps 1 to 3. The rules are in the [README](../README.md#tracks) and the contract in [contracts.md](contracts.md#tracks) [145 to 152]. Screenshots, symbols and diagrams are in [tracks.md](tracks.md).
 
 | Step | What | Status |
 |---|---|---|

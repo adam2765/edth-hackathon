@@ -19,6 +19,8 @@ export interface Entry {
   pending?: boolean;
   /** The coordinator's id for the saved report, sent back with the answer to its question. */
   reportId?: string;
+  /** For a question about a track: its number, said again once a choice places it. */
+  track?: number | null;
 }
 
 export type StepResult = { state: "running" | "pass" | "fail"; note: string };

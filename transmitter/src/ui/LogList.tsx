@@ -17,7 +17,7 @@ function outcomeIcon(e: Entry): { name: IconName; tint: string } {
  * The coordinator's question, with its choices. Shown directly under the talk button, because a
  * question is the one thing on the screen that is waiting for the person holding the phone.
  */
-export function QuestionCard({ entry, onChoose, onNone }: { entry: Entry; onChoose: (entryId: string, c: Candidate) => void; onNone: (entryId: string) => void }) {
+export function QuestionCard({ entry, onChoose, onNone }: { entry: Entry; onChoose: (entryId: string, c: Candidate, track?: number | null) => void; onNone: (entryId: string) => void }) {
   return (
     <View style={styles.question} accessibilityRole="alert">
       <View style={styles.outcome}>
@@ -27,7 +27,7 @@ export function QuestionCard({ entry, onChoose, onNone }: { entry: Entry; onChoo
       {entry.candidates?.map((c, n) => (
         <Pressable
           key={c.id}
-          onPress={() => onChoose(entry.id, c)}
+          onPress={() => onChoose(entry.id, c, entry.track)}
           style={({ pressed }) => [styles.choice, styles.choiceOnCard, pressed && styles.choicePressed]}
           accessibilityRole="button"
           accessibilityLabel={`Choice ${n + 1}: ${c.name}, ${c.category.replace("_", " ")}, ${fmtDistance(c.distance_m)} away`}

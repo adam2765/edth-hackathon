@@ -299,7 +299,7 @@ function Transmitter() {
           setStatus(outcome);
         } else if (res.status === "ambiguous") {
           if (reply.report_id) reportIdsRef.current.set(entryId, reply.report_id);
-          setEntries((es) => [{ ...base, outcome: "Asked back", status: "ambiguous", question: res.question, candidates: res.candidates, pending: true, reportId: reply.report_id }, ...es]);
+          setEntries((es) => [{ ...base, outcome: "Asked back", status: "ambiguous", question: res.question, candidates: res.candidates, pending: true, reportId: reply.report_id, track: res.track?.n ?? null }, ...es]);
           setStatus(res.question ?? "Which one did you mean?");
           if (res.question && !opts.quiet) await speak(res.question, lang);
         } else {
@@ -337,11 +337,11 @@ function Transmitter() {
   );
 
   const choose = useCallback(
-    (entryId: string, c: Candidate) => {
+    (entryId: string, c: Candidate, track?: number | null) => {
       stopSpeaking();
       if (c.track_placement) {
         // The question was about a track: the choice places the track on the shared map, not this unit.
-        const outcome = `Track placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)`;
+        const outcome = `${track != null ? `Track ${track}` : "Track"} placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)`;
         patchEntry(entryId, { pending: false, outcome });
         setStatus(outcome);
         reportAnswer(entryId, c.id);
@@ -390,7 +390,7 @@ function Transmitter() {
       if (out.reply.resolution.status === "ambiguous" && step.choose) {
         chosen = out.reply.resolution.candidates.find((c) => c.id === step.choose);
         // Sent on its own, the question is left open for a person to answer.
-        if (chosen && !manual) choose(out.entryId, chosen);
+        if (chosen && !manual) choose(out.entryId, chosen, out.reply.resolution.track?.n);
       }
       const verdict = evaluate(step, out.reply, chosen);
       if (manual && verdict.pass && chosen) verdict.note = "asked a question";

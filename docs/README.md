@@ -27,6 +27,7 @@ New to the project? Read these in order:
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
+| [tracks.md](tracks.md) | Tracks: screenshots of the receiver and the phone, the symbols, and diagrams of how a report becomes a track | The track rules or the screens for them change; retake the pictures |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: four roles for the four of us, one of them evidence then pitch, and what we leave out to fit | The team agrees a split, or the mentors' answers move it |
@@ -52,5 +53,6 @@ Elsewhere in the repo:
 - **Give status a date.** "Built", "not started" and "measured" go stale. Say when something was checked, in Paris time.
 - **Plain, short sentences,** in the same style as the README and DECISIONS.md. Write for a teammate who joined this morning.
 - **Diagrams as text:** ASCII in a code block, or Mermaid, which GitHub draws. No images that only one tool can edit. In a block diagram, a dashed box or line is optional or not built yet, and the text under it says which. Draw top to bottom when a diagram gets wide, so it stays readable on GitHub. Start no label with a number and a full stop: Mermaid reads "1. Query" as a list and prints an error in the box. The block diagrams are in [architecture.md](architecture.md#block-diagrams), [contracts.md](contracts.md), [gazetteer.md](gazetteer.md#how-it-is-built) and [plan.md](plan.md#local-mode).
+- **Screenshots as PNG** in `docs/images/<topic>/`, each under about 600 KB (reduced to 256 colours), with the date, the mission and how to take them again in the text. Retake them when the screen changes. [tracks.md](tracks.md) is the first page with them.
 - **Link, don't copy.** To share with someone outside the repo, send a GitHub link. Link to another file or heading instead of repeating it.
 - **New topic, new file.** Add it to the table above in the same commit.

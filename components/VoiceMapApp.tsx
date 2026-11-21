@@ -89,7 +89,8 @@ type Report = {
   timings?: Timings;
   roundTripMs?: number;
 };
-type Pending = { reportId: string; question: string; candidates: Candidate[]; lang: Lang };
+/** An open question. `track` is the number of the track it is about, said again once a choice places it. */
+type Pending = { reportId: string; question: string; candidates: Candidate[]; lang: Lang; track?: number | null };
 type RecState = "idle" | "starting" | "recording" | "sending";
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -475,7 +476,7 @@ export default function VoiceMapApp() {
         setStatus(outcome);
       } else if (res.status === "ambiguous") {
         outcome = `Asked: ${res.question}`;
-        setPending({ reportId: id, question: res.question ?? "Which one?", candidates: res.candidates, lang });
+        setPending({ reportId: id, question: res.question ?? "Which one?", candidates: res.candidates, lang, track: res.track?.n ?? null });
         setStatus("Which one did you mean?");
         speak(res.question ?? "", lang);
       } else {
@@ -508,7 +509,8 @@ export default function VoiceMapApp() {
       if (!c) return;
       stopSpeaking();
       // A question about a track: the choice places the track, and the speaker's own marker stays.
-      const out = c.track_placement ? `Track placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)` : applyPlacement(c.placement, c.name);
+      const track = pending.track != null ? `Track ${pending.track}` : "Track";
+      const out = c.track_placement ? `${track} placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)` : applyPlacement(c.placement, c.name);
       updateReport(pending.reportId, { outcome: `Chose ${i + 1}: ${c.name}. ${out}`, evidence: `user_choice [${c.id}]` });
       setStatus(out);
       setPending(null);

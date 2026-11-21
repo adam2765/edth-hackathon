@@ -6,6 +6,20 @@ import { Button } from "./controls";
 import type { StepResult } from "./model";
 import { TOUCH, color, radius, space, type } from "./theme";
 
+/** What a step should get back, in a few words: "a position", "Track 1, hostile vehicle", "a question about Track 4". */
+export function expected(e: ScenarioStep["expect"]): string {
+  let track: string | null = null;
+  if (e.track) {
+    // `affiliation: null` means no word said whose it is, so the track is unknown.
+    const whose = e.track.affiliation === undefined ? "" : e.track.affiliation === "neutral" ? "civilian" : (e.track.affiliation ?? "unknown");
+    const what = [whose, e.track.kind?.replace("_", " ") ?? ""].filter(Boolean).join(" ");
+    track = [e.track.n != null ? `Track ${e.track.n}` : "a track", what].filter(Boolean).join(", ");
+  }
+  if (e.status === "ambiguous") return track ? `a question about ${track}` : "a question back";
+  if (e.status === "unresolved") return "no place, and a question";
+  return track ?? (e.heading_to ? "a movement" : "a position");
+}
+
 export function ScenarioCard({
   scenarios,
   scenarioId,
@@ -81,7 +95,7 @@ export function ScenarioCard({
                   <View style={styles.stepText}>
                     <Text style={type.body}>“{step.text}”</Text>
                     <Text style={[type.footnote, r?.state === "fail" && styles.failNote]}>
-                      {step.callsign} · {r ? r.note : `expects ${step.expect.status === "ambiguous" ? "a question back" : step.expect.heading_to ? "a movement" : "a position"}`}
+                      {step.callsign} · {r ? r.note : `expects ${expected(step.expect)}`}
                     </Text>
                   </View>
                 </Pressable>

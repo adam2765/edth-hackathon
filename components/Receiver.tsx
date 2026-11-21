@@ -12,6 +12,7 @@ import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, describeTrack, HEADING_DEG, trackSymbolCode } from "@/lib/geo/trackKinds";
 import { colourMap, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { sessionCode, type LogEntry, type MissionListReply, type SessionLogReply } from "@/lib/reports/types";
+import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import styles from "./Receiver.module.css";
 
@@ -47,6 +48,37 @@ function arrowFeatures(from: LatLon, to: LatLon, color: string, op: number): Geo
     { type: "Feature", properties: { part: "shaft", color, op }, geometry: { type: "LineString", coordinates: [[from.lon, from.lat], [base.lon, base.lat]] } },
     { type: "Feature", properties: { part: "head", color, op }, geometry: { type: "Polygon", coordinates: [[[to.lon, to.lat], [l.lon, l.lat], [r.lon, r.lat], [to.lon, to.lat]]] } },
   ];
+}
+
+/** Units within a metre of each other stand on one spot: they share one dot's place and one label. */
+function spotKey(p: LatLon): string {
+  return `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+}
+
+type Spot = { lat: number; lon: number; name: string; when: string; allSilent: boolean };
+
+/**
+ * One label for each spot where units stand. Units on the same spot (often the start point) share
+ * it, so call signs do not overprint. "silent" is written out, because a faded marker alone is easy
+ * to miss on a projector.
+ */
+function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean): Map<string, Spot> {
+  const together = new Map<string, UnitState[]>();
+  for (const u of units) {
+    if (!u.position || u.positionTs == null) continue;
+    const k = spotKey(u.position);
+    together.set(k, [...(together.get(k) ?? []), u]);
+  }
+  const out = new Map<string, Spot>();
+  for (const [k, group] of together) {
+    const p = group[0].position!;
+    const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
+    const allSilent = group.every(isSilent);
+    const name = group.map((x) => (isSilent(x) && !allSilent ? `${x.callsign} (silent)` : x.callsign)).join(" · ");
+    const when = `${p.estimated ? "≈ " : ""}${fmtTime(newest)}${allSilent ? " · silent" : ""}`;
+    out.set(k, { lat: p.lat, lon: p.lon, name, when, allSilent });
+  }
+  return out;
 }
 
 // Always the 24-hour clock with seconds, whatever the browser's language is set to. Local time.
@@ -205,8 +237,13 @@ export default function Receiver() {
   const mlRef = useRef<typeof import("maplibre-gl") | null>(null);
   /** The symbol library (milsymbol), loaded on its own so the map does not wait for it. */
   const [symbols, setSymbols] = useState<MilSymbol | null>(null);
-  /** How far each symbol image on the map is drawn from its middle, so its anchor sits on the point. */
-  const trackIcons = useRef(new Map<string, [number, number]>());
+  /**
+   * For each symbol image on the map: how far it is drawn from its middle, so its anchor sits on
+   * the point, and its width and height in pixels.
+   */
+  const trackIcons = useRef(new Map<string, [number, number, number, number]>());
+  /** Bumped after every zoom or turn of the map: where track symbols are drawn is worked out again. */
+  const [zoomKey, setZoomKey] = useState(0);
   const candMarkers = useRef<Marker[]>([]);
   const countRef = useRef(0);
   const replayRef = useRef({ t: 0, end: 0 });
@@ -392,8 +429,11 @@ export default function Receiver() {
         const c = map.getContainer();
         setMapSize(`${c.clientWidth}x${c.clientHeight}`);
       });
+      // Two places 100 m apart overlap at one zoom and not at the next.
+      const bump = () => setZoomKey((z) => z + 1);
+      for (const ev of ["zoomend", "rotateend", "pitchend"] as const) map.on(ev, bump);
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-leader", "track"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -424,6 +464,10 @@ export default function Receiver() {
         map.addLayer({ id: "arrow-shaft", type: "line", source: "arrow", filter: ["==", "part", "shaft"], layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": op } });
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
+        // A symbol drawn off its point, so it hides no unit and no other track: a thin line from the
+        // symbol back to the point, and a small dot in the track's colour on the point itself.
+        map.addLayer({ id: "track-leader-line", type: "line", source: "track-leader", filter: ["==", "$type", "LineString"], layout: { "line-cap": "round" }, paint: { "line-color": "#16212c", "line-width": 1.5, "line-opacity": ["*", 0.7, op] } });
+        map.addLayer({ id: "track-anchor", type: "circle", source: "track-leader", filter: ["==", "$type", "Point"], paint: { "circle-radius": 4, "circle-color": ["get", "color"], "circle-opacity": op, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-stroke-opacity": op } });
         // A track's standard symbol, with its number, what it is, and when and by whom it was seen.
         map.addLayer({
           id: "track-sym",
@@ -508,13 +552,8 @@ export default function Receiver() {
     const trail: GeoJSON.Feature[] = [];
     const arrows: GeoJSON.Feature[] = [];
     const targets: GeoJSON.Feature[] = [];
-    // Units on the same spot (often the start point) share one label, so call signs do not overprint.
-    const together = new Map<string, UnitState[]>();
-    for (const u of view.units) {
-      if (!u.position || u.positionTs == null) continue;
-      const k = `${u.position.lat.toFixed(5)},${u.position.lon.toFixed(5)}`;
-      together.set(k, [...(together.get(k) ?? []), u]);
-    }
+    // Units on the same spot share one label: the first unit of the spot carries it.
+    const spots = unitSpots(view.units, isSilent);
     const labelled = new Set<string>();
     for (const u of view.units) {
       const op = isSilent(u) ? 0.35 : 1;
@@ -524,17 +563,13 @@ export default function Receiver() {
       if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
       for (const t of u.trail) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [t.lon, t.lat] } });
       if (!p || u.positionTs == null) continue;
-      const k = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
-      const group = together.get(k) ?? [u];
-      const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
-      // The first unit of a group carries the label for all of them. "silent" is written out,
-      // because a faded marker alone is easy to miss on a projector.
+      const k = spotKey(p);
+      const spot = spots.get(k);
       const first = !labelled.has(k);
-      const allSilent = group.every(isSilent);
-      const name = first ? group.map((x) => (isSilent(x) && !allSilent ? `${x.callsign} (silent)` : x.callsign)).join(" · ") : "";
-      const when = first ? `${p.estimated ? "≈ " : ""}${fmtTime(newest)}${allSilent ? " · silent" : ""}` : "";
       labelled.add(k);
-      pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
+      const name = first ? (spot?.name ?? u.callsign) : "";
+      const when = first ? (spot?.when ?? "") : "";
+      pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
       acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
       if (p.heading_to) {
         // From the marker, the middle of the circle, so the trail stays visible up to it.
@@ -560,7 +595,11 @@ export default function Receiver() {
     const acc: GeoJSON.Feature[] = [];
     const trail: GeoJSON.Feature[] = [];
     const sight: GeoJSON.Feature[] = [];
-    for (const t of view.tracks) {
+    const leader: GeoJSON.Feature[] = [];
+    // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
+    // keeps its spot and a new one moves.
+    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string }[] = [];
+    for (const t of [...view.tracks].sort((a, b) => a.n - b.n)) {
       const p = t.position;
       if (!p || t.positionTs == null) continue;
       const old = isOld(t);
@@ -588,22 +627,69 @@ export default function Receiver() {
             map.addImage(icon, ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 });
             const { width, height } = s.getSize();
             const a = s.getAnchor();
-            trackIcons.current.set(icon, [width / 2 - a.x, height / 2 - a.y]);
+            trackIcons.current.set(icon, [width / 2 - a.x, height / 2 - a.y, width, height]);
           }
         }
-        off = trackIcons.current.get(icon) ?? [0, 0];
+        const i = trackIcons.current.get(icon);
+        if (i) off = [i[0], i[1]];
       }
       const what = describeTrack(t);
+      const name = `T${t.n} · ${what}`;
       const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
-      sym.push({ type: "Feature", properties: { icon, off, op, labelOp: old ? 0.75 : 1, name: `T${t.n} · ${what}`, when }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
+      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props: { icon, off, op, labelOp: old ? 0.75 : 1, name, when } });
     }
+
+    // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
+    // track drawn before it. Then it is drawn a little way off, in screen pixels, with a line back
+    // to the point. The track's place is the same; only the drawing moves.
+    // The edges of the map count as taken, and the replay bar over its lower edge, so a symbol is
+    // not pushed out of sight. A track whose point is out of sight is not moved at all.
+    const pad = 2;
+    const grow = (r: Rect): Rect => ({ x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad });
+    const box = map.getContainer();
+    const [w, h] = [box.clientWidth, box.clientHeight];
+    const fixed: Rect[] = outside(w, h, Math.round(80 * k));
+    const dot = 2 * (Math.round(9 * k) + 3);
+    const unitText = Math.round(15 * k);
+    for (const s of unitSpots(view.units, isSilent).values()) {
+      const { x, y } = map.project([s.lon, s.lat]);
+      fixed.push(grow(centred(x, y, dot, dot)));
+      const b = textBox([s.name, s.when], unitText);
+      const top = y + 1.1 * unitText;
+      fixed.push(grow({ x0: x - b.w / 2, y0: top, x1: x + b.w / 2, y1: top + b.h }));
+    }
+    const trackText = Math.round(14 * k);
+    const frame = TRACK_SYMBOL_SIZE * k * 1.5;
+    const marks: Mark[] = drawn.map((d) => {
+      const { x, y } = map.project([d.p.lon, d.p.lat]);
+      const i = trackIcons.current.get(d.icon);
+      const b = textBox(d.label, trackText);
+      const bottom = -1.9 * trackText;
+      return { id: d.id, x, y, boxes: [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })] };
+    });
+    const inSight = marks.filter((m) => m.x >= 0 && m.y >= 0 && m.x <= w && m.y <= h);
+    const shifts = declutter(inSight, fixed, Math.round(40 * k));
+    marks.forEach((m, n) => {
+      const d = drawn[n];
+      const s = shifts.get(m.id) ?? { dx: 0, dy: 0 };
+      let at: [number, number] = [d.p.lon, d.p.lat];
+      if (s.dx || s.dy) {
+        const q = map.unproject([m.x + s.dx, m.y + s.dy]);
+        at = [q.lng, q.lat];
+        leader.push({ type: "Feature", properties: { op: d.op }, geometry: { type: "LineString", coordinates: [[d.p.lon, d.p.lat], at] } });
+        leader.push({ type: "Feature", properties: { op: d.op, color: d.color }, geometry: { type: "Point", coordinates: [d.p.lon, d.p.lat] } });
+      }
+      sym.push({ type: "Feature", properties: d.props, geometry: { type: "Point", coordinates: at } });
+    });
+
     const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
     set("track", sym);
     set("track-acc", acc);
     set("track-trail", trail);
     set("track-sight", sight);
-    map.setLayoutProperty("track-sym", "text-size", Math.round(14 * k));
-  }, [view, isOld, effNow, colours, symbols, mapReady, mapSize]);
+    set("track-leader", leader);
+    map.setLayoutProperty("track-sym", "text-size", trackText);
+  }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey]);
 
   // On a projector or a wall screen, the map's labels and markers grow with the panels.
   useEffect(() => {
