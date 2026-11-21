@@ -36,3 +36,7 @@ and restore remembered local mode. Hosted inference was declined. A live model r
 succeeded and health stayed ready. Whisper’s reported model/working buffers fell from
 about 891 MB to 267 MB; these figures are not total process memory. The existing base
 file was checksum-verified and copied on the Mac, with no download or phone model install.
+
+Model selection [186]: `npm start` restores the regular turbo default and keeps Ollama
+resident. `npm start light` uses base and unloads Ollama after 30 seconds idle. Build
+prepares both models. Each start chooses its own mode; no remembered light default.

@@ -11,8 +11,9 @@ import { delay } from './launcher/processes.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const command = process.argv[2];
-if (!['build', 'start', 'stop'].includes(command) || process.argv.length > 3) {
-  console.error('Use npm run build, npm start or npm stop.'); process.exit(1);
+const light = command === 'start' && process.argv[3] === 'light';
+if (!['build', 'start', 'stop'].includes(command) || process.argv.length > (light ? 4 : 3)) {
+  console.error('Use npm run build, npm start [light] or npm stop.'); process.exit(1);
 }
 const config = await loadSettings(root);
 const base = `http://127.0.0.1:${config.controlPort}`;
@@ -37,7 +38,7 @@ try {
   if (command === 'stop') { console.log('Stopped. All project server processes verified gone.'); process.exit(0); }
   await mkdir(path.join(root, '.run'), { recursive: true });
   const log = await open(path.join(root, '.run/launcher.log'), 'a');
-  const child = spawn(process.execPath, [path.join(root, 'scripts/launcher/supervisor.mjs')], {
+  const child = spawn(process.execPath, [path.join(root, 'scripts/launcher/supervisor.mjs'), ...(light ? ['light'] : [])], {
     cwd: root, detached: true, windowsHide: true, env: process.env, stdio: ['ignore', log.fd, log.fd],
   });
   child.unref(); await log.close();

@@ -141,8 +141,8 @@ export function withoutSoundMarks(text: string): string {
  * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
  * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
  * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
- * scenario clips and twice put a prompt word in the transcript (upstream PR #23). The temporary
- * base-model workaround keeps this request format; its recognition accuracy is not remeasured.
+ * scenario clips and twice put a prompt word in the transcript (upstream PR #23). Light mode
+ * uses base with this request format; its recognition accuracy is not remeasured.
  */
 class WhisperServerTranscriber implements Transcriber {
   name = "whisper-server";

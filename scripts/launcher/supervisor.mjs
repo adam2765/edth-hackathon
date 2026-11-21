@@ -16,6 +16,7 @@ const configFile = path.join(directory, 'config.json');
 const stateFile = path.join(directory, 'state.json');
 const buildFile = path.join(directory, 'build.json');
 const env = toolEnvironment();
+const light = process.argv[2] === 'light';
 const config = await loadSettings(root, env);
 const state = { services: {}, ...await readJson(stateFile, {}), root, status: 'Stopped', error: null, busy: false };
 const children = new Map();
@@ -26,7 +27,7 @@ let operation;
 let stopRequested = false;
 const save = () => saveJson(stateFile, state);
 async function phase(message) { state.message = message; console.log(message); await save(); }
-const runtimeEnv = (extra = {}) => ({ ...env, PROVIDER_MODE: config.mode, WHISPER_URL: config.whisperUrl, REPORT_STORE: 'file', REPORT_STORE_DIR: path.join(root, '.data/sessions'), ...extra });
+const runtimeEnv = (extra = {}) => ({ ...env, PROVIDER_MODE: config.mode, WHISPER_URL: config.whisperUrl, WHISPER_PROFILE: light ? 'light' : 'regular', REPORT_STORE: 'file', REPORT_STORE_DIR: path.join(root, '.data/sessions'), ...extra });
 
 async function launch(kind, cwd, args, extra = {}) {
   const id = randomUUID();
@@ -139,7 +140,7 @@ async function start() {
   // Restart always, without building or opening/reloading the phone app.
   await stopAll(false);
   if (!existsSync(path.join(root, '.next/BUILD_ID'))) throw new Error('Run npm run build first.');
-  state.status = 'Starting'; await phase('Starting servers…');
+  state.status = 'Starting'; await phase(`Starting servers (${light ? 'light' : 'regular'})…`);
   if (config.mode === 'local') {
     const whisper = new URL(config.whisperUrl);
     if (!['127.0.0.1', 'localhost'].includes(whisper.hostname)) throw new Error('Local speech-to-text must run on this computer.');
@@ -150,7 +151,7 @@ async function start() {
     }, 'Whisper model readiness', 240_000);
     const url = (env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
     if (!['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw new Error('Local mode needs Ollama on this server.');
-    await launch('ollama', root, ['ollama', 'serve'], { OLLAMA_HOST: new URL(url).host, OLLAMA_NO_CLOUD: '1', OLLAMA_KEEP_ALIVE: '-1', OLLAMA_CONTEXT_LENGTH: '4096' });
+    await launch('ollama', root, ['ollama', 'serve'], { OLLAMA_HOST: new URL(url).host, OLLAMA_NO_CLOUD: '1', OLLAMA_KEEP_ALIVE: light ? '30s' : '-1', OLLAMA_CONTEXT_LENGTH: '4096' });
     await waitFor(() => fetch(`${url}/api/version`, { signal: AbortSignal.timeout(1000) }).then((r) => r.ok).catch(() => false), 'Ollama');
   }
   await launch('coordinator', root, [String(config.port)]);

@@ -153,10 +153,11 @@ npm stop
 |---|---|
 | `npm run build` | Builds components whose source/dependencies changed; builds or reloads the phone app and loads it on the connected phone when needed |
 | `npm start` | Stops existing project servers, then starts Whisper speech-to-text, Ollama, coordinator/web server and phone code server; opens the receiver, leaving phone app launch to you |
+| `npm start light` | Starts with Whisper base and unloads Ollama after 30 seconds idle; the next report reloads it |
 | `npm stop` | Stops project processes and the connected phone app, including servers and the internal process controller; keeps mission data |
 
 `build` needs `npm run`; `start` and `stop` are npm’s built-in shortcuts. No routine command
-needs parameters. If more than one phone is connected, leave only the one being used connected.
+needs parameters; `npm start light` is the optional lower-memory start. If more than one phone is connected, leave only the one being used connected.
 Build with no phone connected prepares the coordinator; connect the phone and repeat the
 same build command to prepare it. Build may stop services that need replacing; use Start
 afterwards.
@@ -178,7 +179,7 @@ Unrelated processes are left alone.
 
 ### Offline: models on this computer
 
-`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs locally through whisper.cpp’s whisper-server with Whisper base (temporary RAM workaround) and Silero VAD. The phone sends audio, with its language; typed reports still work. Build prepares the checksum-verified host models once (about 61 MB); Start runs the service and waits for readiness.
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs locally through whisper.cpp’s whisper-server with Whisper turbo by default, base with `npm start light` and Silero VAD. The phone sends audio, with its language; typed reports still work. Build prepares the checksum-verified host models once (about 635 MB for both speech models and VAD); Start runs the service and waits for readiness.
 
 Install the host tools and Ollama model using [setup](docs/setup.md#install-once). On macOS the tools are `brew install ollama whisper.cpp ffmpeg`. Then use Build followed by Start above; Build prepares the Whisper models once.
 

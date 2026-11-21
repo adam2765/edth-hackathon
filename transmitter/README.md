@@ -40,7 +40,7 @@ phone app. Open Transmitter yourself and tap **Connect** when it finds the coord
 If no mission is running, it says so. Start one on the receiver and the phone joins the newest running mission automatically.
 `npm stop` stops project processes and the connected phone app, preserving settings/data.
 
-No routine parameters. Connect only the phone being used. Tools and signing are in
+Use `npm start light` for lower memory use; plain `npm start` selects regular mode. Connect only the phone being used. Tools and signing are in
 [setup](../docs/setup.md). The host remembers the phone. iPhone compilation requires a
 Mac with Xcode; free Apple provisioning expires after seven days. No EAS.
 
@@ -63,7 +63,7 @@ Metro/USB host browses LAN advertisements and the phone verifies each candidate.
 
 Microphone and scenario utterances send audio through the same report path. The phone
 records 16 kHz mono AAC/m4a and sends it with the selected language; it does not load a
-speech model or transcribe. In local mode, the coordinator uses Whisper base (temporary RAM workaround)
+speech model or transcribe. In local mode, the coordinator uses Whisper turbo by default, base with `npm start light`
 through whisper-server with Silero VAD and ffmpeg conversion. Hosted mode uses Mistral.
 A report counts as successful only after the coordinator acknowledges saving it.
 

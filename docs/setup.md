@@ -9,7 +9,7 @@ Agents never read `.env` files or print keys. Setup does not push or deploy the 
 | Needed for | Tools |
 |---|---|
 | Everyone | Git, Node.js 24.3+ and npm; a current browser |
-| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper base (temporary RAM workaround) and Silero VAD (about 61 MB, checksum-verified by Build) |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
 | Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
 | iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
@@ -40,10 +40,10 @@ prepared or downloaded on the phone. Its existing setup command is now a quick r
 notice. Existing native libraries stay compatible, so this change needs a JavaScript reload,
 not a native rebuild. Scenarios use their compressed audio through the same report path.
 
-For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper base and VAD models on the host, about 61 MB.
+For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper turbo, base and VAD models on the host, about 635 MB for both speech models and VAD.
 Ask before these system installs and large downloads. Start validates existing models and
 starts whisper-server; it does not download them. `WHISPER_MODEL_FILE` can provide a local
-copy of the pinned base model instead of a download.
+copy of the pinned turbo model instead of a download.
 
 The web build prepares the map worker and browser speech runtime, and tries to fetch a
 77 MB Ukrainian reply voice. If unavailable, the browser uses its system voice. Setup
@@ -67,7 +67,7 @@ npm stop
 - **Stop** stops project components, the connected phone app, and the internal controller.
   Mission logs and phone settings are kept. Closing a browser does not stop the servers.
 
-No routine parameters. Use one connected phone; it is remembered. Unlock and approve USB
+Use `npm start light` for lower memory use; plain `npm start` selects regular mode. Use one connected phone; it is remembered. Unlock and approve USB
 trust/debugging. After editing code, repeat Build, then Start. If a build stops a service,
 Start brings the servers back. A build with unchanged source reuses its output.
 
@@ -100,10 +100,11 @@ component. The three normal commands above remain the daily procedure.
 | Phone code server | `npm run start:phone` |
 | Web development server | `npm run dev -- -p 3117` |
 
-For this temporary RAM workaround, the coordinator uses Whisper base and keeps Ollama’s
-3B model resident. There is no idle unload/reload cycle. The phone still sends audio;
-Build, Start and Stop stay the same. Base may recognize speech less accurately than turbo.
-The larger turbo model remains on disk for later use; it is not loaded.
+`npm start` selects regular mode: Whisper large-v3-turbo and a resident Ollama model.
+`npm start light` selects Whisper base and releases Ollama after 30 seconds of inactivity;
+the next report reloads it, adding latency. Base may recognize speech less accurately.
+The choice applies to that start only; the next plain Start returns to regular mode.
+Build prepares both speech models once, so changing mode needs only Start.
 
 The remembered provider mode is local. Keys never belong in chat, launcher configuration
 or Git. Direct coordinator commands can use `.env.local` if needed.

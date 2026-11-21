@@ -1,9 +1,9 @@
-// Speech-to-text on the coordinator in offline mode (decisions 182, 185): prepares Whisper base (temporary RAM workaround)
+// Speech-to-text on the coordinator in offline mode: prepares regular turbo and light base models
 // and the Silero voice-activity model once into models/ (git-ignored), checksums checked, then runs
 // whisper.cpp's whisper-server on this computer only.
 // Build: npm run build. Start/stop: managed with the other servers.
 // Advanced: npm run start:stt runs this component directly after Build prepares it.
-// WHISPER_MODEL_FILE copies the Whisper model from a file already on disk instead of downloading it.
+// WHISPER_MODEL_FILE copies the regular turbo model from a file already on disk instead of downloading it.
 // WHISPER_URL sets the port, as the coordinator reads it (default http://127.0.0.1:3118).
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -13,15 +13,24 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
-// Temporary default for the 8 GB development Mac (decision 185); transcription stays on the host.
-const WHISPER = {
-  name: "Whisper base",
-  file: "ggml-base-q5_1.bin",
-  bytes: 59707625,
-  sha256: "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
-  url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
-  from: process.env.WHISPER_MODEL_FILE,
+const MODELS = {
+  regular: {
+    name: "Whisper large-v3-turbo",
+    file: "ggml-large-v3-turbo-q5_0.bin",
+    bytes: 574041195,
+    sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+    from: process.env.WHISPER_MODEL_FILE,
+  },
+  light: {
+    name: "Whisper base",
+    file: "ggml-base-q5_1.bin",
+    bytes: 59707625,
+    sha256: "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
+  },
 };
+const WHISPER = MODELS[process.env.WHISPER_PROFILE === "light" ? "light" : "regular"];
 // Finds the speech in a clip, so silence comes back as no words instead of Whisper's "Thank you."
 const VAD = {
   name: "Silero VAD",
@@ -75,6 +84,11 @@ async function prepare(model) {
 
 try {
   const preparing = process.argv.includes("--prepare");
+  if (preparing) {
+    for (const model of [...Object.values(MODELS), VAD]) await prepare(model);
+    console.log("Coordinator speech models ready: regular and light (checksums verified).");
+    process.exit(0);
+  }
   if (!preparing) {
     for (const model of [WHISPER, VAD]) {
       if (!(await valid(model, new URL(model.file, directory)))) throw new Error(`${model.name} is missing or invalid. Run npm run build first.`);
@@ -82,10 +96,9 @@ try {
   }
   const whisper = await prepare(WHISPER);
   const vad = await prepare(VAD);
-  if (preparing) { console.log("Coordinator speech models ready (checksums verified)."); process.exit(0); }
   if (!has("whisper-server", "--help")) throw new Error("whisper-server not found. Install whisper.cpp (macOS: brew install whisper.cpp); see docs/setup.md.");
   if (!has("ffmpeg", "-version")) throw new Error("ffmpeg not found. Install ffmpeg (macOS: brew install ffmpeg); see docs/setup.md.");
-  console.log(`Whisper base and Silero VAD ready (checksums verified). Starting whisper-server on 127.0.0.1:${port}.`);
+  console.log(`${WHISPER.name} and Silero VAD ready (checksums verified). Starting whisper-server on 127.0.0.1:${port}.`);
   // --convert: ffmpeg turns the browser's webm and the phone's m4a into the WAV Whisper reads.
   const args = ["-m", whisper, "--host", "127.0.0.1", "--port", port, "--convert", "--vad", "--vad-model", vad];
   const server = spawn("whisper-server", args, { stdio: "inherit" });

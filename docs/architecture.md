@@ -74,7 +74,7 @@ The coordinator is one Next.js app, on Vercel in Paris or on the host computer. 
 flowchart TB
     IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
     CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
-    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>local Whisper base (temporary RAM workaround) or hosted Mistral"]
+    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>local Whisper turbo by default, base with `npm start light` or hosted Mistral"]
     subgraph VOICES["For each voice"]
         EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
         SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
@@ -128,7 +128,7 @@ The open microphone is not built ([plan](plan.md#transmitter)). Every source end
 | Step | Where |
 |---|---|
 | Recording | On the phone |
-| Speech-to-text | Mistral's API, called from our server in Paris; or Whisper base (temporary RAM workaround) on the coordinator in local mode [182] |
+| Speech-to-text | Mistral's API, called from our server in Paris; or Whisper turbo by default, base with `npm start light` on the coordinator in local mode [182] |
 | Intent extraction | Mistral's API, same route; or Ollama on the same computer in local mode [83] |
 | Resolving the place | Our server; plain code, no AI, no outside calls |
 | Map | On the phone; tiles, fonts and icons from OpenFreeMap |
