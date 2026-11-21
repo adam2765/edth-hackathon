@@ -95,8 +95,10 @@ export function clockSaid(transcript: string): ClockSaid | null {
  */
 export function clockChecked(intent: Intent, transcript: string): Intent {
   const all = clocksSaid(transcript);
-  if (!all.length) return intent;
-  const one = clockSaid(transcript);
+  // A bearing in degrees or mils is read the same way, when no clock was said [229].
+  const bearing = all.length ? null : bearingSaid(transcript);
+  if (!all.length && !bearing) return intent;
+  const one = bearing ?? clockSaid(transcript);
   if (intent.relation && /_of$/.test(intent.relation)) {
     return { ...intent, relation: one ? (`${one.direction}_of` as Intent["relation"]) : null, direction: null };
   }
@@ -170,9 +172,68 @@ export interface Faced {
 export function withFacing(intent: Intent, transcript: string): Faced {
   const clock = clockSaid(transcript);
   const facing = facingSaid(transcript);
-  if (!clock || facing == null) return { intent, clock, facing };
+  // A bearing is already from north: it is the angle, and no facing turns it [229].
+  if (!clock) return { intent, clock: bearingSaid(transcript), facing };
+  if (facing == null) return { intent, clock, facing };
   const turned = turnClock(clock, facing);
   const relation = intent.relation === `${clock.direction}_of` ? (`${turned.direction}_of` as Intent["relation"]) : intent.relation;
   const direction = intent.direction === clock.direction ? turned.direction : intent.direction;
   return { intent: { ...intent, relation, direction }, clock: turned, facing };
+}
+
+// ---------- Bearings in degrees or mils [229] ----------
+// "Contact, bearing 060, 300 metres", "azimut 120", "азимут 45", "1600 mils": the way from the
+// speaker as an angle from north, as a compass or a map gives it. Not turned by a facing: a
+// bearing is already from north. The eight compass words would round 060 to north-east, 15° off.
+
+const BEARING_WORDS = new Set(["bearing", "bearings", "azimuth", "azimut", "azimuts", "азимут", "азимуті", "азимутом", "азимута", "пеленг", "пеленгом"]);
+const MILS_WORDS = new Set(["mil", "mils", "millieme", "milliemes", "mills"]);
+const DEGREE_WORDS = new Set(["degree", "degrees", "deg", "degre", "degres", "градус", "градуси", "градусів", "градусов", "градуса"]);
+const SPOKEN_DIGIT: Record<string, string> = {
+  zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", niner: "9",
+  un: "1", deux: "2", trois: "3", quatre: "4", cinq: "5", sept: "7", huit: "8", neuf: "9",
+  нуль: "0", один: "1", два: "2", три: "3", чотири: "4", пять: "5", шість: "6", сім: "7", вісім: "8", девять: "9",
+};
+
+/**
+ * The number that starts at `i`: "060", "0 6 0", or "zero six zero" said digit by digit, as on a
+ * radio. Returns the number and where it ends.
+ */
+function numberAt(toks: string[], i: number): { n: number; end: number; spoken: string } | null {
+  if (/^\d{1,4}$/.test(toks[i] ?? "") && toks[i].length > 1) return { n: Number(toks[i]), end: i + 1, spoken: "" };
+  let digits = "";
+  let j = i;
+  while (j < toks.length && digits.length < 4) {
+    const d = /^\d$/.test(toks[j]) ? toks[j] : SPOKEN_DIGIT[toks[j]];
+    if (d === undefined) break;
+    digits += d;
+    j++;
+  }
+  return digits ? { n: Number(digits), end: j, spoken: digits } : null;
+}
+
+const asSaid = (deg: number): ClockSaid => {
+  const d = Math.round(((deg % 360) + 360) % 360);
+  return { hour: d / 30, deg: d, direction: POINTS[Math.round(d / 45) % 8] };
+};
+
+/** A bearing said, from north: "bearing 060", "azimut 120 degrés", "1600 mils". Null when none was. */
+export function bearingSaid(transcript: string): ClockSaid | null {
+  const toks = words(transcript);
+  for (let i = 0; i < toks.length; i++) {
+    const after = BEARING_WORDS.has(toks[i]);
+    const at = after ? i + 1 : i;
+    let num = numberAt(toks, at);
+    if (!num) continue;
+    // Said digit by digit, a bearing has three: "zero six zero, three hundred metres" is 060.
+    if (num.spoken.length === 4 && !MILS_WORDS.has(toks[num.end] ?? "")) num = { n: Number(num.spoken.slice(0, 3)), end: num.end - 1, spoken: num.spoken.slice(0, 3) };
+    const unit = toks[num.end];
+    if (unit && MILS_WORDS.has(unit)) {
+      if (num.n <= 6400) return asSaid((num.n * 360) / 6400);
+      continue;
+    }
+    if (after && num.n <= 360) return asSaid(num.n);
+    if (!after && unit && DEGREE_WORDS.has(unit) && num.n <= 360 && (BEARING_WORDS.has(toks[i - 1] ?? "") || toks[i - 1] === "at")) return asSaid(num.n);
+  }
+  return null;
 }
