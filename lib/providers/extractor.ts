@@ -124,7 +124,7 @@ Rules:
 - track.kind: from a type word the speaker said: "people" (person, soldiers, infantry, patrol, soldats, піхота, солдати), "vehicle" (car, truck, véhicule, camion, машина, вантажівка), "armour" (tank, APC, char, blindé, танк, БМП, БТР), "drone" (drone, UAV, quadcopter, дрон, БПЛА), "drone_team" (drone team, équipe drone, розрахунок БПЛА), "mortar" (mortier, міномет), "artillery" (gun, howitzer, canon, гармата), "jammer" (jammer, electronic warfare, brouilleur, РЕБ), else "other".
 - track.count: how many, when said ("two vehicles" → 2), else null.
 - track.text: the thing as said, without the place ("two enemy vehicles"), else null.
-- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker.
+- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker: "a patrol to the north" is direction "north", heading null, and still a track.
 - language: "fr" if the report is mostly French, "uk" if it is mostly Ukrainian or Russian, otherwise "en".
 - confidence: 0 to 1, how sure you are of this reading.
 

@@ -125,7 +125,7 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 
 ### Vincennes, with tracks
 
-`scenarios/vincennes-tracks.json`. Two units report what they see; every sighting is made up. It is set in Vincennes, not Izium, where the demo names no unit or position [140]. Start a new mission so the numbers count from 1. Checked on 21 November: 11 of 11 typed through hosted Mistral and through the local 3B model, and 11 of 11 as synthetic-voice clips through the coordinator. Not yet spoken by a person or sent from a phone.
+`scenarios/vincennes-tracks.json`. Two units report what they see; every sighting is made up. It is set in Vincennes, not Izium, where the demo names no unit or position [140]. Start a new mission so the numbers count from 1. Checked on 21 November: 11 of 11 typed through hosted Mistral and through the local 3B model, and 11 of 11 as synthetic-voice clips through the coordinator. On the local model, step 11 needs the compass-only tune [196]: checked again after it, 11 of 11 typed through the coordinator in offline mode. Not yet spoken by a person or sent from a phone.
 
 | # | Who | Say | Expected |
 |---|---|---|---|
