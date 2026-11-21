@@ -9,6 +9,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
 import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
+import { startPcm, stopPcm } from "./src/pcm";
 import { CoordinatorError, callsignKey, fetchMissions, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
 import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
@@ -415,9 +416,9 @@ function Transmitter() {
 
   // ---------- speech-to-text on the phone ----------
   const modelMissing = sttMode !== "server" && !modelReady[sttMode];
-  // Whisper needs uncompressed audio. iOS can record it directly; on Android the microphone
-  // still goes through the server for now (scenario clips work in every mode on both).
-  const phoneStt = sttMode !== "server" && Platform.OS === "ios";
+  // Both phones give Whisper a PCM WAV; Android uses our AudioRecord module.
+  const phoneStt = sttMode !== "server";
+  const androidPcm = phoneStt && Platform.OS === "android";
 
   const fetchModel = useCallback(async () => {
     if (sttMode === "server" || downloadPct !== null) return;
@@ -442,10 +443,11 @@ function Transmitter() {
     setBusyBoth("sending");
     const endedAt = Date.now();
     try {
-      await recorder.stop();
+      const pcmUri = androidPcm ? await stopPcm() : null;
+      if (!androidPcm) await recorder.stop();
       // Hand the audio session back so the spoken question uses the loudspeaker, not the earpiece.
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      const uri = recorder.uri;
+      const uri = androidPcm ? pcmUri : recorder.uri;
       if (!uri || endedAt - recordStartRef.current < MIN_CLIP_MS) {
         setStatus("Too short. Hold the button while you speak.");
         return;
@@ -469,7 +471,7 @@ function Transmitter() {
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, sttMode, useHints]);
+  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, androidPcm, sttMode, useHints]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -484,8 +486,12 @@ function Transmitter() {
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync(phoneStt ? SPEECH_RECORDING_WAV : SPEECH_RECORDING);
-      recorder.record();
+      if (androidPcm) {
+        await startPcm();
+      } else {
+        await recorder.prepareToRecordAsync(phoneStt ? SPEECH_RECORDING_WAV : SPEECH_RECORDING);
+        recorder.record();
+      }
       recordStartRef.current = Date.now();
       setBusyBoth("recording");
       setStatus("Listening… release to send.");
@@ -498,7 +504,7 @@ function Transmitter() {
       setStatus(e instanceof Error ? `Could not open the microphone: ${e.message}` : "Could not open the microphone.");
       setBusyBoth("idle");
     }
-  }, [recorder, stopAndSend, phoneStt]);
+  }, [recorder, stopAndSend, phoneStt, androidPcm]);
 
   const onPressOut = useCallback(() => {
     releasedRef.current = true;
