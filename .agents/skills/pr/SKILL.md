@@ -19,7 +19,7 @@ The title is a commit subject: `Area: what changed`. The body follows the templa
 
 ## Decisions and contracts
 
-- **Decisions:** <the numbers this adds to DECISIONS.md, or none>
+- **Decisions:** <the numbers this adds to DECISIONS.md, and the older ones they replace or change, or none>
 - **Contract change:** <none, or what changes in lib/geo/types.ts, the fields of POST /api/report or the log entry types in lib/reports/, and who has to update>
 - **Extraction prompt:** <unchanged, or the eval runs before and after on both models and their result>
 
