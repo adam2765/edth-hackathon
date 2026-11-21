@@ -1,5 +1,7 @@
 /**
  * Speech-to-text seam. Mistral, with MISTRAL_API_KEY.
+ * Mistral is asked to tell speakers apart (diarization): where the speaker changes, the transcript
+ * gets a ">>" mark, the same mark lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  * A local model can be added later behind the same interface; until then PROVIDER_MODE=local takes text only.
  */
@@ -15,6 +17,38 @@ export interface Transcriber {
   name: string;
   transcribe(audio: Blob, mime: string, biasTerms: string[]): Promise<TranscribeResult>;
 }
+
+/** A stretch of speech as Mistral returns it with segment timestamps. */
+export interface SpeakerSegment {
+  text: string;
+  speaker_id?: string | null;
+  start?: number;
+  end?: number;
+}
+
+/**
+ * One transcript from diarized segments: consecutive segments of one speaker are joined with a
+ * space, and a change of speaker is marked ">>". A segment with no speaker label joins the one before.
+ */
+export function joinSpeakers(segments: SpeakerSegment[]): string {
+  let out = "";
+  let last: string | null | undefined;
+  for (const seg of segments) {
+    const text = (seg.text ?? "").trim();
+    if (!text) continue;
+    const who = seg.speaker_id ?? last;
+    if (out && who != null && last != null && who !== last) out += " >> ";
+    else if (out) out += " ";
+    out += text;
+    last = who;
+  }
+  return out;
+}
+
+const diarizeOn = () => process.env.MISTRAL_STT_DIARIZE !== "0";
+
+/** Mistral refused the diarization options (400 or 422); a timeout or an outage is not this. */
+class DiarizeRefused extends Error {}
 
 function extFor(mime: string): string {
   if (mime.includes("webm")) return "webm";
@@ -35,10 +69,28 @@ class MistralTranscriber implements Transcriber {
   }
 
   async transcribe(audio: Blob, mime: string, biasTerms: string[]): Promise<TranscribeResult> {
+    if (diarizeOn()) {
+      try {
+        return await this.request(audio, mime, biasTerms, true);
+      } catch (err) {
+        if (!(err instanceof DiarizeRefused)) throw err;
+        // A refused option must not cost the report: transcribe again as before.
+        console.warn(`[stt] diarization refused, transcribing without it: ${err.message}`);
+      }
+    }
+    return this.request(audio, mime, biasTerms, false);
+  }
+
+  private async request(audio: Blob, mime: string, biasTerms: string[], diarize: boolean): Promise<TranscribeResult> {
     const form = new FormData();
     form.append("file", new File([audio], `clip.${extFor(mime)}`, { type: mime.split(";")[0] }));
     form.append("model", this.model);
     form.append("return_language", "true");
+    if (diarize) {
+      // Diarization labels segments, so it needs segment timestamps (Mistral docs, 21 Nov 2026).
+      form.append("diarize", "true");
+      form.append("timestamp_granularities", "segment");
+    }
     // Repeated field, one entry per term (checked against Mistral docs and live API, 20 Nov 2026).
     for (const t of biasTerms.slice(0, 100)) form.append("context_bias", t);
     const res = await fetch("https://api.mistral.ai/v1/audio/transcriptions", {
@@ -47,9 +99,13 @@ class MistralTranscriber implements Transcriber {
       body: form,
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new Error(`Mistral STT ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const j = (await res.json()) as { text?: string; language?: string | null };
-    return { text: (j.text ?? "").trim(), language: j.language ?? null };
+    if (!res.ok) {
+      const msg = `Mistral STT ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      throw diarize && (res.status === 400 || res.status === 422) ? new DiarizeRefused(msg) : new Error(msg);
+    }
+    const j = (await res.json()) as { text?: string; language?: string | null; segments?: SpeakerSegment[] };
+    const text = diarize && j.segments?.length ? joinSpeakers(j.segments) : (j.text ?? "");
+    return { text: text.trim(), language: j.language ?? null };
   }
 }
 

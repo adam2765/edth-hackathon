@@ -77,3 +77,71 @@ describe("provider mode", () => {
     expect([pinnedLanguage("uk"), pinnedLanguage("ru"), pinnedLanguage(null), pinnedLanguage("")]).toEqual(["uk", null, null, null]);
   });
 });
+
+describe("Mistral speech-to-text with speakers told apart", () => {
+  beforeEach(() => {
+    vi.stubEnv("PROVIDER_MODE", "");
+    vi.stubEnv("MISTRAL_API_KEY", "test-key");
+    vi.stubEnv("MISTRAL_STT_DIARIZE", "");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+  const clip = new Blob([new Uint8Array(8)], { type: "audio/webm" });
+  const segments = [
+    { text: " I'm at Bérault.", speaker_id: "speaker_0", start: 0, end: 1.2 },
+    { text: " Going to the castle.", speaker_id: "speaker_1", start: 1.3, end: 2.5 },
+    { text: " Now.", speaker_id: "speaker_1", start: 2.5, end: 2.9 },
+  ];
+
+  it("marks a change of speaker with >>, the mark voices are split at", async () => {
+    const { joinSpeakers } = await providers();
+    expect(joinSpeakers(segments)).toBe("I'm at Bérault. >> Going to the castle. Now.");
+    expect(joinSpeakers([{ text: "One voice." }, { text: "Still one." }])).toBe("One voice. Still one.");
+    expect(joinSpeakers([{ text: "A", speaker_id: "s0" }, { text: " " }, { text: "B", speaker_id: null }, { text: "C", speaker_id: "s1" }])).toBe("A B >> C");
+  });
+
+  it("asks for speakers and segment timestamps, and joins the segments", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "I'm at Bérault. Going to the castle. Now.", language: "en", segments })));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    const r = await getTranscriber().transcribe(clip, "audio/webm", ["Bérault"]);
+    expect(r).toEqual({ text: "I'm at Bérault. >> Going to the castle. Now.", language: "en" });
+    const form = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(form.get("diarize")).toBe("true");
+    expect(form.get("timestamp_granularities")).toBe("segment");
+    expect(form.getAll("context_bias")).toEqual(["Bérault"]);
+  });
+
+  it("transcribes again without speakers when Mistral refuses the option", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("diarize not supported", { status: 422 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: "I'm at Bérault.", language: "en" })));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { getTranscriber } = await providers();
+    expect((await getTranscriber().transcribe(clip, "audio/webm", [])).text).toBe("I'm at Bérault.");
+    const second = (fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(second.get("diarize")).toBeNull();
+  });
+
+  it("does not retry an outage", async () => {
+    const fetchMock = vi.fn(async () => new Response("down", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    await expect(getTranscriber().transcribe(clip, "audio/webm", [])).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("can be turned off", async () => {
+    vi.stubEnv("MISTRAL_STT_DIARIZE", "0");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "I'm at Bérault.", language: "en" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    await getTranscriber().transcribe(clip, "audio/webm", []);
+    const form = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(form.get("diarize")).toBeNull();
+  });
+});
