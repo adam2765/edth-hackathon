@@ -6,7 +6,7 @@
  */
 import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
-import { canonTokens, categoryIsExplicit, genericCategoryOf, isCategoryWord, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
+import { canonTokens, categoryIsExplicit, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
 
 export const FRESH_MS = 10 * 60 * 1000;
@@ -558,6 +558,28 @@ export function resolve(input: ResolveInput): Resolution {
       if (ofCat.length) {
         good = ofCat;
         note += `; narrowed to ${category} (said outright)`;
+      }
+    }
+    // "Vincennes metro": the station called exactly "Vincennes" is the RER, and the metro station
+    // with that name in it is "Château de Vincennes". The whole name and the word "metro" point to
+    // two places, so ask, even when one of them is near [180].
+    if (category === "metro_station" && metroIsExplicit(transcript, saidForExplicit)) {
+      const trains = good.filter((m) => m.feature.category === "metro_station");
+      const metros = all.filter((m) => m.feature.category === "metro_station" && m.feature.subtype === "metro" && m.score >= GOOD_SCORE && !good.includes(m));
+      if (trains.length && trains.every((m) => m.feature.subtype !== "metro") && metros.length) {
+        const cands = [...trains, ...metros]
+          .map((m) => toCandidate(m.feature, ref, intent, last, m.score))
+          .sort((a, b) => a.distance_m - b.distance_m)
+          .slice(0, MAX_CHOICES);
+        return {
+          status: "ambiguous",
+          candidates: cands,
+          question: askQuestion(cands, lang, "metro_station"),
+          evidence: {
+            rule: "named_metro_or_train",
+            detail: `${note}; "metro" said, but "${trains[0].feature.name}" is a ${trains[0].feature.subtype ?? "train"} station; metro with the name: ${metros.map((m) => m.feature.name).join(", ")}`,
+          },
+        };
       }
     }
     const groups = collapseColocated(good);
