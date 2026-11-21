@@ -121,7 +121,8 @@ Native builds and exports must run setup before bundling, on either platform.
 ### Historical model comparison
 
 The following measurements predate the fixed-model app; the compared modes are no longer
-user-selectable.
+user-selectable. A newer comparison, on 21 Nov, with the language pinned and against Parakeet and
+Voxtral, is in [../docs/stt-comparison.md](../docs/stt-comparison.md).
 
 Measured on 20 Nov in the iPhone simulator, on the 9 scenario steps (synthetic voices, clean audio).
 A step counts when the coordinator's answer is the expected one.
