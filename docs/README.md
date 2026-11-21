@@ -36,6 +36,7 @@ New to the project? Read these in order:
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: four roles for the four of us, one of them evidence then pitch, and what we leave out to fit | The team agrees a split, or the mentors' answers move it |
+| [pitch.md](pitch.md) | The Demo Day deck: where it lives, its outline slide by slide, what is still to fill in, its look, and how to submit it | A slide is added, cut or changes its point; a placeholder is filled |
 | [receiver-review.md](receiver-review.md) | The Saturday-night review of the receiver, now the command post: what was fixed, and the decisions left for Alex | A decision in it is made; delete it when none are left |
 | [handoff-prompt-tuning.md](handoff-prompt-tuning.md) | Handoff: tuning the extraction prompt with the eval and the two skills, where it stands, what is next | A cycle finishes; fold it into evals/README.md when the work settles |
 | [handoff-android-microphone.md](handoff-android-microphone.md) | Android PCM implemented; remaining recognition and timing checks | Delete it when validation is done |
