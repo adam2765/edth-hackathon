@@ -5,7 +5,7 @@ import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
-import { ukrainianVoice } from "@/lib/tts/ukrainianVoice";
+import { loadingLabel, ukrainianVoice } from "@/lib/tts/ukrainianVoice";
 
 type Lang = "en" | "fr" | "uk";
 const SPEECH_LANG: Record<Lang, string> = { en: "en-GB", fr: "fr-FR", uk: "uk-UA" };
@@ -165,9 +165,33 @@ function unlockSpeech() {
   } catch {}
 }
 
+/**
+ * Where the on-device Ukrainian voice is: about 77 MB the first time, with nothing on screen
+ * before [193]. Shown under the language switch while Ukrainian is chosen.
+ */
+type VoiceLoad = { state: "idle" } | { state: "loading"; text: string } | { state: "ready" } | { state: "failed" };
+const VOICE_IDLE: VoiceLoad = { state: "idle" };
+let voiceLoad: VoiceLoad = VOICE_IDLE;
+const voiceLoadListeners = new Set<() => void>();
+const voiceLoadStore = {
+  get: () => voiceLoad,
+  set(v: VoiceLoad) {
+    voiceLoad = v;
+    for (const cb of voiceLoadListeners) cb();
+  },
+  subscribe(cb: () => void) {
+    voiceLoadListeners.add(cb);
+    return () => voiceLoadListeners.delete(cb);
+  },
+};
 /** Starts fetching the on-device Ukrainian voice. Without it, questions use the system voice. */
 function preloadUkrainianVoice() {
-  ukrainianVoice.load().catch(() => {});
+  if (ukrainianVoice.ready) return;
+  if (voiceLoad.state !== "loading") voiceLoadStore.set({ state: "loading", text: "Завантажую голос…" });
+  ukrainianVoice
+    .load((p) => voiceLoadStore.set({ state: "loading", text: loadingLabel(p) }))
+    .then(() => voiceLoadStore.set({ state: "ready" }))
+    .catch(() => voiceLoadStore.set({ state: "failed" }));
 }
 
 function stopSpeaking() {
@@ -215,6 +239,7 @@ export default function VoiceMapApp() {
   const [mapReady, setMapReady] = useState(false);
   const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
   const speakerLang = useSyncExternalStore(langStore.subscribe, langStore.get, (): Lang => "en");
+  const voiceLoading = useSyncExternalStore(voiceLoadStore.subscribe, voiceLoadStore.get, () => VOICE_IDLE);
 
   // Ukrainian questions use the on-device voice, so fetch it as soon as Ukrainian is chosen.
   useEffect(() => {
@@ -768,6 +793,11 @@ export default function VoiceMapApp() {
           </button>
         ))}
       </nav>
+      {speakerLang === "uk" && (voiceLoading.state === "loading" || voiceLoading.state === "failed") && (
+        <div className="voice-load" role="status" aria-live="polite">
+          {voiceLoading.state === "loading" ? voiceLoading.text : "Голос недоступний: питання читає системний голос."}
+        </div>
+      )}
       <section ref={sheetEl} className="sheet">
         {pending && (
           <div className="ask" role="dialog" aria-label="Which one did you mean?">
