@@ -6,7 +6,7 @@
  */
 import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
-import { canonTokens, categoryIsExplicit, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
+import { canonTokens, categoryIsExplicit, categoryOfToken, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
 import { blocksSaid, crossingsAhead, MAX_BLOCKS, runsWay, type Ahead, type BlocksSaid } from "./blocks";
 
@@ -601,6 +601,31 @@ export function resolve(input: ResolveInput): Resolution {
         }
         return c;
       });
+      // One match of another type than the one said: "I'm at Vincent station" (a misheard
+      // "Vincennes") found only a school, and "А на Ізюмській станції" (rain over "Izium station")
+      // only the weather station 3.3 km away. A type said outright is not overruled by a lone name:
+      // ask among the places of that type, the name's own match last [185].
+      const said = cands.length === 1 ? saidType(transcript, category) : null;
+      // Words for the match's own type were said too ("Route du Donjon": a road, "donjon" a keep): no clash.
+      const ownTypeSaid = canonTokens(transcript).some((t) => isCategoryWord(t, cands[0].category));
+      if (said && cands[0].category !== said && !ownTypeSaid) {
+        // Nearest of that type, even beyond the usual radius: a town may have one station, far out.
+        const ofType = gazetteer
+          .filter((f) => f.category === said)
+          .map((f) => toCandidate(f, ref, intent, last))
+          .sort((a, b) => a.distance_m - b.distance_m)
+          .slice(0, MAX_CHOICES - 1);
+        const choices = [...ofType, cands[0]];
+        return {
+          status: "ambiguous",
+          candidates: choices,
+          question: askQuestion(choices, lang, null),
+          evidence: {
+            rule: "named_type_mismatch",
+            detail: `${note}; the one match "${cands[0].name}" is a ${cands[0].category}, but a ${said} was said; nearest ${ofType.length} ${said} from ${refLabel} offered first`,
+          },
+        };
+      }
       return decide(cands, "named", `${note}; ${cands.length} match(es); ref ${refLabel}`);
     }
     if (category && category !== "street" && category !== "other") {
@@ -802,6 +827,19 @@ function countBlocks(a: BlocksInput): Resolution {
     question: crossingQuestion(useShort ? short : choiceLabels(top, lang), useShort ? one!.name : null, lang),
     evidence: { rule: "blocks_ambiguous", detail: `${detail}; the counts disagree, or more than one street runs ${dir}` },
   };
+}
+
+/**
+ * The type of place the words say outright, if they say exactly one: the model's category when
+ * one of its words was said, else the only category a word names. Streets and "other" are too
+ * loose to overrule a name ("площі" is a square, "Golden Gate" has no type word).
+ */
+function saidType(transcript: string, modelCategory: Category | null): Category | null {
+  const words = canonTokens(transcript);
+  const loose = (c: Category | null | undefined) => !c || c === "street" || c === "other" || c === "intersection";
+  if (!loose(modelCategory) && words.some((t) => isCategoryWord(t, modelCategory!))) return modelCategory;
+  const found = new Set(words.map((t) => categoryOfToken(t)).filter((c): c is Category => !loose(c)));
+  return found.size === 1 ? [...found][0] : null;
 }
 
 function categoryCandidates(category: Category, gazetteer: GazetteerFeature[], ref: LatLon, intent: Intent, last: LastPosition | null | undefined): Candidate[] {
