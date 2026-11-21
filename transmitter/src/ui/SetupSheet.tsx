@@ -1,5 +1,6 @@
-// Everything you set once and then leave alone: who you are, which coordinator, where speech
-// becomes text, and sound. Kept off the main screen so that screen is only for reporting.
+// Everything you set once and then leave alone: the area and language, which coordinator, where
+// speech becomes text, and scenarios. Kept off the main screen so that screen is only for reporting.
+// There is no call sign: like a radio, the phone says who it is in its words [202].
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { PHONE_MODELS, STT_MODES, type PhoneMode, type SttMode } from "../stt";
@@ -14,8 +15,6 @@ export interface SetupProps {
   /** True while a report is being recorded or sent: choices that would change it are locked. */
   locked: boolean;
 
-  callsign: string;
-  onCallsign: (v: string) => void;
   areas: { id: AreaId; label: string }[];
   area: AreaId;
   onArea: (a: AreaId) => void;
@@ -40,8 +39,6 @@ export interface SetupProps {
   sendClips: boolean;
   onSendClips: (v: boolean) => void;
 
-  speakReplies: boolean;
-  onSpeakReplies: (v: boolean) => void;
   playClips: boolean;
   onPlayClips: (v: boolean) => void;
   realTime: boolean;
@@ -83,27 +80,9 @@ export function SetupSheet(p: SetupProps) {
 
           <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             <Group
-              title="This unit"
-              footer="The area decides which place names the coordinator looks reports up in. The language is the one you speak: speech-to-text on the phone listens for it, and questions come back in it. Scenarios use each report’s own language."
+              title="Reports"
+              footer="The area decides which place names the coordinator looks reports up in; in a mission, the mission’s area counts. The language is the one you speak: speech-to-text listens for it, and the operator’s questions are written in it. Scenarios use each report’s own language."
             >
-              <Row
-                label="Call sign"
-                right={
-                  <TextInput
-                    style={styles.input}
-                    value={p.callsign}
-                    onChangeText={(t) => p.onCallsign(t.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    maxLength={16}
-                    placeholder="ALPHA 1"
-                    placeholderTextColor={color.textDim}
-                    selectionColor={color.accent}
-                    accessibilityLabel="Call sign"
-                  />
-                }
-              />
               <View style={styles.padded}>
                 <Segmented label="Area" options={p.areas} value={p.area} onChange={p.onArea} disabled={p.locked} />
               </View>
@@ -172,12 +151,8 @@ export function SetupSheet(p: SetupProps) {
               {phoneMode ? <SwitchRow label="Send clips for testing" note="Also sends each recording. The coordinator keeps it only when started with KEEP_CLIPS=1" value={p.sendClips} onValueChange={p.onSendClips} /> : null}
             </Group>
 
-            <Group title="Sound">
-              <SwitchRow label="Speak questions" note="Reads the coordinator’s question aloud" value={p.speakReplies} onValueChange={p.onSpeakReplies} />
-              <SwitchRow label="Play scenario clips aloud" note="Before each one is sent, so the room hears the report" value={p.playClips} onValueChange={p.onPlayClips} />
-            </Group>
-
             <Group title="Scenarios">
+              <SwitchRow label="Play clips aloud" note="Before each one is sent, so the room hears the report" value={p.playClips} onValueChange={p.onPlayClips} />
               <SwitchRow label="Keep the script’s timing" note="Wait between reports as the script says" value={p.realTime} onValueChange={p.onRealTime} />
             </Group>
           </ScrollView>

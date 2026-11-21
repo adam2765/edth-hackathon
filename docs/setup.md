@@ -215,11 +215,11 @@ xcrun devicectl device process launch --device "<phone>" --terminate-existing \
 
 (person) When iOS asks to "find devices on your local network", allow it.
 
-Check: the app opens, and the dot beside the call sign turns green. The app sends reports to the coordinator on this Mac, port 3117 [78].
+Check: the app opens, and the dot beside the coordinator's name turns green. The app sends reports to the coordinator on this Mac, port 3117 [78].
 
-(person) Open `http://localhost:3117/cp` on the Mac and open a mission from its Missions menu (Vincennes, any name; a start point is optional). In the app, the mission appears under "Join a mission"; tap Join.
+(person) Open `http://localhost:3117/cp` on the Mac and open a mission from its Missions menu: Vincennes, any name, and your call sign under Call signs (ALPHA 1, say); a start point is optional. The app picks the mission by itself when it is the only one open; with several, tap it under "Pick a mission". There is no call sign to type in the app: like a radio, you say it [207].
 
-Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
+Check: the app shows the mission's name at the top, the talk button says "Hold to talk", and the command post lists ALPHA 1, "On roster", not heard yet. Hold the button, say "Alpha 1, at the town hall", release: the app says "Sent", and ALPHA 1 moves to the town hall on the command post. Reports need a mission on this coordinator [114].
 
 (person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
 
@@ -227,7 +227,7 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
 
-For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
+For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: pick the same mission, hold the button until red, say your call sign and a place ("Alpha 1, at the town hall"), release, and look for the report on the command post. Recognition can ask back if it mishears a name; the question waits for the operator there.
 
 ## 7. Daily start
 
