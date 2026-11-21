@@ -14,7 +14,7 @@
 import { resolve, type ResolveInput } from "./resolver";
 import { blocksSaid } from "./blocks";
 import { readGrid } from "./grid";
-import { withFacing } from "./clock";
+import { bearingSaid as bearingInWords, clockSaid, withFacing, type ClockSaid } from "./clock";
 import type { Affiliation, Candidate, Direction, Intent, Placement, Resolution, TrackKind, TrackResolution } from "./types";
 
 /** A track seen "on" a street or along a river is somewhere along it, not at the point nearest the observer. */
@@ -445,10 +445,26 @@ const AFFILIATION_SAY: Record<Lang, Record<Affiliation, [string, string]>> = {
   uk: { hostile: ["ворожий", "ворожа"], suspect: ["підозрілий", "підозріла"], unknown: ["невідомий", "невідома"], neutral: ["цивільний", "цивільна"], friendly: ["дружній", "дружня"] },
 };
 
-const WORDS: Record<Lang, { track: (n: number) => string; now: string; count: (c: number) => string; fromYou: (d: number, dir: string) => string; unsaved: string }> = {
-  en: { track: (n) => `Track ${n}`, now: "now", count: (c) => `count ${c}`, fromYou: (d, dir) => `${d} metres ${dir} of you`, unsaved: "Not numbered: no mission." },
-  fr: { track: (n) => `Piste ${n}`, now: "maintenant", count: (c) => `nombre ${c}`, fromYou: (d, dir) => `${d} mètres ${dir} de vous`, unsaved: "Sans numéro : pas de mission." },
-  uk: { track: (n) => `Об'єкт ${n}`, now: "тепер", count: (c) => `кількість ${c}`, fromYou: (d, dir) => `${d} метрів ${dir} від вас`, unsaved: "Без номера: немає місії." },
+/**
+ * The way as the speaker gave it, said back the same way [230]: "bearing 060", "2 o'clock". The
+ * eight compass words would turn 060 into "north-east", vaguer than what was said.
+ */
+function angleSaid(transcript: string, lang: Lang): string | null {
+  const clock: ClockSaid | null = clockSaid(transcript);
+  if (clock) {
+    const h = Number.isInteger(clock.hour) ? String(clock.hour) : `${Math.floor(clock.hour)}:30`;
+    return lang === "fr" ? `à ${h} heures` : lang === "uk" ? `на ${h} годину` : `at ${h} o'clock`;
+  }
+  const b = bearingInWords(transcript);
+  if (!b) return null;
+  const deg = String(b.deg).padStart(3, "0");
+  return lang === "en" ? `bearing ${deg}` : `azimut ${deg}`.replace("azimut", lang === "uk" ? "азимут" : "azimut");
+}
+
+const WORDS: Record<Lang, { track: (n: number) => string; now: string; count: (c: number) => string; fromYou: (d: number, dir: string) => string; metres: (d: number) => string; unsaved: string }> = {
+  en: { track: (n) => `Track ${n}`, now: "now", count: (c) => `count ${c}`, fromYou: (d, dir) => `${d} metres ${dir} of you`, metres: (d) => `${d} metres`, unsaved: "Not numbered: no mission." },
+  fr: { track: (n) => `Piste ${n}`, now: "maintenant", count: (c) => `nombre ${c}`, fromYou: (d, dir) => `${d} mètres ${dir} de vous`, metres: (d) => `${d} mètres`, unsaved: "Sans numéro : pas de mission." },
+  uk: { track: (n) => `Об'єкт ${n}`, now: "тепер", count: (c) => `кількість ${c}`, fromYou: (d, dir) => `${d} метрів ${dir} від вас`, metres: (d) => `${d} метрів`, unsaved: "Без номера: немає місії." },
 };
 
 /** "hostile vehicle", "véhicule hostile", "ворожа машина". A new track with nothing said is an unknown contact. */
@@ -481,7 +497,9 @@ export function sayBack(res: Resolution, read: Intent, transcript: string): stri
   let where = "";
   if (t.placement?.pin) {
     const dir = bearingSaid(intent);
-    where = res.evidence.rule === "dead_reckoned" && intent.distance_m && dir ? w.fromYou(intent.distance_m, DIR_WORDS[lang][dir]) : (t.label ?? "");
+    const angle = angleSaid(transcript, lang);
+    const reckoned = res.evidence.rule === "dead_reckoned" && intent.distance_m;
+    where = reckoned && angle ? `${w.metres(intent.distance_m!)}, ${angle}` : reckoned && dir ? w.fromYou(intent.distance_m!, DIR_WORDS[lang][dir]) : (t.label ?? "");
     if (where && !t.opened) where = `${w.now} ${where}`;
   }
   const parts = [t.n != null ? w.track(t.n) : "", what, where].filter(Boolean);
@@ -652,7 +670,9 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   const line = target?.category === "street" || target?.category === "water";
   const radius_m = line && r.radius_m != null ? Math.max(r.radius_m, TRACK_ON_LINE_M) : r.radius_m;
   const dir = bearingSaid(withFacing(intent, transcript).intent); // turned to the facing said [224]
-  const label = target?.name ?? (r.evidence.rule === "grid_reference" && grid ? `grid ${grid.text}` : null) ??
+  const label = target?.name ?? (r.evidence.rule === "grid_reference" && grid ? r.evidence.detail.split(":")[0] : null) ??
+    // On the operator's map a bearing is kept as said; a clock is the speaker's own, so the compass way stands [230].
+    (intent.distance_m && !clockSaid(transcript) && bearingInWords(transcript) ? `${intent.distance_m} m, ${angleSaid(transcript, "en")}, from ${input.observer ?? "the observer"}` : null) ??
  (intent.distance_m && dir ? `${intent.distance_m} m ${dir.replace("_", "-")} of ${input.observer ?? "the observer"}` : "position");
   return {
     status: "resolved",

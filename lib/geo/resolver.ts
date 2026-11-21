@@ -350,6 +350,21 @@ export function resolve(input: ResolveInput): Resolution {
     };
   }
   if (grid) {
+    // "Grid DQ 586 101, 200 metres north": the grid is a reference point, the thing is off it [230].
+    // The angle is the clock's or bearing's own when one was said, as for a move [198, 229].
+    const way = d != null ? compassSaid(intent) : null;
+    if (way && d != null && d > 0) {
+      const said = faced.clock && faced.clock.direction === way ? faced.clock.deg : DIRECTION_DEG[way];
+      const radius = grid.radius_m + compassRadius(d);
+      return {
+        status: "resolved",
+        pin: destination(grid.pin, said, d),
+        radius_m: radius,
+        estimated: true,
+        candidates: [],
+        evidence: { rule: "grid_reference", detail: `${d} m ${way.replace("_", "-")} of grid ${grid.text}: ${d} m on bearing ${said}° from the cell's centre, ±${radius} m` },
+      };
+    }
     return {
       status: "resolved",
       pin: grid.pin,
