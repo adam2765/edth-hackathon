@@ -172,6 +172,15 @@ defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier | grep -E 'team
 
 It is the 10-character `teamID`. With several teams, ask the person which one.
 
+Keep both values in `transmitter/.env.local`, which git ignores. Expo's commands and `npm run phones` read it, so no terminal needs them exported [199]. (person) Create it with these two lines, since agents stay out of `.env` files:
+
+```
+APPLE_TEAM_ID=<team ID>
+TRANSMITTER_BUNDLE_ID=dev.voicetomap.transmitter.<first name>
+```
+
+On Alex's Mac, which owns `dev.voicetomap.transmitter`, the file is not needed.
+
 ### The phone
 
 (person) On the iPhone:
@@ -186,18 +195,7 @@ Check: `xcrun devicectl list devices` lists the phone, and its state is not `una
 ```bash
 cd transmitter
 npm install
-export APPLE_TEAM_ID=<team ID>
-export TRANSMITTER_BUNDLE_ID=dev.voicetomap.transmitter.<first name>
-LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
 ```
-
-- `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale [66].
-- The first build takes several minutes.
-- `ios/` is generated and ignored by git. If you change the team or bundle ID after a build, run `npx expo prebuild --clean --platform ios` first.
-
-(person) With a free Apple ID, the first launch is refused until you allow it on the phone: Settings → General → VPN & Device Management → your Apple ID → Trust.
-
-### Run it
 
 The app loads its code from Metro on the Mac. Keep Metro running in its own terminal:
 
@@ -205,13 +203,23 @@ The app loads its code from Metro on the Mac. Keep Metro running in its own term
 cd transmitter && npx expo start --dev-client
 ```
 
-Open the app with the Mac's network name. That works over the cable alone, and it survives address changes:
+Then build, install and open the app on every iPhone connected to this Mac [199]:
 
 ```bash
-xcrun devicectl device process launch --device "<phone>" --terminate-existing \
-  --payload-url "exp+transmitter://?__expo_url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081&__expo_disable_fab=1&__expo_disable_onboarding=1" \
-  "$TRANSMITTER_BUNDLE_ID"
+cd transmitter && npm run phones -- --check    # the bundle ID it will use, and what it will do on each phone
+cd transmitter && npm run phones
 ```
+
+Check: the `--check` line starts with your own bundle ID (`dev.voicetomap.transmitter.<first name>`), except on Alex's Mac.
+
+- The script sets `LANG=en_US.UTF-8`: CocoaPods fails without a UTF-8 locale [66].
+- The first build takes several minutes. Later runs only reopen the app, unless something native changed.
+- `ios/` is generated and ignored by git. The script makes it again when the config changes, a new team or bundle ID included.
+- It opens the app with the Mac's network name, which works over the cable alone and survives address changes.
+
+(person) With a free Apple ID, the first launch is refused until you allow it on the phone: Settings → General → VPN & Device Management → your Apple ID → Trust. Then run `npm run phones` again.
+
+### Run it
 
 (person) When iOS asks to "find devices on your local network", allow it.
 
@@ -222,6 +230,10 @@ Check: the app opens, and the dot beside the call sign turns green. The app send
 Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
 
 (person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
+
+### Later updates
+
+Run `cd transmitter && npm run phones` again after a pull, or to reopen the app on every connected iPhone. It builds only when something native changed [199]. Another teammate's iPhone can get the app from this Mac the same way: plugged in, unlocked, trusted and in Developer Mode, it is signed with this Mac's Apple ID. Details: [transmitter/README.md](../transmitter/README.md#updating-the-phones).
 
 ## 6. Transmitter on Android
 
@@ -240,6 +252,8 @@ PROVIDER_MODE=local npm run dev -- -p 3117              # offline mode; with a k
 cd transmitter && npx expo start --dev-client            # phone testing only
 ```
 
+Then, once, with the iPhones connected: `cd transmitter && npm run phones`. It opens the app on each one, and updates it first if needed.
+
 ## When something fails
 
 | What you see | Why | Fix |
@@ -247,7 +261,7 @@ cd transmitter && npx expo start --dev-client            # phone testing only
 | Coordinator log: `No extraction key` or `No speech-to-text key` | Hosted mode with no Mistral key | Run offline mode, `PROVIDER_MODE=local` (part 3), or add a key (part 4) |
 | `Processing failed` in hosted mode | Missing or wrong Mistral key, or no internet | Check `.env.local` and restart the coordinator, or use offline mode |
 | `pod install` fails with an encoding error | No UTF-8 locale | Prefix the build with `LANG=en_US.UTF-8` [66] |
-| Xcode: the bundle identifier is not available | Another team owns that bundle ID | Set your own `TRANSMITTER_BUNDLE_ID`, then `npx expo prebuild --clean --platform ios` |
+| Xcode: the bundle identifier is not available | Another team owns that bundle ID | Set your own `TRANSMITTER_BUNDLE_ID` in `transmitter/.env.local`, then `npm run phones` |
 | Expo asks to choose a development team | `APPLE_TEAM_ID` is not set | Set it (part 5, Signing) |
 | The phone will not open the app | Developer Mode is off, or the Apple ID is not trusted yet | Part 5, The phone; then VPN & Device Management |
 | Expo Go cannot open the app | It needs native modules | Use the development build [59] |

@@ -30,7 +30,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "setup": "node scripts/prepare-stt.mjs"
+    "setup": "node scripts/prepare-stt.mjs",
+    "phones": "node scripts/phones.mjs"
   },
   "private": true
 }

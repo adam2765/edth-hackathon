@@ -3,7 +3,8 @@
 // (decision 96; steps in ../docs/setup.md):
 //   TRANSMITTER_BUNDLE_ID  your own, e.g. dev.voicetomap.transmitter.sam (default: the one in app.json)
 //   APPLE_TEAM_ID          the 10-character team ID Xcode has for your Apple ID
-// Change either after a build and run `npx expo prebuild --clean --platform ios` before the next one.
+// Keep them in transmitter/.env.local, which Expo's commands and `npm run phones` read. That script
+// makes ios/ again when either changes; by hand, run `npx expo prebuild --clean --platform ios` (decision 199).
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => {
