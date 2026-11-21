@@ -4,6 +4,7 @@ import { distanceM } from "../lib/geo/geo";
 import { readGrid, toUtm } from "../lib/geo/grid";
 import { resolve } from "../lib/geo/resolver";
 import { resolveReport } from "../lib/geo/tracks";
+import { positionFromReport } from "../lib/reports/position";
 import type { Intent } from "../lib/geo/types";
 
 const VINCENNES = { lat: 48.8455, lon: 2.435 };
@@ -70,6 +71,11 @@ describe("a grid in a report [223]", () => {
     const r = resolve({ intent: intent({ landmark_name: "DQ 586 101" }), transcript: "I'm at grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
     expect(r).toMatchObject({ status: "resolved", radius_m: 71, evidence: { rule: "grid_reference" } });
     expect(distanceM(r.pin!, CASTLE)).toBeLessThan(100);
+  });
+
+  it("shows the grid on the command post, not \"position\" [228]", () => {
+    const r = resolve({ intent: intent({}), transcript: "Alpha 1, grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    expect(positionFromReport(r, null)?.label).toBe("grid DQ 586 101");
   });
 
   it("asks again for a grid far outside the area", () => {
