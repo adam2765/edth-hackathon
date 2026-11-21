@@ -25,6 +25,7 @@ export function ScenarioCard({
   scenarioId,
   onSelect,
   results,
+  summary,
   running,
   blocked,
   onPlay,
@@ -35,6 +36,8 @@ export function ScenarioCard({
   scenarioId: string;
   onSelect: (id: string) => void;
   results: Record<string, StepResult>;
+  /** The last run in a line: steps as expected, and the phone's speech-to-text times. */
+  summary: string | null;
   running: boolean;
   /** True when nothing can be sent right now (busy elsewhere, or a model is missing). */
   blocked: boolean;
@@ -65,6 +68,7 @@ export function ScenarioCard({
       </ScrollView>
 
       {running ? <Button label="Stop" icon="stop" onPress={onStop} /> : <Button label="Play all in order" icon="play" onPress={onPlay} disabled={blocked || !scenario} />}
+      {summary && !running ? <Text style={styles.summary}>{summary}</Text> : null}
 
       {scenario ? (
         <View style={styles.panel}>
@@ -104,7 +108,7 @@ export function ScenarioCard({
           })}
         </View>
       ) : null}
-      <Text style={styles.hint}>Tap a report to send it on its own. Scenarios use prepared clips, not the microphone.</Text>
+      <Text style={styles.hint}>Tap a report to send it on its own. Scenarios use prepared clips, not the microphone, and each names its own call sign. A question stays open for the operator on the command post.</Text>
     </View>
   );
 }
@@ -125,4 +129,5 @@ const styles = StyleSheet.create({
   stepText: { flex: 1, gap: 2 },
   failNote: { color: color.bad },
   hint: { ...type.footnote, paddingHorizontal: space.lg },
+  summary: { ...type.footnote, color: color.text, paddingHorizontal: space.lg },
 });

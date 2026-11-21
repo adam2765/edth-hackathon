@@ -43,6 +43,8 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
   const [unreachable, setUnreachable] = useState(false);
   const [area, setArea] = useState<AreaId>(defaultArea);
   const [name, setName] = useState("");
+  /** The call signs on the radio net, split by commas or lines [201]. */
+  const [roster, setRoster] = useState("");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<{ key: string; places: StartPoint[] }>({ key: "", places: [] });
   const [start, setStart] = useState<StartPoint | null>(null);
@@ -107,7 +109,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ area, name, start: start?.id ?? null }),
+        body: JSON.stringify({ area, name, start: start?.id ?? null, roster }),
       });
       if (!res.ok) throw new Error(await errorOf(res));
       const { mission } = (await res.json()) as { mission: MissionSummary };
@@ -146,7 +148,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
           <>
             <section className={styles.panelSection} aria-labelledby="new-h">
               <h2 id="new-h" className={styles.h2}>
-                New mission
+                Start mission
               </h2>
               <div className={styles.field}>
                 <span className={styles.label} id="area-l">
@@ -173,6 +175,22 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                 <span className={styles.label}>Name</span>
                 <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Optional, e.g. Vincennes walk" />
               </label>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="roster-in">
+                  Call signs
+                </label>
+                <input
+                  id="roster-in"
+                  className={styles.input}
+                  value={roster}
+                  onChange={(e) => setRoster(e.target.value)}
+                  maxLength={800}
+                  placeholder="Optional, e.g. ALPHA 1, ALPHA 2, СОКІЛ"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                />
+                <p className={styles.hint}>The units on the radio net, split by commas. A radio report goes only to a unit on this list. You can add one later from the Unassigned tray.</p>
+              </div>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="start-q">
                   Start point
@@ -220,7 +238,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                 <p className={styles.hint}>Optional. Units that join start here, shown with ≈, until they say where they are.</p>
               </div>
               <button type="button" className={styles.primaryBtn} onClick={create} disabled={busy}>
-                {busy ? "Opening…" : "Open mission"}
+                {busy ? "Starting…" : "Start mission"}
               </button>
             </section>
 

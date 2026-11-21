@@ -21,7 +21,7 @@ const named = args.filter((a) => !a.startsWith("--"));
 const dir = clipsDir();
 const files = named.length ? named : readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(dir, f));
 if (!files.length) {
-  console.log(`No clips in ${dir}. Start the coordinator with KEEP_CLIPS=1 and turn on "Send clips" on the phone.`);
+  console.log(`No clips in ${dir}. Start the coordinator with KEEP_CLIPS=1 and send audio from the phone.`);
   process.exit(0);
 }
 

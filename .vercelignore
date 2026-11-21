@@ -26,3 +26,6 @@ next-env.d.ts
 # env files
 .env*
 !.env.example
+
+# Local launcher state, logs and prepared releases
+/.run/

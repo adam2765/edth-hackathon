@@ -6,10 +6,14 @@ The transmitter: it stands in for a field radio and sends spoken reports to the 
 
 Where this app differs from the Expo template advice below:
 
+- **Connection:** detect coordinators through the Metro/USB host and LAN discovery, show Connect per server, then automatically follow the newest running mission between reports. No mission picker or Join/Leave controls.
 - **One screen, no Expo Router** (decision 65). Ignore the routing section below unless the app grows a second screen.
-- **Native development build, not Expo Go** (decision 59): on-device speech-to-text and an open microphone need native modules. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
+- **Transcription runs on the coordinator:** send compressed microphone/scenario audio. Do not restore phone model setup or transcription controls. The existing native dependencies are retained for installed-build compatibility.
+- **Native development build, not Expo Go** (decision 59): installed builds still include the existing native audio dependencies. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
 - **Signing comes from the environment** (decision 96): each teammate signs with their own Apple ID, so `app.config.ts` takes `TRANSMITTER_BUNDLE_ID` and `APPLE_TEAM_ID` over `app.json`. Do not change the bundle ID in `app.json` for one person's build. Setup steps: `../docs/setup.md`.
+- **Update iPhones with `npm run phones`** (decision 207): it reopens the app on every connected iPhone, and builds and installs only after a native change. Use it rather than running `expo run:ios` and `devicectl` by hand. The choices live in `scripts/phones-plan.mjs`, tested in `../tests/phones-plan.test.ts`.
 - **No EAS.** There is no paid Apple account, so iPhones get the app by cable from a Mac and Android by install file. Do not set up EAS build, submit or update.
+- **A radio on the net, not a unit** (decision 208): the phone picks a mission and sends its code as `session`, but never joins, never sends a `callsign` from the microphone (the coordinator reads the sender from the words), never answers or speaks a question (the operator does, on the command post), and sends `lastPosition` only with no mission. Do not add these back. Scenario steps still send their own call sign.
 - **Every source makes an `Utterance`** (`src/types.ts`) and goes down one send path. Add a new source (for example an open microphone) as another producer of utterances, not as a second path.
 - **Reply types come from `../lib/geo/types.ts`** as type-only imports (decision 67). Do not copy them here.
 - **Uploads use expo-file-system's `File`** (decision 64); React Native's `{ uri, name, type }` form part is rejected by Expo 58's fetch.

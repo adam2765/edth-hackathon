@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { LocalTranscriberDownError, getTranscriber } from "@/lib/providers/transcriber";
-import { getExtractor, pinnedLanguage } from "@/lib/providers/extractor";
+import { pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
-import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
-import { readVoices } from "@/lib/geo/voices";
+import { withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
 import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/reports/clips";
 import { AREAS, DEFAULT_AREA, isAreaId, speechHints, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
-import { reportContext, saveReport, type ReportInput } from "@/lib/reports/record";
-import { callsignOf, sessionCode } from "@/lib/reports/types";
+import { missionRoster } from "@/lib/reports/mission";
+import { readTranscript } from "@/lib/reports/pipeline";
+import { positionFromReport } from "@/lib/reports/position";
+import { afterCallsign, farMove, findSender, type SenderFound } from "@/lib/reports/radio";
+import { openMissionLog, reportContext, saveHeld, saveReport, type HeldInput, type ReportInput } from "@/lib/reports/record";
+import { callsignGiven, callsignOf, sessionCode, type Sender } from "@/lib/reports/types";
 
 export const maxDuration = 30;
 
@@ -62,6 +65,7 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
  * number and the words to say back, or, when nothing was saved, with words that say it has none.
  */
 async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string; resolution: Resolution }> {
+  // Without words there is no track to number.
   const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent, input.transcript) : input.resolution };
   if (!session) return unsaved;
   try {
@@ -70,6 +74,27 @@ async function save(session: string | null, input: Omit<ReportInput, "session">)
   } catch (err) {
     console.error("saving the report failed", err);
     return unsaved;
+  }
+}
+
+/** The recording's extension, for keeping it beside a held report. */
+function extOf(audio: Blob): string {
+  const name = (audio as File).name ?? "";
+  const m = name.match(/\.(wav|m4a|mp4|aac|caf|webm|ogg|mp3)$/i);
+  if (m) return m[1].toLowerCase();
+  const t = audio.type;
+  return t.includes("wav") ? "wav" : t.includes("mp4") || t.includes("m4a") || t.includes("aac") ? "m4a" : t.includes("webm") ? "webm" : t.includes("ogg") ? "ogg" : t.includes("mpeg") ? "mp3" : "bin";
+}
+
+/** Holds a radio report for the operator [203]. The phone or radio that sent it gets `held` back, not a resolution. */
+async function hold(session: string, input: Omit<HeldInput, "session" | "audio">, sound: Blob | null) {
+  try {
+    const audio = sound ? { data: Buffer.from(await sound.arrayBuffer()), ext: extOf(sound) } : null;
+    const entry = await saveHeld({ session, ...input, audio });
+    return entry ? { id: entry.id, reason: entry.reason, question: entry.question, audio: entry.audio } : null;
+  } catch (err) {
+    console.error("holding the radio report failed", err);
+    return null;
   }
 }
 
@@ -88,8 +113,8 @@ export async function POST(req: Request) {
 
   const audio = form.get("audio");
   const textIn = form.get("text");
-  // Test clips: the phone's own recording and Whisper's timed segments, sent beside its text when
-  // its "Send clips" switch is on. Kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
+  // Legacy developer clients can send a test clip beside text. New phone reports use audio.
+  // Clips are kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
   const clipIn = form.get("clip");
   const clip = clipIn instanceof Blob && clipIn.size > 0 && clipIn.size <= MAX_AUDIO_BYTES ? clipIn : null;
   const segments = clipSegments(form.get("segments"));
@@ -101,12 +126,26 @@ export async function POST(req: Request) {
   let areaId: AreaId = isAreaId(areaIn) ? areaIn : DEFAULT_AREA;
   // Who sent it and where it belongs; reports without a session (the web page) are not saved.
   const session = sessionCode(form.get("session"));
-  const callsign = callsignOf(form.get("callsign"));
+  // In a mission, a report with no call sign is a radio report: who sent it is read from its words [202].
+  const radio = session != null && !callsignGiven(form.get("callsign"));
+  let callsign = callsignOf(form.get("callsign"));
   const seqIn = Number(form.get("seq"));
   const seq = Number.isInteger(seqIn) && seqIn > 0 ? seqIn : null;
   // The language the device is set to. It decides the question's language; without it, it is guessed.
   const pinned = pinnedLanguage(form.get("language"));
-  if (session) {
+  /** A radio report: the mission's roster, the first hints for Voxtral [205]. */
+  let roster: string[] = [];
+  if (session && radio) {
+    try {
+      const m = await openMissionLog(session);
+      if (!m.ok) return NextResponse.json({ error: m.error, ended: m.ended }, { status: m.status });
+      areaId = m.area;
+      roster = missionRoster(m.entries);
+    } catch (err) {
+      console.error("reading the mission failed", err);
+      return NextResponse.json({ error: "Reading the mission failed." }, { status: 500 });
+    }
+  } else if (session) {
     // In a mission, the mission sets the area and the log gives the last position, not the phone.
     try {
       const c = await reportContext(session, callsign, { area: areaId, lastPosition }, now);
@@ -120,19 +159,19 @@ export async function POST(req: Request) {
     }
   }
   const area = AREAS[areaId];
-  const { gazetteer, bias } = AREA_DATA[area.id];
+  const { bias } = AREA_DATA[area.id];
   const meta = { callsign, seq, clientTs, area: area.id, lastPosition };
+  const sound = clip ?? (audio instanceof Blob && audio.size > 0 ? audio : null);
 
   const timings = { stt: 0, extract: 0, resolve: 0, total: 0 };
   let transcript = "";
   let sttLanguage: string | null = null;
   /** Keeps the report's audio when KEEP_CLIPS=1; the file name goes back in the reply. */
   const keep = async (r: Pick<ClipRecord, "transcript" | "language"> & { resolution: Resolution; report_id?: string }): Promise<{ clip?: string }> => {
-    const sound = clip ?? (audio instanceof Blob && audio.size > 0 ? audio : null);
     if (!sound || !keepingClips()) return {};
     const { resolution: res } = r;
     const file = await keepClip(sound, {
-      ts: now, session, callsign, seq, source: clip ? "phone" : "server", transcript: r.transcript, segments, language: r.language,
+      ts: now, session, callsign: meta.callsign, seq, source: clip ? "phone" : "server", transcript: r.transcript, segments, language: r.language,
       status: res.status, rule: res.evidence.rule, detail: res.evidence.detail, question: res.question, report_id: r.report_id, timings_ms: timings,
     });
     return file ? { clip: file } : {};
@@ -144,7 +183,9 @@ export async function POST(req: Request) {
       const s = performance.now();
       // A speaker whose language is not the area's gets phrases in their own language first [190].
       // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned), { language: pinned });
+      // On a radio net, the roster's call signs go first, so Voxtral hears them [205]. Whisper here takes no prompt [195].
+      const hints = [...roster, ...speechHints(area, bias, pinned)].slice(0, 100);
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", hints, { language: pinned });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -155,6 +196,51 @@ export async function POST(req: Request) {
       transcript = "";
     } else {
       return NextResponse.json({ error: "Send `audio` or `text`." }, { status: 400 });
+    }
+
+    /** For a radio report: who sent it, once the words are known. */
+    let sender: Sender | undefined;
+    if (session && radio) {
+      // Read the log again: questions may have opened while the clip was transcribed.
+      const m = await openMissionLog(session);
+      if (!m.ok) return NextResponse.json({ error: m.error, ended: m.ended }, { status: m.status });
+      const found: SenderFound = findSender(transcript, m.entries, now);
+      const language = pinned ?? sttLanguage;
+      if (found.kind === "held") {
+        timings.total = Math.round(performance.now() - t0);
+        const held = await hold(session, { clientTs, area: area.id, transcript, language, reason: found.reason, heard: found.heard, read: found.read, candidates: found.candidates, question: found.question }, sound);
+        console.log(`[radio] held (${found.reason}): ${found.why}`);
+        return NextResponse.json({ transcript, language, intent: null, timings_ms: timings, clientTs, area: area.id, held });
+      }
+      callsign = found.callsign;
+      sender = found.sender;
+      const c = await reportContext(session, callsign, { area: areaId, lastPosition }, now);
+      if (!c.ok) return NextResponse.json({ error: c.error, ended: c.ended }, { status: c.status });
+      lastPosition = c.lastPosition;
+      tracks = c.tracks;
+      Object.assign(meta, { callsign, lastPosition });
+      // The model reads the words after the call sign; the log keeps them all.
+      const r = await readTranscript(afterCallsign(transcript, sender.heard), { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
+      timings.extract = r.extract_ms;
+      timings.resolve = r.resolve_ms;
+      timings.total = Math.round(performance.now() - t0);
+      // A move the unit could not have made waits for the operator: maybe it was another unit [204].
+      const to = r.resolution.track ? null : positionFromReport(r.resolution, r.intent);
+      const far = farMove(m.entries, callsign, lastPosition, c.atStart, to, now);
+      if (far) {
+        const lang = pinned ?? sttLanguage ?? r.intent.language;
+        const held = await hold(
+          session,
+          { clientTs, area: area.id, transcript, language: lang, reason: "far", heard: sender.heard, read: null, candidates: [...far.others, callsign], question: far.question, position: to },
+          sound,
+        );
+        console.log(`[radio] held (far): ${far.question}`);
+        return NextResponse.json({ transcript, language: lang, intent: r.intent, timings_ms: timings, clientTs, area: area.id, held });
+      }
+      const lang = pinned ?? sttLanguage ?? r.intent.language;
+      const saved = await save(session, { ...meta, transcript, language: lang, intent: r.intent, resolution: r.resolution, timings_ms: timings, sender });
+      const kept = await keep({ transcript, language: lang, ...saved });
+      return NextResponse.json({ transcript, language: lang, intent: r.intent, timings_ms: timings, clientTs, area: area.id, callsign, sender, ...saved, ...kept });
     }
 
     if (!transcript) {
@@ -171,18 +257,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ transcript: "", language: heard, intent: null, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
     }
 
-    // The clip may hold other voices. With one voice this is one reading, as before; when two
-    // voices name different places, the speaker is asked which is theirs (lib/geo/voices.ts).
-    const extractor = getExtractor();
-    const read = await readVoices(transcript, {
-      extract: (text) => extractor.extract(text, { languageHint: sttLanguage, place: area.place, language: pinned }),
-      // About the speaker, or about a track the speaker sees: the words decide, and the resolver places either.
-      resolve: (intent, text) => resolveReport({ intent, transcript: text, lastPosition, now, gazetteer, areaCentre: area.centre, tracks, observer: callsign }),
-      gazetteer,
-      last: lastPosition,
-      now,
-      alsoReport: (text) => kindSaid(text) != null || affiliationSaid(text) != null || trackNumberSaid(text) != null,
-    });
+    const read = await readTranscript(transcript, { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
     const { intent, resolution } = read;
     timings.extract = read.extract_ms;
     timings.resolve = read.resolve_ms;
@@ -195,8 +270,8 @@ export async function POST(req: Request) {
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
     if (err instanceof LocalTranscriberDownError) {
-      console.warn(`[stt] ${err.message}. Start it with \`npm run stt\` (docs/setup.md, part 3).`);
-      const error = "Speech-to-text on the coordinator is not running. Type the report, or use speech-to-text on the phone.";
+      console.warn(`[stt] ${err.message}. Run \`npm run build\` then \`npm start\`.`);
+      const error = "Speech-to-text on the coordinator is not ready. Start the servers with npm start; run npm run build first if speech models are missing.";
       return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 503 });
     }
     console.error("report failed", err);

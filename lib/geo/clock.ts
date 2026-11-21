@@ -102,3 +102,77 @@ export function clockChecked(intent: Intent, transcript: string): Intent {
   }
   return { ...intent, direction: one?.direction ?? null };
 }
+
+// ---------- Which way the speaker faces [224] ----------
+// Above, 12 o'clock is north, as on the map [198]. When the speaker says which way they face,
+// 12 o'clock is that way instead: "facing east, 300 metres at my 3 o'clock" is south.
+
+const FACING_WORDS = new Set(["facing", "face", "faces", "oriente", "orientee", "orientes", "обличчям", "лицем", "дивлюсь", "дивлюся", "дивимось", "смотрю"]);
+const FACING_FILLER = new Set(["the", "to", "a", "au", "l", "le", "la", "vers", "на", "в"]);
+const POINT_DEG: Record<string, number> = { north: 0, east: 90, south: 180, west: 270, northeast: 45, southeast: 135, southwest: 225, northwest: 315, nord: 0, est: 90, sud: 180, ouest: 270 };
+const UK_POINTS: [string, number][] = [["північ", 0], ["півн", 0], ["схід", 90], ["схо", 90], ["півден", 180], ["захід", 270], ["захо", 270], ["север", 0], ["восток", 90], ["юг", 180], ["запад", 270]];
+const pointOf = (t: string | undefined): number | null => (t == null ? null : POINT_DEG[t] ?? UK_POINTS.find(([s]) => t.startsWith(s))?.[1] ?? null);
+
+/** Lower case, Latin accents dropped, apostrophes inside Cyrillic words joined, punctuation out. */
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[À-ɏ]/g, (c) => c.normalize("NFD").replace(/[̀-ͯ]/g, ""))
+    .replace(/([Ѐ-ӿ])[’ʼ'`]([Ѐ-ӿ])/g, "$1$2")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+/** Which way the speaker said they face, degrees from north: "facing north", "face au nord-est", "дивлюсь на схід". */
+export function facingSaid(transcript: string): number | null {
+  const toks = words(transcript);
+  for (let i = 0; i < toks.length; i++) {
+    if (!FACING_WORDS.has(toks[i])) continue;
+    let j = i + 1;
+    while (j < toks.length && FACING_FILLER.has(toks[j])) j++;
+    const a = pointOf(toks[j]);
+    if (a == null) continue;
+    const b = pointOf(toks[j + 1]);
+    if (b != null && (a === 0 || a === 180) && (b === 90 || b === 270)) return a === 0 && b === 270 ? 315 : (a + b) / 2;
+    return a;
+  }
+  return null;
+}
+
+/** "two klicks": kilometres, which the model may read as 2 m. Null when no klick was said. */
+export function klicksSaid(transcript: string): number | null {
+  const toks = words(transcript);
+  for (let i = 0; i < toks.length - 1; i++) {
+    const n = /^\d{1,3}$/.test(toks[i]) ? Number(toks[i]) : HOURS[toks[i]] ?? null;
+    if (n && ["klick", "klicks", "klik", "kliks"].includes(toks[i + 1])) return n * 1000;
+  }
+  return null;
+}
+
+/** A clock direction turned so that 12 o'clock is `facing` degrees, not north. */
+export function turnClock(c: ClockSaid, facing: number): ClockSaid {
+  const deg = Math.round((((c.deg + facing) % 360) + 360) % 360);
+  return { hour: c.hour, deg, direction: POINTS[Math.round(deg / 45) % 8] };
+}
+
+export interface Faced {
+  intent: Intent;
+  /** The clock direction, turned when the facing is known; null when none was said. */
+  clock: ClockSaid | null;
+  /** Degrees, or null when the words did not say. */
+  facing: number | null;
+}
+
+/**
+ * The intent with its compass way turned to where the speaker said they face, when a clock
+ * direction was said too. The way the model or `clockChecked` put north-based is moved.
+ */
+export function withFacing(intent: Intent, transcript: string): Faced {
+  const clock = clockSaid(transcript);
+  const facing = facingSaid(transcript);
+  if (!clock || facing == null) return { intent, clock, facing };
+  const turned = turnClock(clock, facing);
+  const relation = intent.relation === `${clock.direction}_of` ? (`${turned.direction}_of` as Intent["relation"]) : intent.relation;
+  const direction = intent.direction === clock.direction ? turned.direction : intent.direction;
+  return { intent: { ...intent, relation, direction }, clock: turned, facing };
+}

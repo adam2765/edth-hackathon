@@ -8,8 +8,9 @@ import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosi
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
 import { canonTokens, categoryIsExplicit, categoryOfToken, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
+import { GRID_MAX_KM, readGrid } from "./grid";
 import { blocksSaid, crossingsAhead, MAX_BLOCKS, runsWay, type Ahead, type BlocksSaid } from "./blocks";
-import { clockSaid } from "./clock";
+import { klicksSaid, withFacing } from "./clock";
 
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
@@ -295,6 +296,13 @@ function askQuestion(cands: Candidate[], lang: Lang, category: Category | null, 
  */
 type Prompt = "place" | "no_start" | "incomplete" | "crossing_no_start";
 
+function gridTooFar(lang: Lang, grid: string, km: number): string {
+  const n = Math.round(km);
+  if (lang === "fr") return `La grille ${grid} est à ${n} km d'ici. Redites la grille.`;
+  if (lang === "uk") return `Квадрат ${grid} за ${n} км звідси. Повторіть координати.`;
+  return `Grid ${grid} is ${n} km away. Say the grid again.`;
+}
+
 function unresolvedPrompt(lang: Lang, prompt: Prompt = "place"): string {
   if (prompt === "crossing_no_start") {
     if (lang === "fr") return "Je ne sais pas où vous êtes. Donnez les noms des rues qui se croisent.";
@@ -317,15 +325,39 @@ function unresolvedPrompt(lang: Lang, prompt: Prompt = "place"): string {
 }
 
 export function resolve(input: ResolveInput): Resolution {
-  const { intent, transcript, lastPosition: last, now, gazetteer } = input;
+  const { transcript, lastPosition: last, now, gazetteer } = input;
+  // A clock direction turns with the way the speaker said they face [224]; else 12 is north [198].
+  const faced = withFacing(input.intent, transcript);
+  const intent = faced.intent;
   const lang: Lang = intent.language === "fr" || intent.language === "uk" ? intent.language : "en";
-  const d = intent.distance_m ?? null;
+  // Klicks are kilometres; the model may not know the word [224].
+  const d = klicksSaid(transcript) ?? intent.distance_m ?? null;
   const plain = (rule: string, detail: string, prompt?: Prompt): Resolution => ({
     status: "unresolved",
     candidates: [],
     question: unresolvedPrompt(lang, prompt),
     evidence: { rule, detail },
   });
+
+  // A grid reference names the cell outright: no place to look up [223].
+  const grid = readGrid(transcript, input.areaCentre ?? DEFAULT_CENTRE);
+  if (grid && grid.from_centre_km > GRID_MAX_KM) {
+    return {
+      status: "unresolved",
+      candidates: [],
+      question: gridTooFar(lang, grid.text, grid.from_centre_km),
+      evidence: { rule: "grid_too_far", detail: `grid ${grid.text} is ${grid.from_centre_km} km from the area; more likely misheard` },
+    };
+  }
+  if (grid) {
+    return {
+      status: "resolved",
+      pin: grid.pin,
+      radius_m: grid.radius_m,
+      candidates: [],
+      evidence: { rule: "grid_reference", detail: `grid ${grid.text}: the cell's centre, ±${grid.radius_m} m` },
+    };
+  }
 
   // Dead reckoning: no place to go by, only "d metres on this bearing" from the last position.
   // The circle is the last position's own circle plus the spread of the move, so it grows with each leg.
@@ -347,7 +379,7 @@ export function resolve(input: ResolveInput): Resolution {
 
   // A clock direction is finer than the eight compass points it was read as [198]: 2 o'clock is
   // 60°, not north-east's 45°. A move reckoned on that compass point goes on the clock's bearing.
-  const clock = clockSaid(transcript);
+  const clock = faced.clock;
   const exact = (deg: number) => (clock && DIRECTION_DEG[clock.direction] === deg ? clock.deg : deg);
 
   // A place that cannot be found does not stop a move that states its own distance and direction.

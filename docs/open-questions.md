@@ -27,7 +27,7 @@ Have the command post open on the laptop: a mission with three call signs and on
 ### If there are two minutes
 
 1. **How does a report reach the map today?** A voice radio net heard at the command post, a phone, something else? What does the speaker hold, and can it show or play anything back to them?
-   - *Today:* each speaker has a phone that joins a mission under a call sign. The phone shows and speaks our question [107, 114]. The phone app is a stand-in for a radio [58].
+   - *Today:* the phone app is a stand-in for a radio [58]. Since 21 Nov it behaves as one: it picks a mission's net, does not join or name itself, and does not show or speak our question; the operator answers on the command post [208].
    - *It decides:* almost everything on the speaker's side. On a shared radio net nobody joins, the call sign has to come from the words, the question goes to the operator to ask over the radio, and noise and overlapping voices become the main risk ([plan](plan.md#not-covered)).
 
 2. **How will you judge it, on Saturday evening and on Sunday?** Your sentences and places, or ours? In which area? Live, or a video? Would a demo set in a Ukrainian town near the front mean more to you than one in Paris?
@@ -35,7 +35,7 @@ Have the command post open on the laptop: a mission with three call signs and on
    - *It decides:* the demo area, and whether we rehearse sentences we have never seen.
 
 3. **When a report is unclear today, what happens?** Which is worse: a marker in the wrong place, or no marker until someone clarifies? Could the system ask back itself, and whom: the speaker or the operator?
-   - *Today:* it asks back aloud, with up to three choices, and never guesses. The unit shows "awaiting answer" on the shared map until a choice is tapped.
+   - *Today:* it asks back, with up to three choices, and never guesses. The question goes to the operator on the command post, who answers for the unit [178, 208]; the web page still asks aloud. The unit shows "awaiting answer" on the shared map until it is answered.
    - *It decides:* whether our main difference from the other teams is one you want. If a best guess shown as uncertain is better, we add that.
 
 ### If there are ten minutes
@@ -51,7 +51,7 @@ The people:
    - *It decides:* how dense the map and the feed must stay readable, and the fade time.
 
 6. **Do speakers say their call sign in each report?** Is there a standard phrasing, with pro-words such as "over"?
-   - *Today:* the call sign comes from the device, not from the words.
+   - *Today:* the phone names no one, as a radio would [208]. A report with no call sign is a radio report: the sender is read from the words against the mission's roster, and the operator settles any the reader is not sure of [202, 203] ([callsigns.md](callsigns.md)). The reader expects the sender first or after "this is".
    - *It decides:* whether we read the call sign from the transcript. On a shared radio net there is no other way.
 
 The words:

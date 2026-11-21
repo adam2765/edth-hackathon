@@ -1,260 +1,168 @@
-# Setting up a computer
+# Setup and daily use
 
-Step-by-step setup for a teammate's computer, written so a coding agent (Claude Code or Codex) can follow it. A person can follow it too. Checked on Friday 20 November on a MacBook (M1 Pro, macOS, Xcode 27.2, Node 24).
+Install tools once. Daily use is Build, Start, Stop.
+Do not install large tools or download models on someone’s computer without asking first.
+Agents never read `.env` files or print keys. Setup does not push or deploy the live site.
 
-## For the agent doing this
+## Install once
 
-- **A Mistral key is optional.** Offline mode (part 3) needs no key and no account. Hosted mode (part 4) is the only part that needs one. Never stop or wait for a key: if the person has none, set up offline mode and skip part 4.
-- **Work through the parts in order and stop at the last one the person needs.** Every step ends with a check. Do not go on until the check passes.
-- **Steps marked (person) need the human.** Say exactly what to do, wait until they say it is done, then run the check.
-- **Ask before anything large or system-wide:** Homebrew packages, Xcode, Android Studio, or a model download. Say the size.
-- **If the person does have a key, never ask for it in chat, and never print it.** They paste it into `.env.local` themselves.
-- **Long-running servers** (the coordinator, Ollama, Metro) go in their own terminal or in the background. Do not wait for them to exit.
-- **Setup changes no tracked file**, apart from the block `next dev` writes into `AGENTS.md` (leave that). Do not commit, push or deploy as part of setup.
-- **At the end, tell the person** what now runs, the versions, anything skipped or failed, and the daily start commands (part 7).
+| Needed for | Tools |
+|---|---|
+| Everyone | Git, Node.js 24.3+ and npm; a current browser |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
+| Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
+| iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
-## Which parts
+On Android, enable Developer options → USB debugging, connect a USB data cable, unlock,
+and approve debugging. Check: `adb devices -l` lists the phone as `device`.
+Android Studio supplies the tools but can stay closed during builds and daily use.
+On Windows, set `ANDROID_HOME` and `JAVA_HOME` if they differ from the normal Studio paths.
 
-| Part | Needed for | Time |
-|---|---|---|
-| 1. Tools | everyone | 5 min, more if Node is missing |
-| 2. Web app | everyone | 5 min |
-| 3. Offline mode | everyone; needs no key | 20 min, plus 3.6 GB of downloads |
-| 4. Hosted mode | only with a Mistral key; optional | 5 min |
-| 5. Transmitter on an iPhone | testing on a phone; Mac only | 30 to 45 min the first time |
-| 6. Transmitter on Android | Android phones | |
-| 7. Daily start | everyone | |
+On an iPhone, connect to the Mac, tap Trust, enable Developer Mode and allow local network
+access. Add your Apple ID in Xcode → Settings → Accounts. Export `APPLE_TEAM_ID` and your
+own `TRANSMITTER_BUNDLE_ID` before starting; do not change app.json for personal signing.
+Check: `xcrun devicectl list devices` lists the phone as available. With a free account,
+trust the developer under Settings → General → VPN & Device Management after installation.
+The install expires after seven days; expired signing needs a fresh signed native install
+(see advanced console use).
 
-The coordinator runs in one of two modes. **Offline mode** runs speech-to-text (Whisper, in whisper-server) and intent extraction (Ollama) on this computer and calls nothing outside it [83, 195]. **Hosted mode** calls Mistral for both, and needs a key. Both place reports the same way.
-
-## 1. Tools
-
-```bash
-git --version
-node --version     # 22.13 or newer in the 22 line, or 24.3 or newer (Expo's range); 24 is what we use
-npm --version
-```
-
-If Node is missing or too old, ask the person how they install tools: Homebrew (`brew install node@24`), nvm, or the installer from nodejs.org. On a Mac, Homebrew is the easiest way to get the rest of the tools below.
-
-## 2. Web app
+From the repo root:
 
 ```bash
-git clone git@github.com:beverage/edth-hackathon.git    # or the https:// address, the repo is public
-cd edth-hackathon
-npm install
-npm test
-```
-
-Check: every test passes. The tests need no key and no network. No `.env.local` is needed for offline mode.
-
-## 3. Offline mode
-
-No key needed. Two servers run beside the coordinator: Ollama for extraction, and whisper-server for speech-to-text, so the transmitter's Server mode and the browser's microphone work offline too. The transmitter's phone modes send text and need only Ollama. The two models need about 5 GB of free memory.
-
-Install Ollama 0.40 or newer. Version 0.8 cannot run Ministral 3.
-
-```bash
-brew install ollama        # or `brew upgrade ollama`; on Linux or Windows, the installer from ollama.com
-ollama --version
-```
-
-If the Ollama desktop app is running, quit it: it holds port 11434 and ignores the settings below. Then start the server in its own terminal:
-
-```bash
-OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 ollama serve
-```
-
-`OLLAMA_NO_CLOUD=1` stops Ollama from handing a request to its hosted models [42]. `OLLAMA_KEEP_ALIVE=-1` keeps the model in memory between reports.
-
-Check: `curl -s http://127.0.0.1:11434/api/version` prints a version of 0.40 or newer.
-
-Download the model (3 GB, once):
-
-```bash
+npm ci
+npm ci --prefix transmitter
+npm run setup --prefix transmitter
 ollama pull ministral-3:3b
-ollama run ministral-3:3b "Reply with OK"
 ```
 
-Check: the second command answers.
+The phone records compressed audio and sends it to the coordinator; no speech model is
+prepared or downloaded on the phone. Its setup command prepares the native launcher’s project-specific startup instructions. Existing native libraries stay compatible, so this change needs a JavaScript reload,
+not a native rebuild. Scenarios use their compressed audio through the same report path.
 
-Install whisper.cpp and ffmpeg (ffmpeg turns the browser's webm into the WAV Whisper reads):
+For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper turbo, base and VAD models on the host, about 635 MB for both speech models and VAD.
+Ask before these system installs and large downloads. Start validates existing models and
+starts whisper-server; it does not download them. `WHISPER_MODEL_FILE` can provide a local
+copy of the pinned turbo model instead of a download.
+
+The web build prepares the map worker and browser speech runtime, and tries to fetch a
+77 MB Ukrainian reply voice. If unavailable, the browser uses its system voice. Setup
+and model downloads need internet; runtime local transcription does not.
+
+## Daily use
+
+From the project directory:
 
 ```bash
-brew install whisper-cpp ffmpeg     # on Linux, build whisper.cpp from github.com/ggml-org/whisper.cpp and install ffmpeg
-whisper-server --help | head -3
+npm run build
+npm start
+npm stop
 ```
 
-Check: the second command prints whisper-server's usage.
+- **Build** checks file contents and dependencies. It rebuilds changed components and loads
+  the phone app if changed or missing. No connected phone means only the coordinator is built.
+- **Start** stops existing project servers and starts all required servers, including local Whisper speech-to-text and the
+  phone’s code server. When ready, it prints the command-post URL and opens it; it does not
+  launch the phone app or build code.
+- **Stop** stops project components, the connected phone app, and the internal controller.
+  Mission logs and phone settings are kept. Closing a browser does not stop the servers.
 
-Start speech-to-text in its own terminal. The first start downloads two models into `models/`, once, and checks their checksums: Whisper large-v3-turbo (574 MB) and Silero VAD (1 MB), which finds the speech so that silence comes back as no words. If the Whisper file is already on the computer, set `WHISPER_MODEL_FILE` to its path to copy it instead.
+Use `npm start light` for lower memory use; plain `npm start` selects regular mode. Use one connected phone; it is remembered. Unlock and approve USB
+trust/debugging. After editing code, repeat Build, then Start. If a build stops a service,
+Start brings the servers back. A build with unchanged source reuses its output.
+
+On the phone, open Transmitter and tap **Connect** when the coordinator is detected.
+If no mission is running, **Waiting for mission** indicates it. On the command post press
+**Start mission**; the phone follows the newest running mission automatically, with no join step. **Stop mission** stops reports and keeps
+the mission log for replay. Restarting the servers preserves open missions.
+
+Hosts lists discovered reachable servers. The phone automatically follows the newest running mission, switching only between reports. Developer tools has a manual
+address override, scenarios, test clips and timings. The area comes from the mission.
+Voice-to-text is on the coordinator, with no phone provider/model controls.
+
+Android USB uses reverse forwarding; Start restores it without launching the app. On an
+iPhone the app reaches the host’s `.local` name. iPhone builds still need Mac/Xcode and
+signing; free provisioning expires after seven days. Windows and physical-phone deployment
+paths need validation on the relevant hardware. Offline inference works without internet;
+map tiles still need it.
+
+## Advanced console use
+
+Stop the managed servers before running a component directly. Ctrl+C stops that console’s
+component. The three normal commands above remain the daily procedure.
+
+| Component | Direct command |
+|---|---|
+| Web build | `npm run build:web` |
+| Coordinator | `npm run start:coordinator` |
+| Ollama | `npm run start:ollama` |
+| Local speech-to-text | `npm run start:stt` (after Build prepares models) |
+| Phone code server | `npm run start:phone` |
+| Web development server | `npm run dev -- -p 3117` |
+
+`npm start` selects regular mode: Whisper large-v3-turbo and a resident Ollama model.
+`npm start light` selects Whisper base and releases Ollama after 30 seconds of inactivity;
+the next report reloads it, adding latency. Base may recognize speech less accurately.
+The choice applies to that start only; the next plain Start returns to regular mode.
+Build prepares both speech models once, so changing mode needs only Start.
+
+The remembered provider mode is local. Keys never belong in chat, launcher configuration
+or Git. Direct coordinator commands can use `.env.local` if needed.
+
+For local-only Ollama in a macOS console:
 
 ```bash
-npm run stt
+OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 ollama serve
 ```
 
-Check: it prints `Whisper large-v3-turbo and Silero VAD ready (checksums verified)`, and after a few seconds `curl -s http://127.0.0.1:3118/health` prints `{"status":"ok"}`. It listens on this computer only. `WHISPER_URL` moves it to another port; set the same value for the coordinator.
+On PowerShell set the corresponding `$env:` variables first. Native builds remain available
+in transmitter with `npm run android` or `npm run ios` (Mac only). For iOS set
+`LANG=en_US.UTF-8`, `APPLE_TEAM_ID` and `TRANSMITTER_BUNDLE_ID` first. After changing signing,
+regenerate the iOS project with Expo prebuild. No EAS is used.
 
-Start the coordinator in offline mode on port 3117, not 3000, in its own terminal. If one is already on 3117 (`lsof -nP -iTCP:3117 -sTCP:LISTEN` shows it), stop it first.
-
-```bash
-PROVIDER_MODE=local npm run dev -- -p 3117
-```
-
-Before it starts, `predev` copies the browser voice's runtime into `public/` and tries to download the 77 MB Ukrainian voice. A failed download is only a warning: the page then uses the system voice.
-
-Check: its log shows `[stt] whisper-server ready at http://127.0.0.1:3118`, and within about 10 s `[extractor] ollama:ministral-3:3b ready for Vincennes, France` and the same for `central Kyiv, Ukraine`. Then send a typed report:
-
-```bash
-curl -s -X POST http://localhost:3117/api/report --form-string area=vincennes --form-string "text=I'm at Bérault metro."
-```
-
-Expect JSON with `"status":"resolved"` and `"feature_id":"node/9415191169"`, and `timings_ms.extract` around 2,000 on an M1 Pro. Then send a spoken one, a scenario clip:
-
-```bash
-curl -s -X POST http://localhost:3117/api/report --form-string area=vincennes --form-string language=fr -F audio=@transmitter/scenarios/audio/vincennes-tracks/t2.m4a
-```
-
-Expect `"transcript":"Je suis à la mairie de Vincennes."`, `"status":"resolved"` at the Mairie de Vincennes, and `timings_ms.stt` around 1,000 to 1,500 on an M1 Pro (more while something else uses the GPU). (person) Open http://localhost:3117 in a browser to see the map, and type or say a report there.
-
-(person) To prove nothing leaves the computer, turn off Wi-Fi and send the `curl` again. It should still be placed.
-
-`LOCAL_EXTRACT_MODEL=ministral-3:8b` uses the larger model: same accuracy on our scenarios, about 5 s per report [84].
-
-## 4. Hosted mode
-
-Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted mode adds speech-to-text on the server, so the browser's microphone and the transmitter's Server mode work. It needs the internet.
-
-(person) Create `.env.local` and paste the key after `MISTRAL_API_KEY=`.
-
-```bash
-cp .env.example .env.local
-```
-
-Check (person), without printing the key: `grep -c '^MISTRAL_API_KEY=.' .env.local` prints `1`. An agent cannot run this: a guard hook stops agents reading `.env` files. The check after the next step shows whether the key works. A key exported in the shell works too.
-
-Stop the offline coordinator, then start it without `PROVIDER_MODE`:
-
-```bash
-npm run dev -- -p 3117
-```
-
-Check: the `curl` from part 3 gives the same answer, with `timings_ms.extract` under about 1,500. If the log says `No extraction key`, the key is missing; go back to offline mode, or fix `.env.local` and restart.
-
-## 5. Transmitter on an iPhone
-
-Mac only. The transmitter is a native development build; Expo Go cannot run it [59]. See [transmitter/README.md](../transmitter/README.md) for what the app does.
-
-### Tools
-
-(person) Install Xcode from the App Store and open it once, so it finishes installing its parts.
-
-```bash
-xcode-select -p            # expect /Applications/Xcode.app/Contents/Developer
-brew install cocoapods     # if `pod --version` fails; a warning about UTF-8 is expected, the build sets LANG
-```
-
-If `xcode-select -p` shows `/Library/Developer/CommandLineTools`, (person) run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
-
-Optional check without a phone: `cd transmitter && npm install && LANG=en_US.UTF-8 npx expo run:ios` builds for the simulator and needs no signing.
-
-### Signing
-
-Each of us signs the app with our own Apple ID; a free one works. A bundle ID belongs to one Apple team, and `dev.voicetomap.transmitter` is already Alex's, so everyone else picks their own [96].
-
-(person) In Xcode: Settings → Accounts → add your Apple ID.
-
-Find the team ID:
-
-```bash
-defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier | grep -E 'teamID|teamName|isFreeProvisioningTeam'
-```
-
-It is the 10-character `teamID`. With several teams, ask the person which one.
-
-### The phone
-
-(person) On the iPhone:
-
-1. Connect it to the Mac with a cable, unlock it, and tap Trust.
-2. Settings → Privacy & Security → Developer Mode → on. The phone restarts.
-
-Check: `xcrun devicectl list devices` lists the phone, and its state is not `unavailable`.
-
-### Build and install
-
-```bash
-cd transmitter
-npm install
-export APPLE_TEAM_ID=<team ID>
-export TRANSMITTER_BUNDLE_ID=dev.voicetomap.transmitter.<first name>
-LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
-```
-
-- `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale [66].
-- The first build takes several minutes.
-- `ios/` is generated and ignored by git. If you change the team or bundle ID after a build, run `npx expo prebuild --clean --platform ios` first.
-
-(person) With a free Apple ID, the first launch is refused until you allow it on the phone: Settings → General → VPN & Device Management → your Apple ID → Trust.
-
-### Run it
-
-The app loads its code from Metro on the Mac. Keep Metro running in its own terminal:
-
-```bash
-cd transmitter && npx expo start --dev-client
-```
-
-Open the app with the Mac's network name. That works over the cable alone, and it survives address changes:
-
-```bash
-xcrun devicectl device process launch --device "<phone>" --terminate-existing \
-  --payload-url "exp+transmitter://?__expo_url=http%3A%2F%2F$(scutil --get LocalHostName).local%3A8081&__expo_disable_fab=1&__expo_disable_onboarding=1" \
-  "$TRANSMITTER_BUNDLE_ID"
-```
-
-(person) When iOS asks to "find devices on your local network", allow it.
-
-Check: the app opens, and the dot beside the call sign turns green. The app sends reports to the coordinator on this Mac, port 3117 [78].
-
-(person) Open `http://localhost:3117/cp` on the Mac and open a mission from its Missions menu (Vincennes, any name; a start point is optional). In the app, the mission appears under "Join a mission"; tap Join.
-
-Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
-
-(person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
-
-## 6. Transmitter on Android
-
-Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
-
-For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
-
-## 7. Daily start
-
-Each in its own terminal, from the repo root:
-
-```bash
-OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 ollama serve     # offline mode
-npm run stt                                             # offline mode: speech-to-text on this computer
-PROVIDER_MODE=local npm run dev -- -p 3117              # offline mode; with a key, `npm run dev -- -p 3117` is hosted mode
-cd transmitter && npx expo start --dev-client            # phone testing only
-```
+The optional `.run/config.json` stores the remembered phone and ports. Most users never
+edit it. Detailed logs are in `.run/launcher.log`. Build fingerprints and runtime process
+records live in `.run`; the coordinator’s normal build stays in `.next`, and mission data
+stays in `.data/sessions`. There are no release checkouts or separate launcher screen.
 
 ## When something fails
 
-| What you see | Why | Fix |
-|---|---|---|
-| Coordinator log: `No extraction key` or `No speech-to-text key` | Hosted mode with no Mistral key | Run offline mode, `PROVIDER_MODE=local` (part 3), or add a key (part 4) |
-| `Processing failed` in hosted mode | Missing or wrong Mistral key, or no internet | Check `.env.local` and restart the coordinator, or use offline mode |
-| `pod install` fails with an encoding error | No UTF-8 locale | Prefix the build with `LANG=en_US.UTF-8` [66] |
-| Xcode: the bundle identifier is not available | Another team owns that bundle ID | Set your own `TRANSMITTER_BUNDLE_ID`, then `npx expo prebuild --clean --platform ios` |
-| Expo asks to choose a development team | `APPLE_TEAM_ID` is not set | Set it (part 5, Signing) |
-| The phone will not open the app | Developer Mode is off, or the Apple ID is not trusted yet | Part 5, The phone; then VPN & Device Management |
-| Expo Go cannot open the app | It needs native modules | Use the development build [59] |
-| App: "no answer from the coordinator" | Opened with a numeric address, local network access denied, or no coordinator on 3117 | Launch with the `.local` name; allow local network; check `lsof -nP -iTCP:3117 -sTCP:LISTEN` |
-| `ollama pull ministral-3:3b` asks for a newer version | Ollama older than 0.40 | `brew upgrade ollama` |
-| Ollama settings have no effect | The desktop app is serving port 11434 | Quit the app, then `ollama serve` |
-| The first report after a start is slow or times out | The model is still loading | Wait for the two `ready for` lines |
-| A report with audio gets HTTP 503, "Speech-to-text on the coordinator is not running" | whisper-server is not started, or still loading its model | `npm run stt` (part 3); wait for `curl -s http://127.0.0.1:3118/health` to print `{"status":"ok"}` |
-| `npm run stt`: `whisper-server not found` or `ffmpeg not found` | whisper.cpp or ffmpeg is not installed | `brew install whisper-cpp ffmpeg` |
-| Port 3117 is busy | A coordinator is already running | Use that one, or stop it |
+- **Missing coordinator build:** run Build, then Start.
+- **Missing Ollama model:** install `ministral-3:3b` once, then Start.
+- **Phone not detected:** unlock, reconnect and accept trust/debugging; use one connected phone.
+- **Coordinator without a mission:** use Start mission on the command post.
+- **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
+- **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
+
+Each command retires old project controllers before using the current code. Shutdown
+scans processes by checkout path, working directory and parent/child ownership across all
+ports, including servers started directly and orphan workers. It requests a clean stop,
+forces termination after a timeout, and rescans before reporting Stopped. Inspection or
+cleanup failure is an error; a controller’s old Stopped flag is never accepted as proof.
+Ollama and Whisper on their configured local ports and project-owned model processes are included;
+unrelated services and the shared ADB server are left alone.
+
+To reclaim old speech-model storage on an Android development build, first load the updated
+app, then run this with the phone connected. It removes only the two old model files and
+keeps app settings:
+
+```bash
+adb shell run-as dev.voicetomap.transmitter rm -f files/models/ggml-base-q5_1.bin files/models/ggml-small-q5_1.bin
+```
+
+Whisper keeps upstream port 3118. The private controller uses 3116 and migrates an old
+conflicting setting automatically. The receiver remains on 3117 and Metro on 8082.
+
+Several Safari tabs can have established connections to one coordinator listener on 3117.
+Those client connections are not extra servers. Cleanup targets server listeners and owned
+workers, leaving browser processes alone. Startup requires the newly launched coordinator
+to confirm it bound its port; an old server’s healthy response cannot produce a false Ready.
+Cleanup finishes even when the operation that requested it was cancelled.
+
+The native phone launcher now says `npm start`, with `npm start light` in its help text.
+This wording is compiled into the app; run Build once to install the updated binary.
+
+The transmitter is a radio: begin live reports with the sender’s call sign. The coordinator
+reads it from the words against the mission roster; held reports and questions are handled
+on the command post. Green Reporting means a connected coordinator and an active mission.
+Advanced fleet updates remain available with `npm run phones --prefix transmitter`; keep
+the normal Build/Start/Stop procedure for daily use.
