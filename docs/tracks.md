@@ -1,6 +1,6 @@
 # Tracks
 
-A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
+A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [234]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
 Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 182]. This page shows what it looks like and how a report becomes a track.
 
@@ -234,6 +234,39 @@ A unit's later report about the track brings a gone track back, and a placed tra
 
 The controls show only on a live mission that the coordinator keeps a record of: not in a replay, and not on an ended mission.
 
+## Recon requests and tasking
+
+A unit can ask for a drone to look at something, in the same radio call as a report or on its own, and a person at the command post sends one [234]. The app sends nothing by itself, picks no drone, and measures nothing between a drone and a track.
+
+**Asking.** The request words are read in code, in English, French, Ukrainian and Russian: "send the drone", "request eyes on", "need recon", "can we get a drone up", «envoyez le drone», «on a besoin d'un drone», «надішліть дрон», «потрібна пташка», «пришлите дрон», «нужна разведка». "Don't", «pas besoin» or «не» just before them means no request. "Drone up" on its own is not one ("enemy drone up north"), nor "getting eyes on", which is a reply.
+
+A request runs to the next comma or full stop, and is cut out before the model reads the rest (`splitRequest` in `lib/geo/requests.ts`). Left in, "send the drone" made "unknown vehicle" an unknown drone, because the word reader met "drone" first, and "Track 2, request eyes on" got "Where is it?". The extraction prompt is unchanged.
+
+| Said, after the call sign | What the model reads | The request |
+|---|---|---|
+| "unknown vehicle at Mairie de Vincennes, send the drone" | "unknown vehicle at Mairie de Vincennes": Track 2, an unknown vehicle | about Track 2, the track the report opened |
+| "Track 2, request eyes on" | nothing: the call is only a request, so nothing is placed and nothing asked | about Track 2 |
+| "send the drone to Track 3, over" | nothing | about Track 3 |
+| "send the drone" | nothing | names no track: the operator picks one |
+
+**The tray.** Each request waits under **Recon requests**, above the units: who asked and when, the words, and the track. Under it is one button for each friendly drone or drone team track on the map, marked free or with the track it is looking at. The only free drone is offered first; with two free, or none, nothing is. Nothing is sent before a confirm: "Send Track 1, friendly drone team, to look at Track 2?" A busy drone can be sent instead: "Track 1 is looking at Track 3. Send it to Track 2 instead?" **Not now** declines, after a confirm, and nothing is sent. A request that names no track has a list of the mission's tracks to pick from. With no friendly drone or drone team on the map, the tray says to place one with Place track.
+
+<img src="images/tracks/cp-recon-request.png" alt="Two views of the Recon requests tray. Left: ALPHA 1 at 22:38:46, &quot;send the drone&quot;, Track 2, unknown vehicle, Mairie de Vincennes, with the button Send Track 1, drone team, free, and Not now. Right: the same request with the confirm, Send Track 1, friendly drone team, to look at Track 2?, Send and Cancel." width="800">
+
+**Sent.** A solid blue line runs from the drone to the track. The feed says "Sent Track 1 (friendly drone team) to look at Track 2. ALPHA 1 had asked.", and the request's own line adds "CP sent Track 1." The track's card says "Recon: Track 1 since 22:39:42"; the drone's card says "Looking at Track 2 since 22:39:42" and has **Recon done**. Every track card that is not a drone also has **Send drone…**, so the operator can send one with no request.
+
+![The command post after the send. A solid blue line runs from Track 1, the friendly drone team at the school in the north-west, to Track 2, the unknown vehicle at the town hall. ALPHA 1's dotted line of sight also reaches Track 2 from Bérault. The feed: CP sent Track 1 to look at Track 2, ALPHA 1 had asked; ALPHA 1's report, read as Track 2, an unknown vehicle.](images/tracks/cp-recon-sent.png)
+
+Note the track: ALPHA 1 said "unknown vehicle at Mairie de Vincennes, send the drone", and Track 2 is a vehicle, not a drone.
+
+**Ending.** Only a person ends a task: **Recon done** on the drone's card, after a confirm, or sending the drone to another track. A later report does not end it; the app concludes nothing from one. Sending a drone to a track answers every open request for that track. Ending the mission ends every task and closes open requests as not answered.
+
+Each request, send, Recon done and decline is one line in the log (`request` and `task`, [contracts.md](contracts.md#session-log)), so a replay shows the request open before the send and the line after it. A drone's marker does not move when it is sent: it stays where it was last reported or placed. Limits are in [known-gaps.md](known-gaps.md).
+
+**The eval.** `npm run eval:requests`, also run by `npm test`: 84 cases in English, French, Ukrainian and Russian: requests with a report, requests on their own, with and without a track, turned down ("don't send the drone", «pas besoin de drone», «не треба дрона») and near misses ("enemy drone up north", "getting eyes on Track 2", "send BRAVO 2 to the station"). All 84 pass, and no request is read where none was said. 64 were written with the code. The other 20 were written by a separate agent from the rules alone, without the code, and scored before anyone looked at them: 20 of 20. That agent was told to keep to the words the rules list, so this checks the rules as written, not how soldiers actually ask; every case is typed, none is from speech-to-text.
+
+The pictures: mission `vincennes-2`, Saturday 21 November, 22:38 to 22:40, on a coordinator of its own in offline mode (the 3B model), with typed reports. The drone team was placed by hand at the Lycée Claude-Nicolas Ledoux; ALPHA 1 checked in at Bérault and BRAVO 2 at the château, whose question the command post answered. Every sighting is made up.
+
 ## When symbols would overlap
 
 The first run of the script, in mission `vincennes-13`, showed Track 1 drawn on top of ALPHA 1, Track 5 under BRAVO 2's dot, and the labels of Tracks 3 and 5 run together. The command post now lays the symbols out on screen [167]:
@@ -259,3 +292,4 @@ Retake them when the command post or the phone screens change.
 4. Command post: headless Chrome at 1440 × 900 and 2× pixel density, after about 8 s for the map. The full pictures are reduced to 1600 px wide; the close-ups are cut from the full size. All are reduced to at most 256 colours, without dithering, so each stays under 600 KB: the two full pictures needed 240. The close-ups: the list scrolled to its end; the estimate after clicking Track 2 in the list and zooming out once; the two halves of the overlap picture from the question picture and after clicking BRAVO 2.
 5. Placed by hand, after the script: press P, pick Hostile, People, 2 and ±50 m, click the map and type a source, for the palette picture. Then Place, Esc, and click the new track for its card.
 6. The symbol table: one SVG made with milsymbol from `trackSymbolCode`, every affiliation against every kind, size 26.
+7. Recon: a new mission with ALPHA 1 and BRAVO 2 on the roster. Place a friendly drone team, check both units in, then send "ALPHA 1, unknown vehicle at Mairie de Vincennes, send the drone" as a typed report. The tray picture is two close-ups, 800 × 470 from the 2× picture, set side by side: before and after clicking the drone's button. Send from the confirm, wait two minutes for the note about other missions to go, and take the full picture.

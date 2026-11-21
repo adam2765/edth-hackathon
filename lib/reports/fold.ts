@@ -8,7 +8,7 @@ import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
 import { describeTrack } from "../geo/trackKinds";
-import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, Sender, StartPoint, TrackSighting, UnitPosition } from "./types";
+import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitPosition } from "./types";
 
 /** The command post's colour in the feed: a slate grey no call sign is given. */
 export const CP_COLOUR = "#334155";
@@ -94,6 +94,25 @@ export interface TrackState {
   note: string | null;
   /** When the command post marked it gone; null while it is on the map. A new report brings it back. */
   gone: number | null;
+  /** For a friendly drone or drone team: the track the command post sent it to look at, until it ends [234]. */
+  task: { n: number; ts: number; by: string } | null;
+  /** The friendly drones and drone teams sent to look at this track, by track number [234]. */
+  recon: { asset: number; ts: number }[];
+}
+
+/**
+ * A unit's request for recon, open until the command post sends a drone to that track or turns it
+ * down, or the mission ends [234].
+ */
+export interface RequestState {
+  id: string;
+  ts: number;
+  callsign: string;
+  colour: string;
+  /** The track it is about; null when none was named. */
+  n: number | null;
+  words: string;
+  report_id: string | null;
 }
 
 export interface FeedItem {
@@ -101,7 +120,7 @@ export interface FeedItem {
    * A report, a call sign joining, something the command post did to a track, or a note of what it
    * did with a held radio report (added a call sign, dismissed the report).
    */
-  kind: "report" | "join" | "plot" | "note";
+  kind: "report" | "join" | "plot" | "note" | "request" | "task";
   /** The report's or the join's id. */
   id: string;
   ts: number;
@@ -143,6 +162,8 @@ export interface SessionState {
   roster: string[];
   /** Radio reports waiting for the operator, oldest first [203]. */
   held: HeldEntry[];
+  /** Requests for recon not yet answered, oldest first [234]. */
+  requests: RequestState[];
   /** By number. */
   tracks: TrackState[];
   /** Newest first. */
@@ -162,7 +183,7 @@ export function colourMap(entries: LogEntry[]): Map<string, string> {
   };
   for (const e of entries) {
     if (e.kind === "mission") (e.roster ?? []).forEach(give);
-    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster") give(e.callsign);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster" || e.kind === "request") give(e.callsign);
   }
   return m;
 }
@@ -217,6 +238,24 @@ function plotOutcome(e: PlotEntry, t: TrackState): string {
   }
 }
 
+/** A request for recon, in words for the feed [234]. */
+function requestOutcome(e: RequestEntry): string {
+  return e.n != null ? `Asked for recon on Track ${e.n}: “${e.words}”` : `Asked for recon, no track named: “${e.words}”`;
+}
+
+/** What the command post did about recon, in words [234]. `was` is the track the drone looked at before. */
+function taskOutcome(e: TaskEntry, asset: TrackState | undefined, was: number | null, req: RequestState | undefined): string {
+  const drone = asset ? `Track ${asset.n} (${describeTrack(asset)})` : `Track ${e.asset}`;
+  switch (e.action) {
+    case "send":
+      return `Sent ${drone} to look at Track ${e.n}${was != null && was !== e.n ? `, instead of Track ${was}` : ""}.${req ? ` ${req.callsign} had asked.` : ""}`;
+    case "done":
+      return `${drone}: recon${was != null ? ` of Track ${was}` : ""} done.`;
+    case "decline":
+      return req ? `Declined ${req.callsign}’s request for recon${req.n != null ? ` on Track ${req.n}` : ""}: “${req.words}”` : "Declined a request for recon.";
+  }
+}
+
 /** What a report did to a track, in words, once the track has taken it in. */
 function trackOutcome(e: ReportEntry, s: TrackSighting, t: TrackState, opened: boolean): string {
   const what = describeTrack(t);
@@ -229,6 +268,7 @@ function trackOutcome(e: ReportEntry, s: TrackSighting, t: TrackState, opened: b
 function reportOutcome(e: ReportEntry): string {
   const r = e.resolution;
   if (e.position) return describePosition(e.position);
+  if (r.evidence.rule === "request_only") return "Nothing to place: only a request for recon.";
   if (r.status === "resolved") return r.heading_to ? `Heading to ${r.heading_to.name} (no starting position yet)` : "Nothing to place";
   if (r.status === "ambiguous") return `Asked: ${r.question ?? "which one?"}`;
   return r.question ?? "Could not place that.";
@@ -266,6 +306,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   let mission: MissionState | null = null;
   const roster: string[] = [];
   const held = new Map<string, HeldEntry>();
+  const requests = new Map<string, RequestState>();
   const enlist = (c: string) => {
     if (!roster.includes(c)) roster.push(c);
   };
@@ -320,6 +361,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         changed: null,
         note: null,
         gone: null,
+        task: null,
+        recon: [],
       };
       tracks.set(s.n, t);
     } else {
@@ -373,6 +416,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         changed: null,
         note: e.note ?? null,
         gone: null,
+        task: null,
+        recon: [],
       };
       tracks.set(e.n, t);
       placeTrack(t, e.position, e.ts);
@@ -399,6 +444,16 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     if (e.action === "gone") t.gone = e.ts;
     if (e.action === "restore") t.gone = null;
     return t;
+  };
+
+  /** Closes a request for recon, and says how in its feed line. */
+  const closeRequest = (id: string, how: string, expired = false) => {
+    if (!requests.delete(id)) return;
+    const item = feed.get(id);
+    if (item) {
+      item.outcome = `${item.outcome} ${how}`;
+      item.expired = expired;
+    }
   };
 
   for (const e of entries) {
@@ -459,7 +514,69 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         }
         u.pending = null;
       }
-      for (const t of tracks.values()) t.pendingReport = null;
+      for (const t of tracks.values()) {
+        t.pendingReport = null;
+        // Nobody is looking any more once the mission is over.
+        t.task = null;
+      }
+      for (const id of [...requests.keys()]) closeRequest(id, "Not answered before the mission ended.", true);
+      continue;
+    }
+
+    if (e.kind === "request") {
+      const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      // The unit said it: it was heard, as with a report.
+      u.lastHeard = Math.max(u.lastHeard, e.ts);
+      requests.set(e.id, { id: e.id, ts: e.ts, callsign: e.callsign, colour: u.colour, n: e.n, words: e.words, report_id: e.report_id });
+      feed.set(e.id, {
+        kind: "request",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.callsign,
+        colour: u.colour,
+        area: u.area,
+        transcript: "",
+        status: "resolved",
+        outcome: requestOutcome(e),
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: e.n,
+        ...(e.sender ? { sender: e.sender } : {}),
+      });
+      continue;
+    }
+
+    if (e.kind === "task") {
+      const asset = e.asset != null ? tracks.get(e.asset) : undefined;
+      const req = e.request ? requests.get(e.request) : undefined;
+      const was = asset?.task?.n ?? null;
+      if (e.action === "send") {
+        if (!asset || e.n == null || !tracks.has(e.n)) continue;
+        asset.task = { n: e.n, ts: e.ts, by: e.by };
+        // A drone sent to a track answers every open request for that track.
+        for (const r of [...requests.values()]) if (r.id === e.request || r.n === e.n) closeRequest(r.id, `${e.by} sent Track ${asset.n}.`);
+      } else if (e.action === "done") {
+        if (!asset) continue;
+        asset.task = null;
+      } else if (e.request) closeRequest(e.request, `${e.by} declined it.`);
+      feed.set(e.id, {
+        kind: "task",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: asset?.area ?? mission?.area ?? area ?? "vincennes",
+        transcript: "",
+        status: "resolved",
+        outcome: taskOutcome(e, asset, was, req),
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: e.action === "send" ? (e.n ?? null) : e.action === "done" ? (e.asset ?? null) : (req?.n ?? null),
+      });
       continue;
     }
 
@@ -593,11 +710,18 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
   }
 
+  // Who is looking at what, from each drone's task.
+  for (const t of tracks.values()) {
+    if (!t.task) continue;
+    tracks.get(t.task.n)?.recon.push({ asset: t.n, ts: t.task.ts });
+  }
+
   return {
     mission,
     units: [...units.values()],
     roster,
     held: [...held.values()],
+    requests: [...requests.values()],
     tracks: [...tracks.values()].sort((a, b) => a.n - b.n),
     feed: [...feed.values()].sort((a, b) => b.ts - a.ts),
     first,

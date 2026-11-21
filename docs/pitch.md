@@ -48,7 +48,7 @@ The one sentence: speak, and a marker with your call sign moves on a shared map;
 | Who is asked back | 7 | Since the phone became a radio [208], a question goes to the operator, not the phone. The slide still shows the phone's question: swap in the command post's question card or the Unassigned tray [203], and say the operator is asked. |
 | Each coordination card: built, or cut | 9 | At the freeze. Merged: answering from the command post [178], call signs from the words against a roster [200], and the Unassigned tray [203]. Spoken answers are measured, not built [199]: swap that card for the tray unless they land. |
 | The eval, run again; the field-walk error in metres | 11 | `npm run eval:extract -- --resolve --repeat 3` on both models; the field walk |
-| The effector line | 12 | What we show by Sunday. Tracks are for reconnaissance only today [145]; the line, and the tracks slide's wording, change only with a decision that changes 145. |
+| The effector line | 12 | What we show by Sunday. Tracks are for reconnaissance only [234, which replaces 145]: a person at the command post may send a friendly drone to look at a track, at a unit's request or not, and nothing more. The line, and the tracks slide's wording, change only with a decision that changes 234. |
 | Video link | 13 | The backup video, recorded after the freeze |
 | Questions the mentors and the jury asked | 14 | Whoever sits in on those talks |
 

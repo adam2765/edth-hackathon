@@ -7,6 +7,14 @@ import type { Affiliation, Direction, TrackKind } from "./types";
 export const AFFILIATIONS: Affiliation[] = ["hostile", "suspect", "unknown", "neutral", "friendly"];
 export const TRACK_KINDS: TrackKind[] = ["people", "vehicle", "armour", "drone", "drone_team", "mortar", "artillery", "jammer", "other"];
 
+/** The kinds of friendly track the command post can send to look at another track [234]. */
+export const RECON_KINDS: TrackKind[] = ["drone", "drone_team"];
+
+/** True for a friendly drone or drone team: something the command post can send to look [234]. */
+export function canLook(t: { affiliation: Affiliation; kind: TrackKind }): boolean {
+  return t.affiliation === "friendly" && RECON_KINDS.includes(t.kind);
+}
+
 /** The command post's words for whose a track is. */
 export const AFFILIATION_LABEL: Record<Affiliation, string> = { hostile: "Hostile", suspect: "Suspect", unknown: "Unknown", neutral: "Civilian", friendly: "Friendly" };
 const KIND_LABEL: Record<TrackKind, string> = { people: "people", vehicle: "vehicle", armour: "armour", drone: "drone", drone_team: "drone team", mortar: "mortar", artillery: "artillery", jammer: "jammer", other: "" };

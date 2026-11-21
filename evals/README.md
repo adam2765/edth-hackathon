@@ -2,7 +2,7 @@
 
 Checks how well the model turns a transcript into an intent and, with `--resolve`, what the resolver then answers. It does not check speech-to-text. It is layer 2 of the [evaluation plan](../docs/plan.md#evaluation-harness).
 
-The call-sign eval (`callsigns.cases.json`, `npm run eval:callsigns`) is separate and needs no model: see [docs/callsigns.md](../docs/callsigns.md#the-eval).
+The call-sign eval (`callsigns.cases.json`, `npm run eval:callsigns`) is separate and needs no model: see [docs/callsigns.md](../docs/callsigns.md#the-eval). So is the recon-request eval (`requests.cases.json`, `npm run eval:requests`): see [docs/tracks.md](../docs/tracks.md#recon-requests-and-tasking).
 
 ```bash
 npm run eval:extract                              # hosted Mistral, needs MISTRAL_API_KEY in .env.local

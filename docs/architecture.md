@@ -24,7 +24,7 @@ configured. Hosted readiness checks configuration, not live provider availabilit
 - **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It keeps missions: each report in a mission goes to that mission's log, and the unit's last position comes from that log [99, 107, 108].
 - **Command post (CP)**: the shared map at the base station, with every call sign, the tracks and a replay. `/cp`, called the receiver before 21 Nov [176]. It opens and ends missions, places and edits tracks by hand, and can answer a unit's open question [98, 113, 177, 178]. It never places a unit.
 - **Mission**: one run, with a code, an area, an optional start point and a roster of call signs. The native transmitter picks one and sends its code, like a radio tuned to a net; it does not join or name itself, so the coordinator reads the sender from the words [107, 114, 201, 202, 208].
-- **Track**: something on the map that is not a reporting unit. A unit sees it and reports it by voice; the coordinator numbers it and the command post draws it with its standard symbol. For reconnaissance only [145 to 152].
+- **Track**: something on the map that is not a reporting unit. A unit sees it and reports it by voice; the coordinator numbers it and the command post draws it with its standard symbol. For reconnaissance only [146 to 152, 234]. A unit can ask by radio for a drone to look at a track, and a person at the command post sends a friendly drone or drone team track, or declines [234].
 - **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`, and since 21 November `izium`). All three are on the live site.
 
 ## Block diagrams
@@ -50,7 +50,7 @@ flowchart TB
     subgraph RX["Command post at the base"]
         PANEL["Mission panel<br/>open, end, delete"]
         VIEW["Shared map, feed, replay<br/>/cp"]
-        TOOLS["Track tools<br/>place, change, move, gone;<br/>answer for a unit"]
+        TOOLS["Track tools<br/>place, change, move, gone;<br/>answer for a unit;<br/>send a drone, recon done"]
     end
 
     MIS["Mistral API, Paris"]
@@ -67,7 +67,7 @@ flowchart TB
     PIPE -. "local mode: audio" .-> WSP
     LOG -- "the log, every second" --> VIEW
     API <-- "open a mission, find a start point" --> PANEL
-    API <-- "plot a track, answer, name a point" --> TOOLS
+    API <-- "plot a track, answer, name a point, task a drone" --> TOOLS
 ```
 
 The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 195]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
@@ -79,6 +79,7 @@ flowchart TB
     IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
     CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
     STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>local Whisper turbo by default, base with `npm start light` or hosted Mistral"]
+    REQ["Step 1b: a request for recon cut out<br/>splitRequest in lib/geo/requests.ts<br/>pure code; a call that is only a request is saved, not read"]
     subgraph VOICES["For each voice"]
         EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
         SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
@@ -91,18 +92,21 @@ flowchart TB
     LOG[("Mission log<br/>.data/sessions/")]
     ANS["POST /api/answer<br/>the tapped choice, or the CP's"]
     PLOT["POST, PATCH /api/sessions/:code/tracks<br/>a track placed or changed by hand"]
+    TASK["POST /api/sessions/:code/tasks<br/>a drone sent to look, recon done, a request declined"]
     READ["GET /api/sessions/:code?after=n<br/>to the command post"]
 
-    IN --> CTX --> STT --> VOICES --> SAVE --> OUT
+    IN --> CTX --> STT --> REQ --> VOICES --> SAVE --> OUT
+    REQ -. "only a request" .-> SAVE
     GAZ --> RES
     LOG --> CTX
     SAVE --> LOG
     ANS --> LOG
     PLOT --> LOG
+    TASK --> LOG
     LOG --> READ
 ```
 
-Each box names the function or interface that does the step. Steps 2 and 3 run once for each voice in the clip that names a place, which is nearly always one; `readVoices` in `lib/geo/voices.ts` splits them, and two voices that name different places give a question [154]. See [voices.md](voices.md).
+Each box names the function or interface that does the step. Steps 2 and 3 run once for each voice in the clip that names a place, which is nearly always one; `readVoices` in `lib/geo/voices.ts` splits them, and two voices that name different places give a question [154]. See [voices.md](voices.md). Step 1b cuts a request for recon ("send the drone") out of the words before the model reads them, and the save writes it as its own `request` line; a call that is only a request skips steps 2 and 3 [234]. See [tracks.md](tracks.md#recon-requests-and-tasking).
 
 ### Inside the transmitter
 
@@ -152,6 +156,7 @@ no speech-to-text. Developer tools contain scenarios and connection overrides.
 | Shared map, call signs, replay | `app/cp/page.tsx`, `components/CommandPost.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. A Galaxy S10 sent two live reports on 21 Nov; not yet checked on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
 | Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/MissionCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. Since decision 208 the transmitter picks a mission instead of joining; joining stays on the coordinator for older phones. |
 | Tracks: what a unit sees, numbered and drawn with APP-6 symbols | `lib/geo/tracks.ts`, `lib/geo/trackKinds.ts`, `lib/reports/fold.ts`, `lib/reports/plot.ts`, `components/CommandPost.tsx`, `components/TrackTools.tsx`, `tests/tracks.test.ts`, `tests/plot.test.ts` | Built Saturday 21 November, steps 1 to 3 of five [145 to 152]: a unit reports a thing by a place or by a distance and direction from itself, the app says its number back, and "Track 3 moved to the station" or "Track 3 is hostile" updates it. Checked with typed reports through hosted Mistral and the local model, on the command post in a desktop browser, and with the 11 synthetic-voice clips of the tracks script through the coordinator (11 of 11). The phone screens were checked in the iPhone simulator, with ALPHA 1's clips sent from the transmitter; screenshots in [tracks.md](tracks.md). Not yet with a real phone or a person's voice. Edits by hand at the command post built the same day [177, 178]: place, change, move, gone and back, and answering for a unit, checked in a desktop browser and in `tests/plot.test.ts`. Not built: a question when a sighting is close to an old track, "Track 3 is gone" said by a unit, range rings. |
+| Recon requests and tasking [234] | `lib/geo/requests.ts`, `lib/reports/tasks.ts`, `lib/reports/record.ts`, `app/api/sessions/[code]/tasks`, `components/ReconTools.tsx`, `evals/requests.cases.json`, `tests/requests.test.ts`, `tests/tasks.test.ts` | Built Saturday 21 November. A unit asks by radio ("send the drone", "request eyes on"); the request is cut out of the words in code before the model reads them; a person at the command post sends a friendly drone or drone team track, ends its recon, or declines. Checked with typed reports through the local model, on the command post in a desktop browser: a request with a report, a request on its own, one that names no track, send, recon done, decline and replay ([tracks.md](tracks.md#recon-requests-and-tasking)). The request eval: 84 of 84 cases, 20 of them held out and written without the code. Not with speech or a real phone. |
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 

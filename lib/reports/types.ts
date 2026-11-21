@@ -206,6 +206,52 @@ export interface PlotEntry {
   note?: string | null;
 }
 
+/**
+ * A unit asks for a drone to look at a track [234]: "send the drone", "request eyes on", read from
+ * its words in code, in the same call as a report or on its own. It only asks: a person at the
+ * command post decides whether anything is sent, with a `task` entry. It stays open until then.
+ */
+export interface RequestEntry {
+  kind: "request";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who asked. */
+  callsign: string;
+  /** The track it is about: named in the words, or the one the report opened or saw; null when none. */
+  n: number | null;
+  /** The request as it was said ("send the drone"). */
+  words: string;
+  /** The report it came with; null when the call was only the request. */
+  report_id: string | null;
+  /** Set for a radio request: how its sender was found [202]. */
+  sender?: Sender;
+}
+
+/** What the command post can do about recon [234]: send a drone to look, end it, or turn a request down. */
+export type TaskAction = "send" | "done" | "decline";
+
+/**
+ * A person at the command post sends a friendly drone or drone team track to look at a track, ends
+ * that, or turns a request down [234]. Never written by a model or worked out by the app: no range,
+ * no nearest, no ranking. A drone looks at one track at a time; sending it again moves it.
+ */
+export interface TaskEntry {
+  kind: "task";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who did it: "CP". */
+  by: string;
+  action: TaskAction;
+  /** For `send` and `done`: the friendly drone or drone team, by its track number. */
+  asset?: number;
+  /** For `send`: the track it is to look at. */
+  n?: number;
+  /** For `send` and `decline`: the request it answers, if any. */
+  request?: string;
+}
+
 /** A place from the gazetteer where units are assumed to be when they join. Picked at the base, never by the model. */
 export interface StartPoint {
   /** The gazetteer feature's id. */
@@ -255,7 +301,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -306,6 +352,20 @@ export interface HeldReply {
 /** `POST /api/sessions/<code>/tracks` and `PATCH /api/sessions/<code>/tracks/<n>` */
 export interface PlotReply {
   entry: PlotEntry;
+}
+
+/** `POST /api/sessions/<code>/tasks` [234] */
+export interface TaskReply {
+  /** The entry written; null when the request had been settled already. */
+  entry: TaskEntry | null;
+  /** True when someone had settled the request already: the first decision stands. */
+  already: boolean;
+}
+
+/** The `request` field of the report reply: the request read from the words, as saved [234]. */
+export interface RequestReply {
+  id: string;
+  n: number | null;
 }
 
 /** `POST /api/sessions/<code>/join` */

@@ -61,6 +61,8 @@ mode checks that a provider key exists, not that its remote service is reachable
 
 Reply: `{ transcript, language, intent, resolution, timings_ms: { stt, extract, resolve, total }, area, report_id?, clip? }`. `area` is the one used. `report_id` is there when the report was saved; the answer to a question names it. `clip` is the kept file's name, when the coordinator kept a test clip [155]. For a report about a track, `resolution.track` is set and `resolution.track.say` holds the words to speak back; see [Tracks](#tracks).
 
+A request for recon said in the report ("send the drone", "request eyes on") adds `request: { id, n }`: the saved request and the track it is about, or null for none named [234]. The request's words are cut out before the model reads the rest. A call that was only a request ("Track 2, request eyes on") has `intent: null` and a `resolution` with `status: "unresolved"`, no candidates and `evidence.rule: "request_only"`: nothing is placed and nothing is asked. See [Recon requests and tasking](#recon-requests-and-tasking).
+
 A radio report found its unit: the reply also has `callsign` and `sender: { heard, how }`, where `heard` is the call sign as speech-to-text wrote it and `how` is `exact`, `near`, or `reply` (no call sign said, and that unit's question was open and recent) [202, 204]. A radio report the coordinator was not sure of is **held** for the operator instead: no `resolution` and no `report_id`, but `held: { id, reason, question, audio }` [203]. `reason` is `which` (two units fit), `unknown` (a call sign not on the roster), `none` (no call sign, or no words) or `far` (a move the unit could not have made) [204].
 
 Limits: 1 MB per clip (about 15 s), 500 characters of text, 30 requests a minute per IP per server instance [24]. No auth.
@@ -82,6 +84,7 @@ A mission is a session with a name, an area, an optional start point, and an end
 | `POST /api/sessions/<code>/tracks` | The command post places a track by hand [177]. JSON `{ affiliation, kind, count?, lat, lon, radius_m?, note? }`, or `place` (a gazetteer place id) instead of `lat` and `lon`. `radius_m` is 5 to 2000 m, 50 if left out; `note` is the source, up to 120 characters. The track gets the mission's next number. 201 with `{ entry }`, the `plot` entry. 400 for a point outside the mission's area; 409 with `ended: true` for an ended mission. |
 | `PATCH /api/sessions/<code>/tracks/<n>` | Changes track n by hand [177]. JSON `{ action, … }`: `edit` with `affiliation`, `kind`, `count?`, `note?`; `move` with `lat` and `lon` (or `place`), `radius_m?`, `note?`; `gone` or `restore` with nothing else. 200 with `{ entry }`; 404 when the mission has no track n. |
 | `POST /api/sessions/<code>/held/<id>` | The operator settles a held radio report [203]. JSON `{ action, callsign? }`: `assign` gives it to `callsign`, a unit on the roster; `add` puts `callsign` on the roster first, then gives it the report; `dismiss` drops it. A report given to a unit is read again from where that unit was when the report came in. Reply `{ report_id, callsign, already }`; `already` is true when it was settled before, and nothing changed: the first decision stands. 400 for a call sign not on the roster with `assign`; 404 for an unknown held report. |
+| `POST /api/sessions/<code>/tasks` | A person at the command post acts on recon [234]. JSON `{ action, … }`: `send` with `asset` (a friendly drone or drone team track) and `n` (the track to look at), and `request` (the request it answers) or null; `done` with `asset`; `decline` with `request`. 201 with `{ entry, already: false }`, the `task` entry. 200 with `{ entry: null, already: true }` when the request was already answered: the first decision stands. 400 when `asset` is not a friendly drone or drone team, either track is marked gone, `asset` is `n`, or `done` finds no task to end; 404 for no mission, or no such track or request; 409 with `ended: true` for an ended mission. |
 | `GET /api/sessions/<code>/audio/<file>` | A held report's recording, for the operator to listen to [203]. |
 | `DELETE /api/sessions/<code>` | Deletes an ended mission; its file, and its held reports' recordings, move to `deleted/` [112, 203]. 409 for an open one. |
 | `GET /api/places?area=&q=` | Up to 8 gazetteer places matching `q`, each as the start point it would make: `{ id, name, category, lat, lon, radius_m }`. With `lat` and `lon` instead of `q`: `{ places: [], label }`, the name a track placed at that point gets ("120 m east of Église Saint-Louis") [177]; 400 outside the area. |
@@ -102,6 +105,8 @@ Each entry has `kind`, `id`, `session` and server time `ts`, and is one of:
 - `held`: a radio report waiting for the operator [203]: `clientTs`, `area`, `transcript`, `language`, `reason`, `heard`, `read` (a call sign heard that is not on the roster, or null), `candidates` (the units it may be from), `question`, `position` (for `far`: where it would have put the unit), `audio` (the recording's file name, or null).
 - `roster`: the operator added `callsign` to the roster [201]. `by` is `"CP"`; `held` is the held report it was heard in, if any.
 - `dismiss`: the operator dropped held report `held`. `by` is `"CP"`.
+- `request`: a unit asked for recon [234]: `callsign`, `n` (the track, or null when none was named), `words` (the request as said), `report_id` (the report it came with, or null when it was asked on its own), and `sender` for a radio call.
+- `task`: what a person at the command post did about recon [234]: `by` (`"CP"`), `action` (`send`, `done` or `decline`), `asset` (the drone or drone team's track number, for send and done), `n` (the track to look at, for send) and `request` (the request it answers, for send and decline).
 - `end`: nothing more.
 
 Types in `lib/reports/types.ts`. The log is append-only; nothing in it is edited. A session from before missions has no `mission` line; the command post still shows it, and reports to it are refused.
@@ -124,7 +129,7 @@ A clip with more than one voice that names a place: `evidence.rule` is `voices_d
 
 ## Tracks
 
-A track is something on the map that is not a reporting unit: a unit sees it, or knows of it, and reports it by voice. For reconnaissance only [145]. The rules are in `lib/geo/tracks.ts`:
+A track is something on the map that is not a reporting unit: a unit sees it, or knows of it, and reports it by voice. For reconnaissance only [234]. The rules are in `lib/geo/tracks.ts`:
 
 - **Who the report is about** is the model's reading checked against the words. When they disagree, the app asks [147]. A track number or a contact ("Unknown contact, two blocks east") makes it a track whatever the model said [180].
 - **Whose it is** comes from the words alone. Nothing is hostile unless a hostile word was said; with no word it is unknown [148].

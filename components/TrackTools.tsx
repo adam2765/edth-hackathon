@@ -273,6 +273,8 @@ export function TrackCard(props: {
   onGone: () => void;
   onRestore: () => void;
   onClose: () => void;
+  /** What the card says about recon, and its buttons [234]. */
+  children?: ReactNode;
 }) {
   const t = props.track;
   const [confirmGone, setConfirmGone] = useState(false);
@@ -301,6 +303,7 @@ export function TrackCard(props: {
         {t.changed ? ` · changed by ${t.changed.by}` : ""}
         {t.note ? ` · source: ${t.note}` : ""}
       </p>
+      {props.children}
       {props.error ? (
         <p className={styles.error} role="alert">
           {props.error}

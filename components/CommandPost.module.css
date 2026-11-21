@@ -1617,7 +1617,19 @@
   white-space: nowrap;
 }
 
-.giveBtn:hover {
+/* A drone to send: the label may wrap rather than run out of the tray. */
+.droneBtn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.giveBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.giveBtn:hover:not(:disabled) {
   background: rgba(44, 156, 255, 0.16);
 }
 

@@ -16,10 +16,11 @@ import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
-import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
+import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
+import { SendDrone, TrackRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -612,7 +613,7 @@ export default function CommandPost() {
       // One handler for the life of the map; what a click does depends on what the command post is doing.
       map.on("click", (e) => mapClick.current(e));
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-task", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -640,6 +641,9 @@ export default function CommandPost() {
         // The line of sight: from where the observer was to what they saw, dotted in the observer's
         // colour. It has no arrowhead: it says who saw it from where, and nothing else.
         map.addLayer({ id: "track-sight-line", type: "line", source: "track-sight", layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 2.5, "line-dasharray": [0.1, 2.2], "line-opacity": 0.85 } });
+        // Recon: a friendly drone or drone team the command post sent to look at a track [234]. A
+        // solid line in the friendly colour, with no arrowhead: who is looking at what, nothing else.
+        map.addLayer({ id: "track-task-line", type: "line", source: "track-task", layout: { "line-cap": "round" }, paint: { "line-color": AFFILIATION_COLOUR.friendly, "line-width": 2, "line-opacity": 0.8 } });
         map.addLayer({ id: "arrow-shaft", type: "line", source: "arrow", filter: ["==", "part", "shaft"], layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": op } });
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
@@ -805,6 +809,15 @@ export default function CommandPost() {
     const trail: GeoJSON.Feature[] = [];
     const sight: GeoJSON.Feature[] = [];
     const leader: GeoJSON.Feature[] = [];
+    // Each drone sent to look at a track, from the drone to the track [234]. Not drawn when either is gone or not placed.
+    const task: GeoJSON.Feature[] = [];
+    for (const d of view.tracks) {
+      const seen = d.task ? view.tracks.find((t) => t.n === d.task!.n) : undefined;
+      const a = d.position;
+      const b = seen?.position;
+      if (!a || !b || d.gone != null || seen!.gone != null || distanceM(a, b) < 5) continue;
+      task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
+    }
     // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
     // keeps its spot and a new one moves.
     const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
@@ -921,6 +934,7 @@ export default function CommandPost() {
     set("track-acc", acc);
     set("track-trail", trail);
     set("track-sight", sight);
+    set("track-task", task);
     set("track-leader", leader);
     map.setLayoutProperty("track-sym", "text-size", trackText);
   }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked]);
@@ -1293,6 +1307,27 @@ export default function CommandPost() {
     [session],
   );
 
+  /** The operator sends a drone to look at a track, ends its recon, or turns a request down [234]. */
+  const sendTask = useCallback(
+    async (body: TaskBody, done: string) => {
+      if (!session) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(session)}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = (await res.json().catch(() => ({}))) as Partial<TaskReply> & { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+        setNotice(data.already ? "Someone had answered this request already" : done);
+        pollNow.current();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Saving that failed.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [session],
+  );
+
   /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. */
   const sendHeld = useCallback(
     async (st: Settling) => {
@@ -1595,7 +1630,9 @@ export default function CommandPost() {
               onGone={() => markGone(pickedTrack.n, true)}
               onRestore={() => markGone(pickedTrack.n, false)}
               onClose={() => setPicked(null)}
-            />
+            >
+              <TrackRecon track={pickedTrack} tracks={view.tracks} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
+            </TrackCard>
           ) : null}
         </div>
         {/* A frame round the map says "this is a replay" from across the room. */}
@@ -1832,6 +1869,45 @@ export default function CommandPost() {
           </section>
         ) : null}
 
+        {/* Units that asked for a drone to look at a track: nothing is sent until the operator
+            picks a drone and confirms [234]. */}
+        {view.requests.length ? (
+          <section className={styles.section} aria-labelledby="requests-h">
+            <h2 id="requests-h" className={styles.h2}>
+              Recon requests <span className={styles.count}>{view.requests.length}</span>
+            </h2>
+            <ol className={styles.held}>
+              {view.requests.map((r) => {
+                const t = r.n != null ? view.tracks.find((x) => x.n === r.n) : undefined;
+                return (
+                  <li key={r.id} className={styles.heldItem}>
+                    <span className={styles.itemHead}>
+                      <span className={styles.itemTime}>{fmtTime(r.ts)}</span>
+                      <span className={styles.itemCall}>
+                        <span className={styles.itemDot} style={{ background: r.colour }} aria-hidden="true" />
+                        {r.callsign}
+                      </span>
+                      <span className={styles.pill} data-status="ask">
+                        Recon
+                      </span>
+                    </span>
+                    <span className={styles.said}>“{r.words}”</span>
+                    {t ? (
+                      <button type="button" className={styles.linkBtn} onClick={() => flyToTrack(t)}>
+                        Track {t.n} · {describeTrack(t)}
+                        {t.position ? ` · ${t.position.label}` : " · not placed yet"}
+                      </button>
+                    ) : (
+                      <span className={styles.heldQuestion}>No track named. Pick the track to look at.</span>
+                    )}
+                    {canEdit ? <SendDrone key={`${r.id}:${r.n}`} n={t ? t.n : null} tracks={view.tracks} request={r} busy={busy} onTask={sendTask} /> : null}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ) : null}
+
         <section className={styles.section} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
@@ -1956,8 +2032,10 @@ export default function CommandPost() {
           {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
             {view.feed.map((f) => {
-              if (f.kind === "plot" || f.kind === "note") {
-                // Something the command post did to a track or a held report: one line, like a join.
+              if (f.kind === "plot" || f.kind === "note" || f.kind === "request" || f.kind === "task") {
+                // Something the command post did to a track or a held report, or a request for recon
+                // and what was done about it [234]: one line, like a join.
+                const t = f.track != null ? view.tracks.find((x) => x.n === f.track) : undefined;
                 return (
                   <li key={f.id}>
                     <button
@@ -1967,12 +2045,13 @@ export default function CommandPost() {
                       data-selected={selected === f.id || undefined}
                       onClick={() => {
                         flyToItem(f);
-                        if (f.track != null) setPicked(f.track);
+                        if (t && !f.position) flyToTrack(t);
+                        else if (f.track != null) setPicked(f.track);
                       }}
                     >
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
                       <span className={styles.itemCall}>
-                        <span className={styles.itemDot} style={{ background: CP_COLOUR }} aria-hidden="true" />
+                        <span className={styles.itemDot} style={{ background: f.kind === "request" ? f.colour : CP_COLOUR }} aria-hidden="true" />
                         {f.callsign}
                       </span>
                       <span className={styles.joinText}>{f.outcome}</span>
