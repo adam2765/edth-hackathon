@@ -15,7 +15,8 @@ import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEA
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
-import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
+import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
+import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
@@ -23,11 +24,16 @@ import styles from "./CommandPost.module.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const POLL_MS = 1000;
-/** With no mission on screen, how often the list of missions is read. */
+/** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
 const SPEEDS = [1, 10, 30];
+/** How close to a mission's start or end, in pixels on the bar, the replay is pulled onto it. */
+const DETENT_PX = 8;
+/** The replay bar's thumb, in CSS pixels: its middle runs from half this in from each end. */
+const THUMB_PX = 16;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_LOG: LogEntry[] = [];
 // The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
 // label, which is wider than its marker.
 const MAP_PADDING = { top: 80, bottom: 130, left: 90, right: 90 };
@@ -268,9 +274,13 @@ export default function CommandPost() {
     return { session: sessionCode(q.get("session")), fixedArea: isAreaId(a) ? a : null };
   }, [search]);
 
-  // The log of the session shown; entries of another session are dropped when it changes.
-  const [log, setLog] = useState<{ session: string | null; entries: LogEntry[] }>({ session: null, entries: [] });
-  const entries = useMemo(() => (log.session === session ? log.entries : []), [log, session]);
+  // The logs read so far, by session. Moving the replay into another mission of the day shows its
+  // log at once; the one on screen is polled for what is new.
+  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
+  const logsRef = useRef(logs);
+  const entries = useMemo(() => (session ? (logs[session] ?? EMPTY_LOG) : EMPTY_LOG), [logs, session]);
+  /** The missions on this coordinator, for the replay bar. */
+  const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -320,7 +330,8 @@ export default function CommandPost() {
   const [zoomKey, setZoomKey] = useState(0);
   const candMarkers = useRef<Marker[]>([]);
   const countRef = useRef(0);
-  const replayRef = useRef({ t: 0, end: 0 });
+  /** What the replay's timer and the bar's handlers read between renders. */
+  const replayRef = useRef<{ t: number; end: number; stretches: Stretch[]; session: string | null }>({ t: 0, end: 0, stretches: [], session: null });
   /** Reads the log at once, after the command post changed it, rather than at the next poll. */
   const pollNow = useRef<() => void>(() => {});
   /** What a click on the map does; set below, read by the handler the map was given once. */
@@ -344,6 +355,7 @@ export default function CommandPost() {
         if (stop) return;
         setStored(data.stored);
         setLastOk(Date.now());
+        setMissions(data.missions);
         const open = data.missions.find((m) => m.ended == null);
         if (open) showSession(open.code, true);
         else {
@@ -363,6 +375,30 @@ export default function CommandPost() {
     };
   }, [session]);
 
+  // With a mission on screen, the list is still read: the replay bar shows the day's other missions.
+  // It does not start over when the replay moves into another mission.
+  const hasSession = session != null;
+  useEffect(() => {
+    if (!hasSession) return;
+    let stop = false;
+    const look = async () => {
+      try {
+        const res = await fetch("/api/sessions", { cache: "no-store" });
+        if (!res.ok || stop) return;
+        const data = (await res.json()) as MissionListReply;
+        if (!stop) setMissions(data.missions);
+      } catch {
+        // The bar keeps the list it has.
+      }
+    };
+    look();
+    const id = setInterval(look, LIST_POLL_MS);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [hasSession]);
+
   const pickSession = useCallback((code: string | null) => {
     setPlaying(false);
     setMode("live");
@@ -375,11 +411,16 @@ export default function CommandPost() {
 
   // ---------- the log ----------
   useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  useEffect(() => {
     if (!session) return;
     let stop = false;
     let busy = false;
     let loaded = false;
-    countRef.current = 0;
+    // A log read before (another mission of the day, visited in a replay) goes on from where it was.
+    countRef.current = logsRef.current[session]?.length ?? 0;
     const poll = async () => {
       if (busy || stop) return;
       busy = true;
@@ -393,11 +434,11 @@ export default function CommandPost() {
         if (data.total < countRef.current) {
           // The log was cleared: start over.
           countRef.current = 0;
-          setLog({ session, entries: [] });
+          setLogs((all) => ({ ...all, [session]: [] }));
         } else if (data.entries.length || !loaded) {
           const from = countRef.current;
           countRef.current += data.entries.length;
-          setLog((l) => ({ session, entries: l.session === session && from > 0 ? [...l.entries, ...data.entries] : data.entries }));
+          setLogs((all) => ({ ...all, [session]: from > 0 ? [...(all[session] ?? []), ...data.entries] : data.entries }));
           setManualArea(null);
         }
         loaded = true;
@@ -438,15 +479,46 @@ export default function CommandPost() {
   // units do not all read as silent for the hours since.
   const effNow = mode === "live" ? (ended ?? now) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
-  const rangeStart = full.first != null ? full.first - 2000 : 0;
-  const rangeEnd = full.last != null ? full.last + 2000 : 0;
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
 
+  // ---------- the replay bar ----------
+  // The missions opened in this area on the shown one's day, each a stretch from its start to its
+  // end, gray between. Until the log of a mission moved to is read, its line in the list stands in.
+  // A session from before missions has only its own entries.
+  const stretches = useMemo<Stretch[]>(() => {
+    if (!session) return [];
+    const shown: ShownMission | undefined = mission
+      ? { code: session, name: mission.name, area: mission.area, opened: mission.opened, ended: mission.ended, last: full.last ?? mission.opened }
+      : missions.find((m) => m.code === session);
+    if (shown) return dayStretches(missions, shown, now);
+    return full.first != null && full.last != null ? [{ code: session, name: session, start: full.first, end: full.last, open: false }] : [];
+  }, [session, mission, full.first, full.last, missions, now]);
+  const { lo: rangeStart, hi: rangeEnd } = useMemo(() => barRange(stretches), [stretches]);
+  const shownStretch = stretches.find((s) => s.code === session) ?? null;
+  const dayCodes = stretches.map((s) => s.code).join(" ");
+
   useEffect(() => {
-    replayRef.current = { t: replayT, end: rangeEnd };
-  }, [replayT, rangeEnd]);
+    replayRef.current = { t: replayT, end: rangeEnd, stretches, session };
+  }, [replayT, rangeEnd, stretches, session]);
+
+  // The day's other missions are read once, so the replay moves into one without a wait.
+  const fetching = useRef(new Set<string>());
+  useEffect(() => {
+    for (const code of dayCodes ? dayCodes.split(" ") : []) {
+      if (code === session || logsRef.current[code] || fetching.current.has(code)) continue;
+      fetching.current.add(code);
+      fetch(`/api/sessions/${encodeURIComponent(code)}`, { cache: "no-store" })
+        .then((res) => (res.ok ? (res.json() as Promise<SessionLogReply>) : null))
+        .then((data) => {
+          // The poll of the mission on screen may have read it first; that copy is kept.
+          if (data) setLogs((all) => (all[code] ? all : { ...all, [code]: data.entries }));
+        })
+        .catch(() => {})
+        .finally(() => fetching.current.delete(code));
+    }
+  }, [dayCodes, session]);
 
   // ---------- replay ----------
   const goLive = useCallback(() => {
@@ -455,36 +527,57 @@ export default function CommandPost() {
     setFollow(true);
   }, []);
 
-  const scrub = useCallback((t: number) => {
-    setMode("replay");
-    setReplayT(t);
+  /** The replay has moved into another mission of the day: show it. What was picked belongs to the old one. */
+  const enterMission = useCallback((code: string) => {
+    replayRef.current.session = code;
+    setPicked(null);
+    setTool(null);
+    setAnswering(null);
+    setConfirmEnd(false);
+    showSession(code, true);
   }, []);
+
+  const scrub = useCallback(
+    (t: number) => {
+      setMode("replay");
+      setReplayT(t);
+      const { stretches: day, session: shown } = replayRef.current;
+      const s = stretchAt(day, t, shown);
+      if (s && s.code !== shown) enterMission(s.code);
+    },
+    [enterMission],
+  );
 
   const togglePlay = useCallback(() => {
     if (playing) {
       setPlaying(false);
       return;
     }
-    // From live, or from the end, a replay starts at the beginning of the session.
-    if (mode === "live" || replayRef.current.t >= replayRef.current.end) setReplayT(rangeStart);
+    // From live, or from the end, a replay starts at the beginning of the mission on screen.
+    if (mode === "live" || replayRef.current.t >= replayRef.current.end) setReplayT(shownStretch?.start ?? rangeStart);
     setMode("replay");
     setFollow(true);
     setPlaying(true);
-  }, [playing, mode, rangeStart]);
+  }, [playing, mode, shownStretch, rangeStart]);
 
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
-      const { t, end } = replayRef.current;
-      const next = t + STEP_MS * speed;
-      if (next >= end) {
-        // The replay has caught up with the present: back to live.
+      const { t, end, stretches: day, session: shown } = replayRef.current;
+      if (t + STEP_MS * speed >= end) {
+        // The replay has caught up with the present, or the day's last end: back to live.
         setPlaying(false);
         setMode("live");
-      } else setReplayT(next);
+        return;
+      }
+      // The gray between two missions is skipped: the replay goes on at the next one's start.
+      const next = stepAlong(day, t, 1, STEP_MS * speed);
+      setReplayT(next);
+      const s = stretchAt(day, next, shown);
+      if (s && s.code !== shown) enterMission(s.code);
     }, STEP_MS);
     return () => clearInterval(id);
-  }, [playing, speed]);
+  }, [playing, speed, enterMission]);
 
   // ---------- map ----------
   useEffect(() => {
@@ -1289,7 +1382,12 @@ export default function CommandPost() {
   const latest = view.feed[0];
   /** An ended mission shown as it ended, not replayed. */
   const atEnd = mode === "live" && ended != null;
-  const sliderValue = mode === "live" ? rangeEnd : Math.min(Math.max(replayT, rangeStart), rangeEnd);
+  // Live, the bar stands at the shown mission's end: now while it is open.
+  const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, rangeStart), rangeEnd);
+  const barSpan = rangeEnd - rangeStart;
+  /** Where a time sits along the bar, in per cent. */
+  const barPct = (t: number) => (barSpan > 0 ? ((t - rangeStart) / barSpan) * 100 : 0);
+  const sliderMission = stretchAt(stretches, sliderValue, session);
 
   return (
     <div className={styles.root}>
@@ -1549,32 +1647,60 @@ export default function CommandPost() {
             type="button"
             className={styles.playBtn}
             onClick={togglePlay}
-            disabled={!entries.length}
+            disabled={!stretches.length}
             aria-label={playing ? "Pause replay" : "Play replay"}
-            title={playing ? "Pause the replay" : "Replay from the start"}
+            title={playing ? "Pause the replay" : "Replay from the start of this mission"}
           >
             {playing ? "❚❚" : "▶"}
           </button>
-          <input
-            className={styles.slider}
-            type="range"
-            min={rangeStart}
-            max={rangeEnd}
-            step={1000}
-            value={sliderValue}
-            disabled={!entries.length}
-            onChange={(e) => {
-              setPlaying(false);
-              scrub(Number(e.target.value));
-            }}
-            aria-label="Replay time"
-            // No time before the first entry: the server's locale would not match the browser's.
-            aria-valuetext={entries.length ? fmtTime(sliderValue) : undefined}
-          />
+          {/* The day's missions in this area: a stretch for each, gray where none was running, and
+              a detent at every start and end. The replay never rests in the gray. */}
+          <div className={styles.timeline}>
+            <div className={styles.rail} aria-hidden="true">
+              {stretches.map((s) => (
+                <span
+                  key={s.code}
+                  className={styles.stretch}
+                  data-shown={s.code === session ? "" : undefined}
+                  style={{ left: `${barPct(s.start)}%`, width: `${barPct(s.end) - barPct(s.start)}%` }}
+                />
+              ))}
+              {detents(stretches).map((d) => (
+                <span key={d} className={styles.detent} style={{ left: `${barPct(d)}%` }} />
+              ))}
+            </div>
+            <input
+              className={styles.slider}
+              type="range"
+              min={rangeStart}
+              max={rangeEnd}
+              step="any"
+              value={sliderValue}
+              disabled={!stretches.length}
+              onChange={(e) => {
+                setPlaying(false);
+                // A start or end within a few pixels pulls the replay onto it.
+                const width = e.currentTarget.getBoundingClientRect().width - THUMB_PX;
+                const pull = width > 0 ? (barSpan * DETENT_PX) / width : 0;
+                scrub(Math.round(settle(stretches, Number(e.currentTarget.value), pull)));
+              }}
+              onKeyDown={(e) => {
+                const to = keyTarget(stretches, sliderValue, e.key);
+                if (to == null) return;
+                e.preventDefault();
+                setPlaying(false);
+                scrub(to);
+              }}
+              aria-label="Replay time"
+              title="The day's missions in this area; gray where none was running. Page Up and Page Down jump between starts and ends."
+              // No time before the first entry: the server's locale would not match the browser's.
+              aria-valuetext={stretches.length ? `${fmtTime(sliderValue)}${sliderMission ? `, ${sliderMission.name}` : ""}` : undefined}
+            />
+          </div>
           <div className={styles.time}>
             {mode === "replay" ? (
               <>
-                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(rangeEnd - replayT)} left</span>
+                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(Math.max(0, (shownStretch?.end ?? rangeEnd) - replayT))} left</span>
               </>
             ) : ended != null ? (
               <>Ended · {fmtTime(ended)}</>
