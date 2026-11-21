@@ -142,3 +142,94 @@ From `AGENTS.md` and `transmitter/AGENTS.md`:
 - No EAS. Build locally with `npx expo run:android`. Never edit `android/` by hand: it is generated. Configure through `app.json` and config plugins.
 - Every source makes an `Utterance` and goes down one send path.
 - Do not push, deploy or move the `prior-work-fri-1800` tag unless the person you work for asks. Other people commit to `main` at the same time: pull before you start, and stage only your own files.
+
+
+## Ollama setup on this Mac
+
+Local mode needs two separate things: the web coordinator and an Ollama server with the
+`ministral-3:3b` model. Starting Next.js does not install or start Ollama. No Mistral API key
+or Ollama account is needed. Internet is needed for the one-time installation and model download.
+
+### One-time installation
+
+Install the current Homebrew version of Ollama. The model download below is about 3 GB;
+ask before installing packages or downloading it.
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+brew install ollama
+ollama --version
+```
+
+If Ollama is already installed, check its version first; use `brew upgrade ollama` if it is
+too old to load the model. If the Ollama desktop app is running, quit it before using
+`ollama serve`, so the server below can use port 11434 and the intended settings.
+
+### Terminal 1: start Ollama
+
+This command can run from any folder. Leave it running.
+
+```bash
+OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 ollama serve
+```
+
+These settings disable cloud features, keep the model loaded between reports, and limit
+the context to 4,096 tokens for this 8 GB Mac. Use the 3B model, not the 8B model.
+
+### Terminal 2: download and check the model
+
+Keep Terminal 1 running while these commands run. The download is needed only once.
+
+```bash
+curl --fail --show-error http://127.0.0.1:11434/api/version
+ollama pull ministral-3:3b
+ollama list
+ollama run ministral-3:3b "Reply with OK"
+```
+
+Check: the version endpoint returns JSON, `ollama list` includes `ministral-3:3b`, and
+the last command answers. If port 11434 is already occupied, identify the existing
+Ollama app or server; do not start a second copy.
+
+### Terminal 2: start the web coordinator
+
+After the model check, run from the repo root, not `transmitter/`:
+
+```bash
+cd ~/Projects/edth-hackathon
+PROVIDER_MODE=local npm run dev -- -p 3117
+```
+
+If the coordinator is already running, stop that copy with Ctrl+C first. Wait for both
+`ready for` lines before sending reports. Open http://localhost:3117/receiver, create a
+Vincennes mission, and join it from the physical Android phone.
+
+Check from another terminal:
+
+```bash
+curl --fail --show-error http://localhost:3117/api/report \
+  --form-string area=vincennes \
+  --form-string "text=I'm at Bérault metro."
+```
+
+Expect `resolution.status` to be `resolved` and `evidence.feature_id` to be
+`node/9415191169`. This text check does not create a mission report.
+
+### If warm-up says "fetch failed"
+
+Next.js can be ready while Ollama is unreachable. Check the version endpoint above first.
+The default address is `http://127.0.0.1:11434`; `OLLAMA_URL` in the shell or
+`.env.local` overrides it. If that address is wrong, correct it and restart the coordinator.
+If the model is missing, pull it, then restart the coordinator so warm-up runs again.
+No `.env.local` is required for the defaults; do not overwrite an existing one.
+
+For daily use, start Ollama in Terminal 1, then the coordinator in Terminal 2. No repeated
+installation or download is needed. For the first Android build, stop the coordinator,
+run `ollama stop ministral-3:3b`, and stop `ollama serve` with Ctrl+C to free memory;
+build first, then restart Ollama and the coordinator. The live Android microphone still
+needs the PCM fix described above; installing Ollama alone does not implement that fix.
+
+References: [Homebrew formula](https://formulae.brew.sh/formula/ollama),
+[Ollama configuration](https://github.com/ollama/ollama/blob/main/docs/faq.mdx),
+[model](https://ollama.com/library/ministral-3:3b).
+
