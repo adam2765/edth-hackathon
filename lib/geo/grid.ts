@@ -26,14 +26,21 @@ const NATO: Record<string, string> = {
   alpha: "A", alfa: "A", bravo: "B", charlie: "C", delta: "D", echo: "E", foxtrot: "F", golf: "G", hotel: "H", india: "I",
   juliet: "J", juliett: "J", kilo: "K", lima: "L", mike: "M", november: "N", oscar: "O", papa: "P", quebec: "Q", romeo: "R",
   sierra: "S", tango: "T", uniform: "U", victor: "V", whiskey: "W", whisky: "W", xray: "X", yankee: "Y", zulu: "Z",
+  // As a Ukrainian or Russian transcript writes them: "Дельта Квебек" [226].
+  альфа: "A", браво: "B", чарлі: "C", чарли: "C", дельта: "D", ехо: "E", эхо: "E", фокстрот: "F", гольф: "G", готель: "H", отель: "H",
+  індія: "I", индия: "I", джульєтта: "J", джульєта: "J", джульетта: "J", кіло: "K", кило: "K", ліма: "L", лима: "L", майк: "M",
+  новембер: "N", оскар: "O", папа: "P", квебек: "Q", ромео: "R", сієрра: "S", сьєрра: "S", сьерра: "S", танго: "T", юніформ: "U",
+  юниформ: "U", віктор: "V", виктор: "V", віскі: "W", виски: "W", іксрей: "X", иксрей: "X", янкі: "Y", янки: "Y", зулу: "Z",
 };
+/** Lower case with Latin accents dropped: a French transcript writes "Delta Québec", "zéro". */
+const plain = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC");
 /**
  * Digits said one by one, as on a radio: "five eight six one zero one", "niner", "oh" for zero.
  * Only a run with a square or a grid word is read as a grid, so "two vehicles" stays a count.
  */
 const DIGIT_WORDS: Record<string, string> = {
   zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", niner: "9",
-  zéro: "0", un: "1", une: "1", deux: "2", trois: "3", quatre: "4", cinq: "5", sept: "7", huit: "8", neuf: "9",
+  un: "1", une: "1", deux: "2", trois: "3", quatre: "4", cinq: "5", sept: "7", huit: "8", neuf: "9",
   нуль: "0", один: "1", одна: "1", два: "2", дві: "2", три: "3", чотири: "4", пять: "5", шість: "6", сім: "7", вісім: "8", девять: "9",
 };
 
@@ -130,9 +137,15 @@ function tokens(text: string): { t: string; announced: boolean }[] {
   const out: { t: string; announced: boolean }[] = [];
   let announced = false;
   // "п'ять", "дев'ять": the apostrophe inside a Cyrillic word is part of it.
-  const joined = text.normalize("NFC").replace(/([\u0400-\u04ff])[\u2019\u02bc'`]([\u0400-\u04ff])/g, "$1$2");
+  // "X-ray" and "ікс-рей" are one spelled letter.
+  const joined = text
+    .normalize("NFC")
+    .replace(/([\u0400-\u04ff])[\u2019\u02bc'`]([\u0400-\u04ff])/g, "$1$2")
+    .replace(/\b(x)[-\s]?(ray)\b/gi, "$1$2")
+    .replace(/(ікс|икс)[-\s]?(рей)/giu, "$1$2");
   for (const raw of joined.split(/[^\p{L}\p{N}]+/u).filter(Boolean)) {
-    const low = raw.toLowerCase();
+    // Cyrillic keeps its letters: "й" and "ї" are not accented forms here.
+    const low = /[\u0400-\u04ff]/.test(raw) ? raw.toLowerCase() : plain(raw);
     if (DIGIT_WORDS[low]) {
       out.push({ t: DIGIT_WORDS[low], announced });
       continue;
@@ -142,7 +155,7 @@ function tokens(text: string): { t: string; announced: boolean }[] {
       continue;
     }
     // "31UDQ586101" → "31", "UDQ", "586101".
-    for (const part of raw.match(/\p{N}+|\p{L}+/gu) ?? []) out.push({ t: NATO[part.toLowerCase()] ?? part, announced });
+    for (const part of raw.match(/\p{N}+|\p{L}+/gu) ?? []) out.push({ t: NATO[/[\u0400-\u04ff]/.test(part) ? part.toLowerCase() : plain(part)] ?? part, announced });
   }
   return out;
 }
