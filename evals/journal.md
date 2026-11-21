@@ -43,3 +43,12 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - Accepted by Alex with the local regressions ("Keep it", and for this final wording "Keep and commit"). Baselines saved from the two runs above (`eval:baseline`).
 - The eval does not see whose marker moved: a wrong pin compares places only, so the live bug, read as the speaker at the right station, shows only in the `subject` field.
 - Next: unchanged. The example names on the 3B model come first; `a-two-places-2` is the same leak.
+
+## 2026-11-21, attack: track heading [ollama:ministral-3:3b, mistral:mistral-small-latest]
+
+- Seen live, mission `vincennes-21`, on a coordinator in offline mode: "Hostile drone, 1 km east, heading north." lost "east" and asked how far; "Hostile drone one kilometer east, moving north." swapped the two and pinned the drone 1 km north; "Hostel drone 1 km east" got "east" as its heading too.
+- Cases: 8 reports with a distance, where the thing is and the way it is going, in English, French and Ukrainian (`a-compass-1` to `a-compass-8`, tag `compass`). A second reading by a fresh agent agreed on distance, direction and heading for all; it found "of me" and "of us" made the subject unclear, so those were reworded without them.
+- Hosted: 24 of 24 in 3 rounds. The rule holds.
+- Local: 6 of 24, the same in every round. Swapped in `a-compass-5`, `-7` and `-8`; "east" dropped in `-1`; south and west merged into south-west in `-3`; north-east taken as where it is in `-4`. `-2` and `-6` pass.
+- No prompt change. Code now checks the compass words of a track report against the words [184], so these misreadings no longer move the pin or draw a wrong arrow. The eval cannot show that: the outcome of a dead-reckoned track is only "resolved".
+- Next: `prompt-tune` on the 3B model for two compass words, if the team wants the fields right and not only the pin.
