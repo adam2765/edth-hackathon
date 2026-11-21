@@ -107,7 +107,8 @@ with [Install and build once](#install-and-build-once).
 ### Daily use: USB Android phone, no Studio
 
 Use **three Terminal windows**, one for each service. Leave all three open. Android Studio
-and an emulator are not needed. Connect and unlock the phone first.
+and an emulator are not needed. Connect the phone to the Mac with a **USB data cable**
+(not a charging-only cable), unlock it, and keep it connected throughout this procedure.
 
 **1. Ollama — runs the local language model.** Paste into the first window:
 
@@ -187,8 +188,11 @@ Full setup and iPhone signing: [docs/setup.md](docs/setup.md).
 
 Studio supplies the installed JDK and SDK, but **leave Studio closed**. Use this for the
 first Android install, or after changing native code, native dependencies or app config.
-Install npm dependencies as above first. Stop the three servers with Ctrl+C before a
-native build, especially on an 8 GB Mac.
+Install npm dependencies as above first. **Installation requires the phone connected to
+the Mac with a USB data cable.** Enable **Developer options → USB debugging** on the
+phone, unlock it, and accept its debugging authorization prompt. Keep the cable connected
+for the daily startup below; this procedure uses USB for both installation and communication.
+Stop the three servers with Ctrl+C before a native build, especially on an 8 GB Mac.
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
