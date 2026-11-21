@@ -1,6 +1,6 @@
 # Handoff: tuning the intent-extraction prompt
 
-Written Saturday 21 November, late morning (Paris time), updated after the side-word tune, for whoever picks up the prompt work next, person or coding agent. The work is ongoing, not a one-off: when it settles, fold what is still true into [evals/README.md](../evals/README.md) and delete this file and its row in [README.md](README.md).
+Written Saturday 21 November, late morning (Paris time), updated after the compass-only tune, for whoever picks up the prompt work next, person or coding agent. The work is ongoing, not a one-off: when it settles, fold what is still true into [evals/README.md](../evals/README.md) and delete this file and its row in [README.md](README.md).
 
 ## What this work is
 
@@ -60,22 +60,23 @@ Work one rule at a time, in this loop:
 3. **Record**: new baselines from the accepted runs, a decision line, a journal entry, the scores table in `evals/README.md`, and `docs/known-gaps.md` if a gap opened or closed.
 4. **Commit** when the person asks: the prompt change, the baselines, the run files, and the records together.
 
-## Where it stands (21 Nov, prompt `4c9ef72e73`, 85 cases)
+## Where it stands (21 Nov, prompt `300d5e0a2d`, 119 cases)
 
 | Model | Case results passed | Wrong pins | Median |
 |---|---|---|---|
-| Mistral Small (hosted) | 237 of 255 | 0 | 0.7 s |
-| Ministral 3 3B (local) | 174 of 255 | 12 | 2.3 s |
+| Mistral Small (hosted) | 319 of 357 | 2 | 0.8 s |
+| Ministral 3 3B (local) | 237 of 357 | 9 | 3.4 s (shared GPU) |
 
-Done: the eval, the skills, one attack and two tunes (two places in one report; a side word alone, "Friendly at the town hall.", is a track).
+Done: the eval, the skills, two attacks, two sets of cases from code changes, and three tunes (two places in one report; a side word alone, "Friendly at the town hall.", is a track; a thing given only a compass way, "Enemy vehicle to the east.", is a track). The offline model is the target of the last one; its hosted costs were accepted [194].
 
 ## Next, in order
 
-1. **Example names leak into the 3B model's answers.** It writes "Bérault", from two of the prompt's examples ("Moving towards Bérault", "Track 3 moved to Bérault"), for "Two blocks past the church" and "Je suis derrière l'hôtel de ville", and pins the unit at Bérault metro (`fr-hdv`; `p-blocks` until the side-word tune). It also reads "From Bérault metro, moving towards the town hall." as going to Bérault, like the example (`a-two-places-2`). Tune: rewrite the examples' Vincennes and Kyiv names to names in no gazetteer, then check the hosted model did not lose anything. This also touches decision [104] (the 3B model labelling English as Ukrainian after Kyiv examples).
+1. **Example names leak into the 3B model's answers.** It writes "Bérault", from two of the prompt's examples ("Moving towards Bérault", "Track 3 moved to Bérault"), for "Two blocks past the church" and "Je suis derrière l'hôtel de ville", and pins the unit at Bérault metro (`fr-hdv` until the compass-only tune; `p-blocks` until the side-word tune). It also reads "From Bérault metro, moving towards the town hall." as going to Bérault, like the example (`a-two-places-2`). Tune: rewrite the examples' Vincennes and Kyiv names to names in no gazetteer, then check the hosted model did not lose anything. This also touches decision [104] (the 3B model labelling English as Ukrainian after Kyiv examples).
 2. **Generic words written as names:** "pharmacy", "park", "cimetière" come back as `landmark_name` (`a-two-places-3`, `-4`, `-5`). Attack and tune the `landmark_name` rule.
 3. **"Outside" read as near** (`p-outside`) and **«за» read as near** on the 3B model (`uk-behind`): the relation rule.
 4. **"Copy that, moving out" read as a movement** (`o-moving-out`): the rule for `other`.
-5. **Attack the rules with few cases:** tracks (17 cases, 10 of them side words), crossings, lemmas on the 3B model, distances in words.
+5. **Attack the rules with few cases:** crossings, lemmas on the 3B model, distances in words.
+6. **Two compass words in one track report on the 3B model:** a way and a heading ("Two trucks to the north, moving west.", `t-compass-heading`; `a-compass-*`), and `t-trucks`, which lost its heading in the compass-only tune. Code checks the words since [186], so this is about the fields, not the pin. On hosted, `a-compass-6` asks instead of placing since that tune [194].
 
 Not a prompt cycle, but waiting on one: "I'm at Vincent station." pins a school named Vincent d'Indy through the resolver ([known-gaps.md](known-gaps.md)). Add it as a case once the resolver asks back there ([evals/README.md](../evals/README.md#open) has the details).
 
@@ -92,7 +93,9 @@ Questions for Alex before they are acted on, also in [evals/README.md](../evals/
 - **A case with no start position can only ask back,** so it can never show a wrong pin. Give attack cases a `from` at the place the speaker names, as a mission would.
 - **A timeout counts as a failed result,** not a model answer (`ERR`, "aborted due to timeout"). Rerun before reading anything into it.
 - **The baseline must match the prompt.** Each run prints a prompt id. If it differs from the baseline's, the prompt changed since: ask before tuning, or the comparison mixes two changes.
-- **Do not run two local runs at once;** they share one Ollama and both slow down.
+- **Do not run two local runs at once;** they share one Ollama and both slow down. Other sessions may use Ollama or the GPU too (speech-to-text work runs Whisper on it): compare speed back to back on the same cases, not with the baseline's median.
+- **Three rounds miss rare hosted flakes.** `a-two-places-10` was 3 of 3 in the side-word baseline and pins 1 to 6 times in 20 on that same prompt. Before reading a flagged hosted case as a regression, run it 10 to 20 times on both prompts (`--only <id> --repeat 20 --no-save --no-compare`).
+- **Mistral's rate limit is shared** with every session using the key. A 429 can outlast the retries [191] and shows as `ERR`; it is not a model answer.
 - **Other sessions commit to `main` as you work.** Check `git log` before committing, stage only your files, and if your decision number is taken, keep both lines and renumber yours.
 - **Outcomes depend on the resolver.** After a resolver change, run `npm run eval:outcomes -- --check`; `--refresh` rewrites the outcomes it derived itself, never a scenario's.
 

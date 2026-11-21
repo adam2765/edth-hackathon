@@ -1,17 +1,17 @@
 {
   "extractor": "ollama:ministral-3:3b",
-  "prompt_id": "4c9ef72e73",
-  "at": "2026-11-21T11:36:33.526Z",
+  "prompt_id": "300d5e0a2d",
+  "at": "2026-11-21T15:26:04.384Z",
   "repeat": 3,
   "resolve": true,
   "summary": {
     "cases": {
-      "passed": 174,
-      "total": 255
+      "passed": 237,
+      "total": 357
     },
     "heldOut": {
-      "passed": 165,
-      "total": 246
+      "passed": 228,
+      "total": 348
     },
     "inPrompt": {
       "passed": 9,
@@ -19,90 +19,90 @@
     },
     "fields": {
       "kind": {
-        "passed": 213,
-        "total": 222
+        "passed": 279,
+        "total": 300
       },
       "landmark_name": {
-        "passed": 96,
-        "total": 147
+        "passed": 162,
+        "total": 216
       },
       "landmark_name_lemma": {
-        "passed": 45,
-        "total": 51
+        "passed": 48,
+        "total": 54
       },
       "landmark_category": {
-        "passed": 168,
-        "total": 186
+        "passed": 234,
+        "total": 252
       },
       "relation": {
-        "passed": 195,
-        "total": 207
+        "passed": 252,
+        "total": 276
       },
       "language": {
-        "passed": 123,
-        "total": 126
+        "passed": 150,
+        "total": 153
       },
       "subject": {
-        "passed": 246,
-        "total": 255
+        "passed": 345,
+        "total": 357
       },
       "direction": {
-        "passed": 33,
-        "total": 36
+        "passed": 93,
+        "total": 117
       },
       "distance_m": {
-        "passed": 30,
-        "total": 30
+        "passed": 114,
+        "total": 114
       },
       "landmark_text": {
         "passed": 12,
         "total": 12
       },
       "track_kind": {
-        "passed": 18,
-        "total": 18
+        "passed": 66,
+        "total": 66
       },
       "track_ref": {
-        "passed": 33,
-        "total": 33
+        "passed": 48,
+        "total": 48
       },
       "track_count": {
-        "passed": 3,
-        "total": 3
+        "passed": 9,
+        "total": 9
       },
       "track_heading": {
-        "passed": 3,
-        "total": 3
+        "passed": 15,
+        "total": 30
       }
     },
     "tags": {
       "scenario": {
-        "passed": 42,
-        "total": 54
+        "passed": 45,
+        "total": 57
       },
       "fr": {
-        "passed": 30,
-        "total": 39
+        "passed": 48,
+        "total": 60
       },
       "uk": {
-        "passed": 60,
-        "total": 75
+        "passed": 69,
+        "total": 90
       },
       "distance": {
-        "passed": 21,
-        "total": 21
+        "passed": 24,
+        "total": 24
       },
       "intersection": {
         "passed": 3,
         "total": 3
       },
       "paraphrase": {
-        "passed": 24,
+        "passed": 27,
         "total": 39
       },
       "trap": {
-        "passed": 9,
-        "total": 18
+        "passed": 27,
+        "total": 36
       },
       "filler": {
         "passed": 9,
@@ -113,38 +113,54 @@
         "total": 12
       },
       "stt_error": {
-        "passed": 3,
-        "total": 6
+        "passed": 9,
+        "total": 12
       },
       "other": {
         "passed": 12,
         "total": 15
       },
       "track": {
-        "passed": 36,
-        "total": 51
+        "passed": 72,
+        "total": 129
       },
       "adversarial": {
-        "passed": 24,
-        "total": 60
+        "passed": 48,
+        "total": 105
       },
       "two-places": {
         "passed": 9,
         "total": 30
       },
       "side-word": {
-        "passed": 15,
+        "passed": 18,
         "total": 30
+      },
+      "compass": {
+        "passed": 6,
+        "total": 24
+      },
+      "blocks": {
+        "passed": 24,
+        "total": 36
+      },
+      "contact": {
+        "passed": 6,
+        "total": 24
+      },
+      "compass-only": {
+        "passed": 15,
+        "total": 21
       }
     },
     "outcomes": {
-      "passed": 240,
-      "total": 255
+      "passed": 333,
+      "total": 357
     },
-    "wrongPins": 12,
+    "wrongPins": 9,
     "flaky": 0,
-    "medianMs": 2283,
-    "p90Ms": 2893
+    "medianMs": 3435,
+    "p90Ms": 4650
   },
   "cases": {
     "s-v1": {
@@ -328,8 +344,8 @@
       "wrong_pins": 0
     },
     "p-two-places": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -382,10 +398,10 @@
       "wrong_pins": 0
     },
     "fr-hdv": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
-      "wrong_pins": 3
+      "wrong_pins": 0
     },
     "fr-hotel": {
       "pass": true,
@@ -459,6 +475,12 @@
       "rounds": 3,
       "wrong_pins": 0
     },
+    "e-vincent-station": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
     "e-no-punct": {
       "pass": true,
       "passes": 3,
@@ -502,8 +524,8 @@
       "wrong_pins": 0
     },
     "t-trucks": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -628,8 +650,8 @@
       "wrong_pins": 0
     },
     "t-side-ami-mairie": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -654,6 +676,204 @@
     "t-side-self-control": {
       "pass": false,
       "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-1": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-2": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-3": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-4": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-5": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-6": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-7": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-8": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-contact-east": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-moved-east": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-east-of-street": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-counts-differ": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-from-crossing-street": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-fr-contact": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-fr-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-uk-contact": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-uk-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-few": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-distance-said": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-address": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-behind-castle": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-fr-mairie": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-lost": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-uk-gate": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-base": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-t11": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-patrol": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-truck": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-fr": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-uk": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-heading": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-self-control": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-self-control-fr": {
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     }
