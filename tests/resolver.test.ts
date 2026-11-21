@@ -539,6 +539,26 @@ describe("cemeteries", () => {
   });
 });
 
+describe("roads in the Bois closed to cars", () => {
+  // OpenStreetMap maps them as tracks and paths. Until 21 Nov the build left those out: Route de
+  // la Dame Blanche was its 102 m open to cars, not its 418 m, and Route du Donjon was not there.
+  const DAME_BLANCHE = gaz.find((f) => f.id === "street/route-de-la-dame-blanche")!;
+  const onStreet = (name: string) => intent({ landmark_text: name, landmark_name: name, landmark_category: "street", relation: "at" });
+
+  it("a road that is only a track is in the gazetteer", () => {
+    const r = resolve({ intent: onStreet("Route du Donjon"), transcript: "I'm on Route du Donjon", now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("resolved");
+  });
+
+  it("from the car-free end, the pin is where the speaker is, not 300 m away", () => {
+    expect(DAME_BLANCHE.subtype).toBe("residential");
+    const eastEnd: LastPosition = { lat: 48.8449, lon: 2.446, ts: NOW - 60_000 };
+    const r = resolve({ intent: onStreet("Route de la Dame Blanche"), transcript: "I'm on Route de la Dame Blanche", lastPosition: eastEnd, now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("resolved");
+    expect(distanceM(r.pin!, eastEnd)).toBeLessThan(30);
+  });
+});
+
 describe("a move along a street", () => {
   const NOGENT = gaz.find((f) => f.id === "street/avenue-de-nogent")!;
   // The answer that put ALPHA 1 at Château de Vincennes station, mission vincennes-4.

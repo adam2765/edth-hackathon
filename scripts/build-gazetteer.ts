@@ -22,6 +22,9 @@ const OUT_FILE = `data/gazetteer.${AREA.id}.json`;
 const ENDPOINT = process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
 
 const bb = `${BBOX.s},${BBOX.w},${BBOX.n},${BBOX.e}`;
+// Roads include tracks, paths and bridleways: the Bois de Vincennes roads closed to cars are mapped
+// as tracks ("Route de la Dame Blanche"). Cycleways are left out: here they are the lane beside a
+// road that is already in, or a misspelt copy of its name.
 const query = `
 [out:json][timeout:120];
 (
@@ -47,7 +50,7 @@ const query = `
   way["building"]["name"][!"shop"][!"amenity"][!"tourism"][!"office"][!"craft"][!"healthcare"][!"leisure"][!"historic"](${bb});
 )->.poi;
 .poi out tags bb;
-way["highway"~"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian|service|footway)$"]["name"](${bb})->.streets;
+way["highway"~"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian|service|footway|track|path|bridleway)$"]["name"](${bb})->.streets;
 .streets out tags geom;
 way["waterway"~"^(river|canal|stream)$"]["name"](${bb})->.rivers;
 .rivers out tags geom;
@@ -348,7 +351,9 @@ async function main() {
     const slug = (s: string) => normalize(s).replace(/ /g, "-");
     const suffixes = streetsOfName.map((s) => (s.town ? slug(s.town) : ""));
     streetsOfName.forEach((s, i) => {
-      const first = s.pieces[0];
+      // The kind, name and id come from the first piece cars can use, so a street's kind does not
+      // turn to "path" because a path of the same name runs beside it (Esplanade Saint-Louis).
+      const first = s.pieces.find((p) => !/^(track|path|bridleway)$/.test(p.subtype)) ?? s.pieces[0];
       const lines = s.pieces.map((p) => p.line);
       const names: string[] = [];
       for (const p of s.pieces) for (const n of p.names) if (!names.includes(n)) names.push(n);

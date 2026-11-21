@@ -77,7 +77,7 @@ Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two 
 
 ## Demo script
 
-Chosen from the real gazetteer (1,108 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle, 31 stops, 38 pharmacies). Start from a fresh page (or "Clear map and log").
+Chosen from the real gazetteer (1,130 features: 6 rail/metro stations, 11 churches, 2 town halls, 1 castle, 31 stops, 38 pharmacies). Start from a fresh page (or "Clear map and log").
 
 | # | Say | Expected |
 |---|---|---|
