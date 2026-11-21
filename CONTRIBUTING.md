@@ -19,7 +19,17 @@ The transmitter app has its own `package.json` and tooling; see [transmitter/REA
 npm test && npx tsc --noEmit && npm run lint
 ```
 
-If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`.
+If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. On a fresh clone that has never run `npm run dev`, run `npx next typegen` once first: `tsc` needs the route types it makes, or it stops at `RouteContext` and `LayoutProps`.
+
+## CI
+
+GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every push to `main` and on every pull request. It has three jobs, side by side:
+
+- **Tests, types and lint:** the three checks above, and `npm run eval:outcomes -- --check`.
+- **Production build:** `npm run build`, which catches what the dev server lets through.
+- **Transmitter types:** `npx tsc --noEmit` in `transmitter/`, so a change to `lib/geo/types.ts` that breaks the app shows up even if you did not run it.
+
+It needs no key: nothing in it calls Mistral or Overpass. See the runs on the repo's Actions tab, or with `gh run list`. It does not stop a push to `main`; it only reports. If your push turns `main` red, fix it or revert it before you go on.
 
 ## Working agreements (proposed)
 

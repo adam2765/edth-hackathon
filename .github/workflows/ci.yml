@@ -1,0 +1,75 @@
+# Runs on every push to main and on every pull request: the checks from "Before you push" in
+# CONTRIBUTING.md, a production build, and the transmitter's types. It needs no secrets: nothing
+# here calls Mistral or Overpass.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the older run still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, types and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # A fresh clone has no next-env.d.ts or route types; `next dev` makes them on a laptop.
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - name: Eval outcomes still match the resolver
+        run: npm run eval:outcomes -- --check
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The prebuild step puts the 77 MB Ukrainian voice in public/tts/. Keep it between runs
+      # rather than download it from Hugging Face every time; the key changes when the voice does.
+      - uses: actions/cache@v6
+        with:
+          path: public/tts
+          key: tts-${{ hashFiles('lib/tts/voiceManifest.json') }}
+      - run: npm run build
+
+  transmitter:
+    name: Transmitter types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: transmitter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: transmitter/package-lock.json
+      - run: npm ci
+      # Also catches a change to lib/geo/types.ts that the app no longer matches.
+      - run: npx tsc --noEmit

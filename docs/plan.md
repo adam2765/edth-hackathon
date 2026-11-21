@@ -345,7 +345,7 @@ Open calls for Alex: whose phones (ours only, or any phone); travel router or th
 
 Planned on Friday and held until the team formed; it can start now. Smaller than levelang's on purpose, because this pipeline has exact answers.
 
-- **Layer 1, resolver unit tests:** exist (`npm test`).
+- **Layer 1, resolver unit tests:** exist (`npm test`), and CI runs them on every push to `main` and every pull request ([CONTRIBUTING.md](../CONTRIBUTING.md#ci)).
 - **Layer 2, text evaluation:** 60 to 80 cases, each a transcript with the expected intent fields and outcome, run through `getExtractor()` and `resolve()` in-process. Flags for area, language, tag, model and repeat count. Needs `MISTRAL_API_KEY`. Built 21 Nov: `npm run eval:extract`, 65 cases with expected fields and outcomes, the resolver step and wrong-pin count (`--resolve`), flaky cases (`--repeat`), committed baselines per model with an exit code on a regression, and the `prompt-attack` and `prompt-tune` skills to grow the cases and tune the prompt ([evals/README.md](../evals/README.md)).
 - **Layer 3, audio evaluation:** real clips recorded by the team on phones, scored on whether the right place resolves, not on word error rate. This is where the place-name bias list gets tuned.
 - **Headline metric: the wrong-pin rate.** Each failure is attributed to a stage (speech-to-text, extraction, resolver) so we know what to tune. Each run is compared with one committed baseline file.

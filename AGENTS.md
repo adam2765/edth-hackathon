@@ -33,6 +33,7 @@ evals/                      extraction eval: cases, baselines, saved runs, the p
 .agents/skills/             skills for every agent: prompt-attack, prompt-tune (.claude/skills links here)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
 tests/                      vitest
+.github/workflows/ci.yml    CI: the checks below, a build and the transmitter's types, on every push to main and every pull request
 docs/                       design docs, one Markdown file per topic; start at docs/README.md
 ```
 
@@ -51,7 +52,7 @@ npm run eval:extract        # score intent extraction (evals/README.md); needs a
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
 ```
 
-Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`.
+Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
 
 A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: only Ollama on the same computer with `ministral-3:3b` (`docs/setup.md`, part 3). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
 
