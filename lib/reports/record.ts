@@ -1,16 +1,22 @@
-/** Saving to the shared record: missions, joins, reports, answers, the command post's plots and ends. Server only. */
+/**
+ * Saving to the shared record: missions, joins, reports, answers, the command post's plots and
+ * ends, radio reports held for the operator and what the operator did with them. Server only.
+ */
 import type { AreaId } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
 import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
-import { endOf, missionOf, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
+import { endOf, missionOf, missionRoster, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
 import { nextTrackNumber, plotPosition, type PlotInput } from "./plot";
 import { positionFromPlacement, positionFromReport } from "./position";
-import { getStore, newEntryId, withSessionLock } from "./store";
+import { AUDIO_FILE, getStore, newEntryId, withSessionLock } from "./store";
 import type {
   AnswerEntry,
+  DismissEntry,
   EndEntry,
+  HeldEntry,
+  HeldReason,
   JoinEntry,
   JoinReply,
   LogEntry,
@@ -19,9 +25,12 @@ import type {
   MissionSummary,
   PlotEntry,
   ReportEntry,
+  RosterEntry,
+  Sender,
   StartPoint,
   Timings,
   TrackSighting,
+  UnitPosition,
 } from "./types";
 
 /** A refusal, with the HTTP status the endpoint returns. `ended` and `taken` let a phone say why. */
@@ -47,7 +56,7 @@ export async function listMissions(): Promise<MissionListReply> {
 
 /** Opens a mission with the next free code for its area: vincennes-1, vincennes-2, … A code is never reused. */
 export async function createMission(
-  input: { area: AreaId; name: string; start: StartPoint | null },
+  input: { area: AreaId; name: string; start: StartPoint | null; roster?: string[] },
   now = Date.now(),
 ): Promise<{ ok: true; mission: MissionSummary } | Refusal> {
   const store = getStore();
@@ -56,7 +65,8 @@ export async function createMission(
   const re = new RegExp(`^${input.area}-(\\d+)$`);
   let n = Math.max(0, ...used.map((c) => Number(re.exec(c)?.[1] ?? 0))) + 1;
   for (let tries = 0; tries < 50; tries++, n++) {
-    const entry: MissionEntry = { kind: "mission", id: newEntryId(now), session: `${input.area}-${n}`, ts: now, ...input };
+    const { roster, ...rest } = input;
+    const entry: MissionEntry = { kind: "mission", id: newEntryId(now), session: `${input.area}-${n}`, ts: now, ...rest, ...(roster?.length ? { roster } : {}) };
     if (await store.create(entry)) return { ok: true, mission: summarizeMission(entry.session, [entry])! };
   }
   return { ok: false, status: 500, error: "Could not find a free mission code." };
@@ -128,8 +138,11 @@ export async function deleteMission(session: string): Promise<{ ok: true } | Ref
 
 // ---- reports ----
 
-/** What a report in a session works with: the mission's area, and the unit's last position from the log. */
-export type ReportContext = { ok: true; area: AreaId; lastPosition: LastPosition | null; inMission: boolean; tracks: KnownTrack[] };
+/**
+ * What a report in a session works with: the mission's area, the unit's last position from the log,
+ * and whether that is only the start point (an assumption, not a fix) or nothing at all.
+ */
+export type ReportContext = { ok: true; area: AreaId; lastPosition: LastPosition | null; atStart: boolean; inMission: boolean; tracks: KnownTrack[] };
 
 /**
  * For a report to a mission: refuses an unknown or ended mission, and gives the area and the
@@ -143,14 +156,16 @@ export async function reportContext(
   callsign: string,
   fallback: { area: AreaId; lastPosition: LastPosition | null },
   now = Date.now(),
+  /** For a held report given to a unit later: the unit as it was when the report came in [203]. */
+  upTo = Number.POSITIVE_INFINITY,
 ): Promise<ReportContext | Refusal> {
   const store = getStore();
-  if (store.kind === "none") return { ok: true, ...fallback, inMission: false, tracks: [] };
+  if (store.kind === "none") return { ok: true, ...fallback, atStart: false, inMission: false, tracks: [] };
   const { entries } = await store.list(session);
   const mission = missionOf(entries);
   if (!mission) return NO_MISSION;
   if (endOf(entries)) return ENDED;
-  const state = foldLog(entries);
+  const state = foldLog(entries, upTo);
   const u = state.units.find((x) => x.callsign === callsign);
   let lastPosition: LastPosition | null = null;
   if (u?.position && u.positionTs != null) {
@@ -160,7 +175,19 @@ export async function reportContext(
   } else if (mission.start) {
     lastPosition = { ...toLastPosition(startPosition(mission.start), now), ...(mission.start.category === "street" ? { street: mission.start.id } : {}) };
   }
-  return { ok: true, area: mission.area, lastPosition, inMission: true, tracks: state.tracks.map((t) => ({ n: t.n })) };
+  const atStart = !u?.position || u.atStart;
+  return { ok: true, area: mission.area, lastPosition, atStart, inMission: true, tracks: state.tracks.map((t) => ({ n: t.n })) };
+}
+
+/** An open mission's log, for a radio report: who is on the roster, which questions are open. */
+export async function openMissionLog(session: string): Promise<{ ok: true; area: AreaId; entries: LogEntry[] } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  const { entries } = await store.list(session);
+  const mission = missionOf(entries);
+  if (!mission) return NO_MISSION;
+  if (endOf(entries)) return ENDED;
+  return { ok: true, area: mission.area, entries };
 }
 
 export interface ReportInput {
@@ -175,12 +202,21 @@ export interface ReportInput {
   resolution: Resolution;
   lastPosition: LastPosition | null;
   timings_ms: Timings;
+  /** A radio report: how its sender was found [202]. Its call sign must be on the roster. */
+  sender?: Sender;
 }
 
 /** A saved report: its id, and the resolution as saved, which for a track now carries its number. */
 export interface SavedReport {
   id: string;
   resolution: Resolution;
+  /** A held report someone had given to a unit, or dismissed, already: nothing new was saved [203]. */
+  already?: boolean;
+}
+
+/** The report a held one became, or its dismissal; undefined while it waits. */
+function settledHeld(entries: LogEntry[], held: string): ReportEntry | DismissEntry | undefined {
+  return entries.find((e): e is ReportEntry | DismissEntry => (e.kind === "report" && e.sender?.held === held) || (e.kind === "dismiss" && e.held === held));
 }
 
 /**
@@ -202,6 +238,14 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     if (input.seq != null && input.clientTs != null) {
       const dup = entries.find((e): e is ReportEntry => e.kind === "report" && e.callsign === input.callsign && e.seq === input.seq && e.clientTs === input.clientTs);
       if (dup) return { id: dup.id, resolution: dup.resolution };
+    }
+    if (input.sender) {
+      // A transcript never creates a unit: a radio report goes only to a call sign on the roster [201].
+      if (!missionRoster(entries).includes(input.callsign)) throw new Error(`${input.callsign} is not on the roster of ${input.session}`);
+      // A held report is settled once: the first decision stands.
+      const held = input.sender.held;
+      const earlier = held ? settledHeld(entries, held) : undefined;
+      if (earlier) return { id: earlier.id, resolution: earlier.kind === "report" ? earlier.resolution : input.resolution, already: true };
     }
     if (mission && !joinedAlready(entries, input.callsign)) {
       const join: JoinEntry = {
@@ -240,6 +284,94 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     const entry: ReportEntry = { kind: "report", id: newEntryId(now), ts: now, ...input, resolution, position, ...(track ? { track } : {}) };
     await store.append(entry);
     return { id: entry.id, resolution };
+  });
+}
+
+// ---- radio reports held for the operator [203] ----
+
+export interface HeldInput {
+  session: string;
+  clientTs: number | null;
+  area: AreaId;
+  transcript: string;
+  language: string | null;
+  reason: HeldReason;
+  heard: string | null;
+  read: string | null;
+  candidates: string[];
+  question: string;
+  position?: UnitPosition | null;
+  /** The recording, kept for the operator to listen to. */
+  audio: { data: Buffer; ext: string } | null;
+}
+
+/** Saves a radio report for the Unassigned tray, with its recording. Null when nothing is kept or the mission ended. */
+export async function saveHeld(input: HeldInput, now = Date.now()): Promise<HeldEntry | null> {
+  const store = getStore();
+  if (store.kind === "none") return null;
+  const id = newEntryId(now);
+  const { audio, session, ...rest } = input;
+  let file: string | null = null;
+  if (audio) {
+    const name = `${id}.${audio.ext}`;
+    try {
+      if (AUDIO_FILE.test(name) && (await store.saveAudio(session, name, audio.data))) file = name;
+    } catch (err) {
+      console.error("keeping the held report's audio failed", err);
+    }
+  }
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!missionOf(entries) || endOf(entries)) return null;
+    const entry: HeldEntry = { kind: "held", id, session, ts: now, ...rest, audio: file };
+    await store.append(entry);
+    return entry;
+  });
+}
+
+/** A held report as the operator would settle it: the report, and whether it waits still. */
+export async function heldReport(session: string, held: string): Promise<{ ok: true; entry: HeldEntry; settled: ReportEntry | DismissEntry | null } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  const { entries } = await store.list(session);
+  if (!missionOf(entries)) return NO_MISSION;
+  const entry = entries.find((e): e is HeldEntry => e.kind === "held" && e.id === held);
+  if (!entry) return { ok: false, status: 404, error: "No such held report in this mission." };
+  const settled = settledHeld(entries, held) ?? null;
+  if (!settled && endOf(entries)) return ENDED;
+  return { ok: true, entry, settled };
+}
+
+/**
+ * The operator adds a call sign to the roster [201]. Adding one that is on it already changes
+ * nothing. `held` is the held report it was heard in, when it came from the tray.
+ */
+export async function addToRoster(session: string, callsign: string, by: string, held: string | null = null, now = Date.now()): Promise<{ ok: true; added: boolean } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!missionOf(entries)) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    if (missionRoster(entries).includes(callsign)) return { ok: true, added: false };
+    const entry: RosterEntry = { kind: "roster", id: newEntryId(now), session, ts: now, by, callsign, ...(held ? { held } : {}) };
+    await store.append(entry);
+    return { ok: true, added: true };
+  });
+}
+
+/** The operator dismisses a held report. Settled already: the first decision stands. */
+export async function dismissHeld(session: string, held: string, by: string, now = Date.now()): Promise<{ ok: true; already: boolean } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!entries.some((e) => e.kind === "held" && e.id === held)) return { ok: false, status: 404, error: "No such held report in this mission." };
+    if (settledHeld(entries, held)) return { ok: true, already: true };
+    if (endOf(entries)) return ENDED;
+    const entry: DismissEntry = { kind: "dismiss", id: newEntryId(now), session, ts: now, by, held };
+    await store.append(entry);
+    return { ok: true, already: false };
   });
 }
 

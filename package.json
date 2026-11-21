@@ -17,7 +17,8 @@
     "eval:format": "tsx scripts/eval-format.ts",
     "eval:outcomes": "tsx scripts/eval-outcomes.ts",
     "eval:baseline": "tsx scripts/eval-baseline.ts",
-    "eval:replies": "tsx scripts/eval-replies.ts"
+    "eval:replies": "tsx scripts/eval-replies.ts",
+    "eval:callsigns": "tsx scripts/eval-callsigns.ts"
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",
