@@ -2,11 +2,11 @@
 
 A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
-Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 176, 177]. This page shows what it looks like and how a report becomes a track.
+Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178]. This page shows what it looks like and how a report becomes a track.
 
 ## The pictures
 
-All the pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 10:40 to 10:43, in mission `vincennes-15`. The coordinator ran on the Mac in hosted mode (Mistral). ALPHA 1 was the transmitter in the iPhone 16 Pro simulator, playing the script's clips; BRAVO 2's reports were typed. Every sighting is made up. They were taken before the receiver was renamed the command post and given its track tools [175, 176], so their header says Receiver.
+All the pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 10:40 to 10:43, in mission `vincennes-15`. The coordinator ran on the Mac in hosted mode (Mistral). ALPHA 1 was the transmitter in the iPhone 16 Pro simulator, playing the script's clips; BRAVO 2's reports were typed. Every sighting is made up. They were taken before the receiver was renamed the command post and given its track tools [176, 177], so their header says Receiver.
 
 ### The command post at the end of the script
 
@@ -185,7 +185,7 @@ A move adds the old place to the track's trail. A change of whose it is or what 
 
 ## Placed by the command post
 
-The command post can put a track on the map itself, for news that comes another way: a drone feed, a phone call, a radio message [176]. Press **Place track**, or P:
+The command post can put a track on the map itself, for news that comes another way: a drone feed, a phone call, a radio message [177]. Press **Place track**, or P:
 
 1. **Whose:** Hostile, Suspect, Unknown, Civilian or Friendly. It starts on Unknown, as a report with no such word does [148]. Keys H, S, U, C, F.
 2. **What:** the nine kinds, each with its symbol. Keys 1 to 9.
@@ -202,7 +202,7 @@ Click a track on the map or in the list for its card:
 
 A unit's later report about the track brings a gone track back, and a placed track takes reports like any other ("Track 4 moved to the station"). Every change is one `plot` line in the log, so a replay shows it when it happened, and the feed shows it under CP. The position comes from a person's click or a gazetteer place, never from a model. The command post places tracks only; a unit's position still comes only from what the unit says.
 
-**Answering for a unit.** Under a unit's open question the command post has the same numbered choices and "None of these". After a confirm it answers for the unit, as an operator would on a radio net [177]. The question closes, the marker moves, and the feed says "CP answered". The unit's last-heard time does not change. If the phone answers later, the first answer stands.
+**Answering for a unit.** Under a unit's open question the command post has the same numbered choices and "None of these". After a confirm it answers for the unit, as an operator would on a radio net [178]. The question closes, the marker moves, and the feed says "CP answered". The unit's last-heard time does not change. If the phone answers later, the first answer stands.
 
 The controls show only on a live mission that the coordinator keeps a record of: not in a replay, and not on an ended mission.
 

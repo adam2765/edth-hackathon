@@ -18,7 +18,7 @@ In scope:
 - **Fading:** a marker dims when its speaker has been silent for a few minutes.
 - **Speaker side:** pick a call sign once and join a session by link; nothing else changes.
 
-Out of scope: logins and roles, editing or deleting reports, the command post talking back (it may answer a unit's open question [177]), GPS ground truth, grid references, drawing tools.
+Out of scope: logins and roles, editing or deleting reports, the command post talking back (it may answer a unit's open question [178]), GPS ground truth, grid references, drawing tools.
 
 Design choices:
 
@@ -146,7 +146,7 @@ A unit with no start point can still report. The resolver already copes with no 
 | GPS on the phone | No | The app never reads GPS (a project rule): jamming must not matter. |
 | A start point the base sets | Yes, optional | Missions start somewhere known: the base, a meeting point, a vehicle drop-off. The operator picks a place from the gazetteer by name, or by clicking a place on the map, so no coordinates are typed and the model makes none. Every unit that joins starts there as an estimate: ≈, a circle of 300 m or the place's own size if larger. Because it is an estimate, it does not settle a choice between nearby places on its own [47]. |
 | A spoken check-in | Yes, always | The phone asks for one on joining. The first report that names a place replaces the start point. |
-| The operator drags a unit on the command post | Later | Useful for corrections. The command post places and moves tracks by hand [176], but a unit's position still comes only from what it says. |
+| The operator drags a unit on the command post | Later | Useful for corrections. The command post places and moves tracks by hand [177], but a unit's position still comes only from what it says. |
 
 ### Who keeps the last position
 
@@ -257,7 +257,7 @@ Still open, for Alex:
 
 - **The word.** "Track" is in. "Object" was the other candidate. The French "Piste" and the Ukrainian "Об'єкт" need a native check.
 - **Where a range comes from** (step 5): only when said, set at the base, or a table by kind in code.
-- **Operator edits:** built [176, 177]. The command post places a track (click, drag or a place by name), changes what it is, moves it, marks it gone and puts it back, and can answer a unit's open question. This settles decision 1 of the [receiver review](receiver-review.md). See [tracks](tracks.md#placed-by-the-command-post).
+- **Operator edits:** built [177, 178]. The command post places a track (click, drag or a place by name), changes what it is, moves it, marks it gone and puts it back, and can answer a unit's open question. This settles decision 1 of the [receiver review](receiver-review.md). See [tracks](tracks.md#placed-by-the-command-post).
 - **Unit colours:** the fifth unit colour is a pink-red (`#e0367a`). Hostile tracks are red, so a fifth call sign would be a red-ish friendly dot. Not changed yet.
 - **A demo script with tracks.** Written: `scenarios/vincennes-tracks.json`, 11 made-up steps in Vincennes ([README](../README.md#vincennes-with-tracks)). Still to choose: whether it, or a short version of it, goes into the Demo Day run.
 

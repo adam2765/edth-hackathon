@@ -71,7 +71,7 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 | "Track 9 …" when the mission has no Track 9 | `unresolved`: "There is no Track 9 in this mission." |
 | The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said, or when the words name a thing and whose it is ("our drone team is at the station") | `unresolved`: "Is that where you are, or something you see?" |
 
-A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the command post a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. The command post can also place, change, move and take off a track by hand [176]. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone" said by a unit, and range rings. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
+A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the command post a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. The command post can also place, change, move and take off a track by hand [177]. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone" said by a unit, and range rings. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
 
 Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two named streets share a point in OpenStreetMap; a bridge shares none, so it is not a crossing. In a mission the coordinator remembers the street each unit is on (from a report that named a street, kept through crossings on it) and the way it last moved, and passes both with the last position. A crossing within 20 m is the one the unit is at, never the next one. The pin is the crossing, with a 30 m circle.
 
@@ -313,7 +313,7 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 
 Environment options are in `.env.example`. Hosted mode needs `MISTRAL_API_KEY` in
 `.env.local`; never commit a key. Without one, use offline mode. Extraction can also
-use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
+use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`. `MISTRAL_STT_DIARIZE=0` stops asking Mistral to tell speakers apart.
 
 ### Offline: models on this computer
 
@@ -344,15 +344,15 @@ Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes s
 
 ## Command post
 
-The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [175].
+The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [176].
 
 A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
 Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
 
-**Tracks by hand** [176]. **Place track** (or P) opens a palette: whose (it starts on Unknown), what, how many and how sure. Click the map or find a place by name, drag the symbol if needed, add a source if you have one, and press Place. The track gets the next number. Click any track for its card: Change, Move, Gone (off the map, kept in the list and the log) and Put back. Every change is a `plot` line in the log, marked CP in the feed. The command post never places a unit.
+**Tracks by hand** [177]. **Place track** (or P) opens a palette: whose (it starts on Unknown), what, how many and how sure. Click the map or find a place by name, drag the symbol if needed, add a source if you have one, and press Place. The track gets the next number. Click any track for its card: Change, Move, Gone (off the map, kept in the list and the log) and Put back. Every change is a `plot` line in the log, marked CP in the feed. The command post never places a unit.
 
-**Answering for a unit** [177]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The first answer stands, the phone's or the command post's.
+**Answering for a unit** [178]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The first answer stands, the phone's or the command post's.
 
 The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers, tracks placed by hand and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its command post stays empty [101].
 

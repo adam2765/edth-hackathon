@@ -58,7 +58,7 @@ Limits: 1 MB per clip (about 15 s), 500 characters of text, 30 requests a minute
 
 ## Answer endpoint
 
-`POST /api/answer`, JSON `{ session, report, choice, by? }`: `report` is the `report_id`, `choice` the candidate id tapped, or `null` for "none of these". From a phone, the phone has already moved its own marker; this closes the question on the command post and moves the marker there [100]. The command post sends `by: "CP"` when it chooses for a unit that cannot tap [177]; any other `by` is a 400. Reply `{ answer_id, by }`, where `by` says who gave the answer that stands: `"CP"`, or null for the unit. The first answer to a question stands. When the question was about a track, the choice places the track and the speaker stays where they are [146]. Errors: 400 for a choice that was not offered, 404 for an unknown report, 409 with `ended: true` when the mission has ended, 501 when the coordinator keeps no record.
+`POST /api/answer`, JSON `{ session, report, choice, by? }`: `report` is the `report_id`, `choice` the candidate id tapped, or `null` for "none of these". From a phone, the phone has already moved its own marker; this closes the question on the command post and moves the marker there [100]. The command post sends `by: "CP"` when it chooses for a unit that cannot tap [178]; any other `by` is a 400. Reply `{ answer_id, by }`, where `by` says who gave the answer that stands: `"CP"`, or null for the unit. The first answer to a question stands. When the question was about a track, the choice places the track and the speaker stays where they are [146]. Errors: 400 for a choice that was not offered, 404 for an unknown report, 409 with `ended: true` when the mission has ended, 501 when the coordinator keeps no record.
 
 ## Missions
 
@@ -70,10 +70,10 @@ A mission is a session with a name, an area, an optional start point, and an end
 | `POST /api/sessions` | Opens a mission. JSON `{ area, name?, start? }`; `start` is a gazetteer place id or null. 201 with `{ mission }`. The code is `<area>-<n>`, never reused [109]. |
 | `POST /api/sessions/<code>/join` | JSON `{ callsign, device }`; `device` is an id the phone made up and keeps (8 to 64 letters, digits, `-`, `_`). Reply `{ mission, callsign, position, positionTs, rejoined }`: where the coordinator has the unit, the start point (≈) on a first join. The same device joining again gets its unit back and nothing is written. 404 for an unknown mission; 409 with `ended: true` for an ended one, or with `taken: true` when another phone has used the call sign in the last 3 minutes [111]. |
 | `POST /api/sessions/<code>/end` | Ends the mission: joins, reports and answers are refused after it. Ending it again changes nothing. |
-| `POST /api/sessions/<code>/tracks` | The command post places a track by hand [176]. JSON `{ affiliation, kind, count?, lat, lon, radius_m?, note? }`, or `place` (a gazetteer place id) instead of `lat` and `lon`. `radius_m` is 5 to 2000 m, 50 if left out; `note` is the source, up to 120 characters. The track gets the mission's next number. 201 with `{ entry }`, the `plot` entry. 400 for a point outside the mission's area; 409 with `ended: true` for an ended mission. |
-| `PATCH /api/sessions/<code>/tracks/<n>` | Changes track n by hand [176]. JSON `{ action, … }`: `edit` with `affiliation`, `kind`, `count?`, `note?`; `move` with `lat` and `lon` (or `place`), `radius_m?`, `note?`; `gone` or `restore` with nothing else. 200 with `{ entry }`; 404 when the mission has no track n. |
+| `POST /api/sessions/<code>/tracks` | The command post places a track by hand [177]. JSON `{ affiliation, kind, count?, lat, lon, radius_m?, note? }`, or `place` (a gazetteer place id) instead of `lat` and `lon`. `radius_m` is 5 to 2000 m, 50 if left out; `note` is the source, up to 120 characters. The track gets the mission's next number. 201 with `{ entry }`, the `plot` entry. 400 for a point outside the mission's area; 409 with `ended: true` for an ended mission. |
+| `PATCH /api/sessions/<code>/tracks/<n>` | Changes track n by hand [177]. JSON `{ action, … }`: `edit` with `affiliation`, `kind`, `count?`, `note?`; `move` with `lat` and `lon` (or `place`), `radius_m?`, `note?`; `gone` or `restore` with nothing else. 200 with `{ entry }`; 404 when the mission has no track n. |
 | `DELETE /api/sessions/<code>` | Deletes an ended mission; its file moves to `deleted/` [112]. 409 for an open one. |
-| `GET /api/places?area=&q=` | Up to 8 gazetteer places matching `q`, each as the start point it would make: `{ id, name, category, lat, lon, radius_m }`. With `lat` and `lon` instead of `q`: `{ places: [], label }`, the name a track placed at that point gets ("120 m east of Église Saint-Louis") [176]; 400 outside the area. |
+| `GET /api/places?area=&q=` | Up to 8 gazetteer places matching `q`, each as the start point it would make: `{ id, name, category, lat, lon, radius_m }`. With `lat` and `lon` instead of `q`: `{ places: [], label }`, the name a track placed at that point gets ("120 m east of Église Saint-Louis") [177]; 400 outside the area. |
 
 A start point is a circle of 300 m, or the place's own size if larger, and always an estimate [110].
 
@@ -86,8 +86,8 @@ Each entry has `kind`, `id`, `session` and server time `ts`, and is one of:
 - `mission`, the first line: `area`, `name`, `start` (null, or `{ id, name, category, lat, lon, radius_m }`).
 - `join`: `callsign`, `device` (null when the call sign joined with its first report), `position` (the start point as an estimate, or null).
 - `report`: the report endpoint's reply plus `callsign`, `seq`, `clientTs`, `area`, the `lastPosition` used, and `position`: where it leaves the speaker, or null. A report about a track also has `track`: `{ n, affiliation, kind, count, text, heading, position, from }`, where `position` is where the track is (null while its question is open, or when the report only says what it is) and `from` is where the observer was. Its own `position` is then null.
-- `answer`: `callsign`, `report_id`, `choice`, `position`. For a question about a track: `track: { n, position }`, and `position` is null. `by: "CP"` when the command post chose [177].
-- `plot`: a change to a track made by hand at the command post [176]: `by` (`"CP"`), `action` (place, edit, move, gone, restore), `n`, and what the action sets: `affiliation`, `track_kind` and `count` for place and edit; `position`, with its `label`, for place and move; `note` when one was given.
+- `answer`: `callsign`, `report_id`, `choice`, `position`. For a question about a track: `track: { n, position }`, and `position` is null. `by: "CP"` when the command post chose [178].
+- `plot`: a change to a track made by hand at the command post [177]: `by` (`"CP"`), `action` (place, edit, move, gone, restore), `n`, and what the action sets: `affiliation`, `track_kind` and `count` for place and edit; `position`, with its `label`, for place and move; `note` when one was given.
 - `end`: nothing more.
 
 Types in `lib/reports/types.ts`. The log is append-only; nothing in it is edited. A session from before missions has no `mission` line; the command post still shows it, and reports to it are refused.
@@ -115,7 +115,7 @@ A track is something on the map that is not a reporting unit: a unit sees it, or
 - **Where it is:** by a place, or by a distance and a compass direction from the observer. A track report never moves the speaker [149].
 - **Its number** is given when the report is saved, one count per mission. The speaker names it later: "Track 3 moved to the station" [150].
 - **Its symbol** is the APP-6 code from `trackSymbolCode` in `lib/geo/trackKinds.ts`, drawn by `milsymbol` on the command post [151].
-- **Placed by hand:** the command post can place a track, change what it is, move it, take it off the map (gone) and put it back [176]. Its position comes from a person's click or a gazetteer place, never from a model. Nothing is placed for a unit by hand.
+- **Placed by hand:** the command post can place a track, change what it is, move it, take it off the map (gone) and put it back [177]. Its position comes from a person's click or a gazetteer place, never from a model. Nothing is placed for a unit by hand.
 
 `foldLog` returns `tracks` beside `units`: each with its number, affiliation, kind, count, position, trail, who saw it last and when, and where that observer was. For a track changed by hand also `plotted` (placed by the command post last), `changed` (who changed it and when), `note` and `gone` (when it was taken off the map).
 

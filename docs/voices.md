@@ -30,7 +30,7 @@ Limits:
 
 - The app cannot tell whose voice is whose. It only notices when two voices name places, and then asks.
 - It finds turns only where Whisper marks them. A missed mark reads the clip as one voice, as before.
-- Mistral's speech-to-text, as called today, marks no voices. Its diarization is not wired in: the docs give no raw form example for it, and there is no key on this computer to test one.
+- Mistral's speech-to-text is asked to tell speakers apart (`diarize`, with segment timestamps) [175]. Where the speaker label changes, the transcript gets ">>", which splits voice turns like Whisper's dash. If Mistral refuses the option (400 or 422), the clip is transcribed again without it, so a report is never lost to it; `MISTRAL_STT_DIARIZE=0` turns it off. Not yet checked on real two-person clips: how reliably it labels a short report, and what it adds to the time.
 
 ## Whispers and closeness to the microphone [156]
 
