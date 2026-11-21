@@ -2,18 +2,18 @@
 
 A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
-Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178]. This page shows what it looks like and how a report becomes a track.
+Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 182]. This page shows what it looks like and how a report becomes a track.
 
 ## The pictures
 
-All the pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 10:40 to 10:43, in mission `vincennes-15`. The coordinator ran on the Mac in hosted mode (Mistral). ALPHA 1 was the transmitter in the iPhone 16 Pro simulator, playing the script's clips; BRAVO 2's reports were typed. Every sighting is made up. They were taken before the receiver was renamed the command post and given its track tools [176, 177], so their header says Receiver.
+The command post pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 14:16 to 14:19, in mission `vincennes-2` on a coordinator of its own. The coordinator ran on the Mac in offline mode (the 3B model). Both units' reports were typed. Ten of the 11 steps got the answer the script expects. In step 11 the model read "Enemy vehicle to the east" as about the speaker, so the app asked "Is that where you are, or something you see?" instead of how far east: still no track, as expected, but a different question (in the feed of the first picture). Track 7 was then placed by hand. The phone pictures come from an earlier run, 10:40 to 10:43 in mission `vincennes-15`, in hosted mode (Mistral), with ALPHA 1 the transmitter in the iPhone 16 Pro simulator playing the script's clips. Every sighting is made up.
 
 ### The command post at the end of the script
 
-![The command post with six tracks and two units in Vincennes](images/tracks/receiver-six-tracks.png)
+![The command post with six tracks and two units in Vincennes](images/tracks/cp-six-tracks.png)
 
 - **Units are dots, tracks are symbols.** ALPHA 1 (orange) and BRAVO 2 (blue) never moved: a report about a track does not move the speaker.
-- **Each track has a label:** number, what it is, the time it was last seen and who saw it ("T1 · hostile vehicle ×2, 10:41:56 · ALPHA 1").
+- **Each track has a label:** number, what it is, the time it was last seen and who saw it ("T1 · hostile vehicle ×2, 14:17:40 · ALPHA 1").
 - **A symbol that would hide a unit or another track is drawn a short way off,** with a thin line back to a small dot on its real point ([below](#when-symbols-would-overlap)). Track 5, a civilian car at the town hall where BRAVO 2 stands, is drawn above and to the left; Track 3 is drawn beside the church.
 - **A dotted line of sight** runs from the observer to each track it reported: ALPHA 1 to Tracks 4 and 6, BRAVO 2 to Track 2.
 - **A dashed trail** shows where a track was before. Track 1 was first seen on Avenue de Paris and moved to Avenue de Nogent.
@@ -21,19 +21,19 @@ All the pictures come from one run of the tracks script ([README](../README.md#v
 - **A dashed circle and ≈** mean an estimate. Track 2 was placed 300 m north of BRAVO 2, then marked hostile without moving.
 - **The list** gives each track its symbol, a word for whose it is, what and where, and who saw it. The last two tracks:
 
-<img src="images/tracks/receiver-list.png" alt="The tracks list: Track 5, civilian vehicle at Mairie de Vincennes; Track 6, friendly drone team at Vincennes" width="400">
+<img src="images/tracks/cp-list.png" alt="The tracks list: Track 5, civilian vehicle at Mairie de Vincennes; Track 6, friendly drone team at Vincennes" width="400">
 
 ### While a question is open
 
-![The command post while ALPHA 1's question about two cemeteries waits for an answer](images/tracks/receiver-question.png)
+![The command post while ALPHA 1's question about two cemeteries waits for an answer](images/tracks/cp-question.png)
 
-"Enemy patrol near the cemetery" could mean two cemeteries, so the app asked. ALPHA 1 shows "Awaiting answer", the question is in the unit list and the feed, and the two choices are numbered on the map ("ALPHA 1: T4?"). Track 4 already has its number but no place until the choice is tapped.
+"Enemy patrol near the cemetery" could mean two cemeteries, so the app asked. ALPHA 1 shows "Awaiting answer", the question is in the unit list and the feed, and the two choices are numbered on the map ("ALPHA 1: T4?"). Track 4 already has its number but no place until the choice is tapped. Under the question in the feed, the command post can answer for ALPHA 1 ([below](#placed-by-the-command-post)); here the phone answered.
 
 Note Track 1 at this point. Its place is on ALPHA 1's dot, because Bérault is on Avenue de Paris, so its symbol is drawn just east of ALPHA 1 with a line back ([below](#when-symbols-would-overlap)).
 
 ### An estimate
 
-<img src="images/tracks/receiver-estimate.png" alt="Track 2, a hostile drone 300 m north of BRAVO 2, in a dashed circle with a dotted line down to BRAVO 2" width="480">
+<img src="images/tracks/cp-estimate.png" alt="Track 2, a hostile drone 300 m north of BRAVO 2, in a dashed circle with a dotted line down to BRAVO 2" width="480">
 
 "I see a drone about 300 metres north of me" gives no place, only a distance and a direction. The track is worked out from BRAVO 2's position, so its circle is BRAVO 2's own plus 0.4 × the distance, dashed, and its time starts with ≈.
 
@@ -196,8 +196,10 @@ The command post can put a track on the map itself, for news that comes another 
 1. **Whose:** Hostile, Suspect, Unknown, Civilian or Friendly. It starts on Unknown, as a report with no such word does [148]. Keys H, S, U, C, F.
 2. **What:** the nine kinds, each with its symbol. Keys 1 to 9.
 3. **How many**, and **how sure**: a circle of 25, 50, 100 or 250 m.
-4. **Where:** click the map, or find a place by name. The symbol appears in a dashed circle; drag it to adjust. The card shows the name the point gets ("30 m south-east of Pharmacie Bonne Nouvelle") and takes an optional source.
+4. **Where:** click the map, or find a place by name. The symbol appears in a dashed circle; drag it to adjust. The card shows the name the point gets and takes an optional source. The name is the place itself when the point is on it, or within 30 m ("Square Virginia Woolf"), otherwise a distance and a direction from the nearest place ("30 m south-east of Pharmacie Bonne Nouvelle").
 5. **Place**, or Enter. The track gets the mission's next number, from the same count as reported tracks. The palette stays open for the next one; Esc closes it.
+
+<img src="images/tracks/cp-place.png" alt="The Place Track 7 palette: Hostile, People, 2 and ±50 m picked. Below it the confirm card: Track 7, hostile people ×2, Square Virginia Woolf, ±50 m, placed by CP, the source &quot;drone feed&quot;, and Place. On the map the symbol sits in a dashed circle." width="440">
 
 Click a track on the map or in the list for its card:
 
@@ -205,6 +207,8 @@ Click a track on the map or in the list for its card:
 - **Move:** click or find the new place. The old place goes into the trail.
 - **Gone:** off the map, after a confirm. It stays in the list, last, and in the log.
 - **Put back on the map**, for a gone track.
+
+<img src="images/tracks/cp-track-card.png" alt="Track 7's card: hostile people ×2, Square Virginia Woolf, ±50 m, placed by CP, source: drone feed, with Change, Move and Gone. On the map, Track 7 is labelled 14:18:39 · CP." width="600">
 
 A unit's later report about the track brings a gone track back, and a placed track takes reports like any other ("Track 4 moved to the station"). Every change is one `plot` line in the log, so a replay shows it when it happened, and the feed shows it under CP. The position comes from a person's click or a gazetteer place, never from a model. The command post places tracks only; a unit's position still comes only from what the unit says.
 
@@ -216,7 +220,7 @@ The controls show only on a live mission that the coordinator keeps a record of:
 
 The first run of the script, in mission `vincennes-13`, showed Track 1 drawn on top of ALPHA 1, Track 5 under BRAVO 2's dot, and the labels of Tracks 3 and 5 run together. The command post now lays the symbols out on screen [167]:
 
-![Left: Track 1 drawn just east of ALPHA 1 at Bérault, with a line back to its point. Right: Track 3 and Track 5 drawn apart around BRAVO 2 at the town hall](images/tracks/receiver-moved.png)
+![Left: Track 1 drawn just east of ALPHA 1 at Bérault, with a line back to its point. Right: Track 5 drawn above BRAVO 2 at the town hall, with a line down to its point, and Track 3 beside them at the church](images/tracks/cp-moved.png)
 
 - **A symbol stays on its point** unless it would cover a unit's dot or label, or a track drawn before it. Then it is drawn at the nearest free spot, 40 pixels away or a multiple of that, with a thin dark line back to a small dot in the track's colour on the real point.
 - **Only the drawing moves.** The track's place, its circle and its line of sight stay where the report put them. Units never move.
@@ -232,7 +236,8 @@ Limits: the size of a label is estimated from its number of letters, not measure
 Retake them when the command post or the phone screens change.
 
 1. Run the coordinator on port 3117 and open a new mission with no start point.
-2. In the iPhone simulator, join it as ALPHA 1, pick "Vincennes with tracks (made up)" and tap ALPHA 1's steps in order. Send BRAVO 2's steps as typed reports to `POST /api/report` (text, session, call sign BRAVO 2, language). Tap **Cimetière Nord de Saint-Mandé** when the phone asks.
+2. In the iPhone simulator, join it as ALPHA 1, pick "Vincennes with tracks (made up)" and tap ALPHA 1's steps in order. Send BRAVO 2's steps as typed reports to `POST /api/report` (text, session, call sign BRAVO 2, language). Tap **Cimetière Nord de Saint-Mandé** when the phone asks. For the command post pictures alone, ALPHA 1's steps can be typed too, with the choice sent to `POST /api/answer`.
 3. Phone screens: `xcrun simctl io booted screenshot <file>.png`, then 420 px wide.
-4. Command post: headless Chrome at 1440 × 900 and 2× pixel density, after about 8 s for the map. Reduced to 1600 px wide and 256 colours, so each picture stays under 600 KB. The close-ups: the estimate after clicking Track 2 in the list; the two halves of the overlap picture from the question picture and after clicking BRAVO 2.
-5. The symbol table: one SVG made with milsymbol from `trackSymbolCode`, every affiliation against every kind, size 26.
+4. Command post: headless Chrome at 1440 × 900 and 2× pixel density, after about 8 s for the map. The full pictures are reduced to 1600 px wide; the close-ups are cut from the full size. All are reduced to at most 256 colours, without dithering, so each stays under 600 KB: the two full pictures needed 240. The close-ups: the list scrolled to its end; the estimate after clicking Track 2 in the list and zooming out once; the two halves of the overlap picture from the question picture and after clicking BRAVO 2.
+5. Placed by hand, after the script: press P, pick Hostile, People, 2 and ±50 m, click the map and type a source, for the palette picture. Then Place, Esc, and click the new track for its card.
+6. The symbol table: one SVG made with milsymbol from `trackSymbolCode`, every affiliation against every kind, size 26.
