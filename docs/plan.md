@@ -267,6 +267,37 @@ The uplink-off demo. Mandatory for Demo Day; target Saturday midday. About 1.5 t
 
 One switch, `PROVIDER_MODE=hosted|local`; nothing else in the app changes. The MacBook (M1 Pro, 32 GB) serves the app; phones reach it over a hotspot or travel router with no internet. Use local mode for the in-hall demo and hosted mode over mobile data for the outdoor field walk.
 
+The uplink-off setup. Dashed boxes and lines are not built yet, as of Saturday 21 November. The network is not set up either: the Mac's hotspot or a travel router.
+
+```mermaid
+flowchart LR
+    subgraph NET["Wi-Fi with no internet"]
+        NAT["Native app<br/>Whisper on the phone, sends text<br/>plain http"]
+        WEB["Phone web page<br/>needs HTTPS for the microphone"]:::todo
+        subgraph MAC["MacBook, M1 Pro"]
+            CO["Coordinator<br/>PROVIDER_MODE=local"]
+            OLL["Ollama<br/>ministral-3:3b"]
+            WHS["Whisper large-v3-turbo<br/>speech-to-text on the Mac"]:::todo
+            ST[("File store<br/>.data/sessions/")]
+            RX["Receiver<br/>on the Mac's screen"]
+            TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
+        end
+    end
+
+    NAT -- "text" --> CO
+    WEB -. "audio or text" .-> CO
+    CO -- "extraction" --> OLL
+    CO -. "audio" .-> WHS
+    CO --> ST
+    RX --> CO
+    RX -. "map" .-> TILES
+    WEB -. "map" .-> TILES
+
+    classDef todo stroke-dasharray: 5 5
+```
+
+Until track C is done, the receiver's map still loads from OpenFreeMap and needs the internet.
+
 | Track | Item | Size |
 |---|---|---|
 | A. Network (do first) | A Wi-Fi network with no internet that the phones join | 0.5 to 1 h |
@@ -278,7 +309,7 @@ One switch, `PROVIDER_MODE=hosted|local`; nothing else in the app changes. The M
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
 | D | `scripts/bench-local.ts`: run the clips through both modes, print per-step timings and whether the place matched; rehearse in the hall | 3 h |
-| E. Receiver | A local file store behind the storage interface | 1 to 2 h |
+| E. Receiver | A local file store behind the storage interface. Built: `FileStore` in `lib/reports/store.ts`, in `.data/sessions/` | done |
 
 A, B and C can run in parallel.
 

@@ -19,7 +19,7 @@ New to the project? Read these in order:
 | File | What it holds | Update it when |
 |---|---|---|
 | [overview.md](overview.md) | The challenge, judged items, our approach, timeline | Scope or schedule changes |
-| [architecture.md](architecture.md) | The parts, where each step runs, what is built, the resolver in brief | A part is built, moved or deployed |
+| [architecture.md](architecture.md) | The parts and their block diagrams, where each step runs, what is built, the resolver in brief | A part is built, moved or deployed |
 | [contracts.md](contracts.md) | Report endpoint, intent, resolution, utterance, scenario and gazetteer files, provider interfaces | A contract changes, on purpose, with a decision line |
 | [plan.md](plan.md) | Receiver, missions (start, join, check in, end), local mode, transmitter, evaluation, demo | Work starts, finishes or changes scope |
 | [gazetteer.md](gazetteer.md) | How place data is built, same-name streets, adding an area, scaling | The build or the data changes |
@@ -51,6 +51,6 @@ Elsewhere in the repo:
 - **Change the docs in the same commit as the code they describe.** The table above says which file.
 - **Give status a date.** "Built", "not started" and "measured" go stale. Say when something was checked, in Paris time.
 - **Plain, short sentences,** in the same style as the README and DECISIONS.md. Write for a teammate who joined this morning.
-- **Diagrams as text:** ASCII in a code block, or Mermaid, which GitHub draws. No images that only one tool can edit.
+- **Diagrams as text:** ASCII in a code block, or Mermaid, which GitHub draws. No images that only one tool can edit. In a block diagram, a dashed box or line is optional or not built yet, and the text under it says which. Draw top to bottom when a diagram gets wide, so it stays readable on GitHub. Start no label with a number and a full stop: Mermaid reads "1. Query" as a list and prints an error in the box. The block diagrams are in [architecture.md](architecture.md#block-diagrams), [contracts.md](contracts.md), [gazetteer.md](gazetteer.md#how-it-is-built) and [plan.md](plan.md#local-mode).
 - **Link, don't copy.** To share with someone outside the repo, send a GitHub link. Link to another file or heading instead of repeating it.
 - **New topic, new file.** Add it to the table above in the same commit.

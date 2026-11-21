@@ -4,6 +4,39 @@ These are the seams between the parts. Work on either side of one can go ahead i
 
 The types live in `lib/geo/types.ts`. The transmitter imports them as types only, so a change to the reply shape shows up as a type error in the app [67].
 
+Where each seam sits. Every label on a line is a heading on this page.
+
+```mermaid
+flowchart TB
+    subgraph NAT["Native app"]
+        SRC["Sources<br/>microphone, scenario clip"] -- "Utterance" --> SEND["Send path"]
+    end
+    WEB["Phone web page"]
+    RX["Receiver"]
+
+    subgraph CO["Coordinator"]
+        ROUTES["Routes<br/>app/api/"]
+        PROV["Providers<br/>lib/providers/"]
+        RES["Resolver<br/>lib/geo/"]
+        LOG[("Mission logs<br/>lib/reports/")]
+    end
+
+    MODELS["Mistral or Ollama"]
+    GAZ[("data/gazetteer.*.json")]
+    SCN[("scenarios/*.json")]
+
+    SEND -- "Report endpoint, Answer endpoint, Missions" --> ROUTES
+    WEB -- "Report endpoint" --> ROUTES
+    RX -- "Missions, Session log" --> ROUTES
+    ROUTES -- "Provider interfaces" --> PROV
+    PROV --> MODELS
+    PROV -- "Intent" --> RES
+    RES -- "Resolution" --> ROUTES
+    GAZ -- "Gazetteer file" --> RES
+    ROUTES -- "Session log" --> LOG
+    SCN -- "Scenario file" --> SRC
+```
+
 ## Report endpoint
 
 `POST /api/report`, multipart form:
