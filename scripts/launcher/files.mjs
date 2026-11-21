@@ -5,7 +5,7 @@ import path from 'node:path';
 export const groups = {
   web: ['app', 'components', 'lib', 'data', 'public', 'scripts/copy-maplibre-worker.mjs', 'scripts/prepare-tts.mjs', 'scripts/stt-server.mjs', 'instrumentation.ts', 'next.config.ts', 'tsconfig.json', 'package.json', 'package-lock.json'],
   phone: ['transmitter/App.tsx', 'transmitter/index.ts', 'transmitter/src', 'transmitter/assets', 'transmitter/scenarios', 'transmitter/metro.config.js', 'transmitter/tsconfig.json', 'transmitter/babel.config.js', 'lib/geo/types.ts', 'lib/reports/types.ts'],
-  native: ['transmitter/modules', 'transmitter/plugins', 'transmitter/app.json', 'transmitter/app.config.ts', 'transmitter/package.json', 'transmitter/package-lock.json'],
+  native: ['transmitter/scripts/prepare-app.mjs', 'transmitter/modules', 'transmitter/plugins', 'transmitter/app.json', 'transmitter/app.config.ts', 'transmitter/package.json', 'transmitter/package-lock.json'],
 };
 const skipped = new Set(['node_modules', '.git', '.next', '.run', '.expo', 'build', '.gradle', '.cxx', 'models', 'ort', 'tts']);
 export async function fingerprint(root, inputs, settings = {}) {

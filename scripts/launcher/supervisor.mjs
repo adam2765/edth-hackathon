@@ -129,6 +129,7 @@ async function build() {
   }
   if (device) {
     await dependencies(true);
+    await run(process.execPath, [path.join(root, 'transmitter/scripts/prepare-app.mjs')], { cwd: root, env });
     await phase(phoneChanged ? 'Building/loading changed phone app…' : 'Checking installed phone app…');
     const phoneEnv = runtimeEnv({ EXPO_PUBLIC_SERVER_URL: phoneServer(config, device) });
     const receipt = await deploy(root, device, phoneEnv, false, previous.phoneBuild, native);

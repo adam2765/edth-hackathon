@@ -113,3 +113,7 @@ through the phone's speaker before it is sent, for an audience. Sound comes out 
 `npm run scenarios` (in the folder above, on a Mac) makes the clips with synthetic voices and
 writes `scenarios/index.ts` here. "Play scenario" sends every step and marks each one ✓ or ✗
 against its expected answer.
+
+The native Expo launcher help uses `npm start` and mentions `npm start light`. Setup
+applies this wording after dependency installs; Build includes it in the native fingerprint
+and rebuilds the phone binary when it changes. A JavaScript reload cannot update this text.

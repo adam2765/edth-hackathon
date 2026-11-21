@@ -36,8 +36,7 @@ ollama pull ministral-3:3b
 ```
 
 The phone records compressed audio and sends it to the coordinator; no speech model is
-prepared or downloaded on the phone. Its existing setup command is now a quick readiness
-notice. Existing native libraries stay compatible, so this change needs a JavaScript reload,
+prepared or downloaded on the phone. Its setup command prepares the native launcher’s project-specific startup instructions. Existing native libraries stay compatible, so this change needs a JavaScript reload,
 not a native rebuild. Scenarios use their compressed audio through the same report path.
 
 For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper turbo, base and VAD models on the host, about 635 MB for both speech models and VAD.
@@ -158,3 +157,6 @@ Those client connections are not extra servers. Cleanup targets server listeners
 workers, leaving browser processes alone. Startup requires the newly launched coordinator
 to confirm it bound its port; an old server’s healthy response cannot produce a false Ready.
 Cleanup finishes even when the operation that requested it was cancelled.
+
+The native phone launcher now says `npm start`, with `npm start light` in its help text.
+This wording is compiled into the app; run Build once to install the updated binary.
