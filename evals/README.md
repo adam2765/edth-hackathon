@@ -38,7 +38,7 @@ The script calls the same `getExtractor()` and `systemPrompt()` as the coordinat
 - **`outcome_from: "resolver"`**: the outcome was worked out by `eval:outcomes` from the case's own `expect`, so `--refresh` may rewrite it after a resolver change. Scenario cases carry the outcome from their scenario file instead.
 - **`from`**: where the speaker was before, as the coordinator would know it: a gazetteer id or a crossing id, and optionally `street` and `heading_deg`. Without it the speaker has no last position.
 - **`area`** picks the place given to the prompt ("Vincennes, France") and the gazetteer.
-- **Tags:** `scenario` (the scenario scripts' sentences), `paraphrase`, `filler`, `fr`, `uk`, `mixed`, `stt_error`, `distance`, `other`, `track`, `trap` (built to catch one rule), `adversarial` (added by an attack, below), `compass` (a track's place and heading as two compass words).
+- **Tags:** `scenario` (the scenario scripts' sentences), `paraphrase`, `filler`, `fr`, `uk`, `mixed`, `stt_error`, `distance`, `other`, `track`, `trap` (built to catch one rule), `adversarial` (added by an attack, below), `compass` (a track's place and heading as two compass words), `blocks` (a count of blocks or streets, counted in code [184]), `contact` (a contact, a track whatever the model reads [180]).
 
 A case whose words are already one of the prompt's examples is marked `[in prompt]`. Its score is shown apart, because a pass there proves little.
 
