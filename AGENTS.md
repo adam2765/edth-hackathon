@@ -24,6 +24,7 @@ lib/providers/              Transcriber and IntentExtractor interfaces, Mistral 
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
 lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report is about, whose a track is, where it is
+lib/geo/blocks.ts           "two blocks east": the count read from the words, the crossings counted along the street lines
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
