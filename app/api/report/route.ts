@@ -20,7 +20,9 @@ const RATE_MAX = 30;
 const AREA_DATA = Object.fromEntries(
   (Object.keys(AREAS) as AreaId[]).map((id) => {
     const gazetteer = loadGazetteer(id);
-    return [id, { gazetteer, bias: biasTerms(gazetteer, 100) }];
+    // The report words first, so the 100 always hold them.
+    const words = AREAS[id].speechWords;
+    return [id, { gazetteer, bias: [...words, ...biasTerms(gazetteer, 100 - words.length)] }];
   }),
 ) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
 

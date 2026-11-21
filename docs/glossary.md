@@ -5,7 +5,7 @@
 | Affiliation | Whose a track is: hostile, suspect, unknown, neutral (civilian) or friendly. Read from the speaker's words in code; unknown when no word was said |
 | Ask-back | The question the app asks, aloud and on screen, when a report could mean more than one place |
 | Area | A region with its own gazetteer: `vincennes`, `kyiv` or `izium` |
-| Bias terms | Up to 100 place names sent to speech-to-text so it spells them right (`context_bias`) |
+| Bias terms | Up to 100 report words and place names sent to speech-to-text so it spells them right (`context_bias`) |
 | Block | The stretch of street from one crossing to the next. "Two blocks east" is counted in crossings along the street lines, never turned into metres [184] |
 | Call sign | The name a speaker reports under, such as ALPHA 2. Stored in capitals; one phone per call sign in a mission |
 | Check-in | A unit's first report that names a place. It replaces the start point |
