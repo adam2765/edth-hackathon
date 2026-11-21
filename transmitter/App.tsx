@@ -330,7 +330,7 @@ function Transmitter() {
     [serverUrl, leaveMission],
   );
 
-  /** Tells the receiver which choice was tapped. The phone has already applied it, so this only logs a failure. */
+  /** Tells the command post which choice was tapped. The phone has already applied it, so this only logs a failure. */
   const reportAnswer = useCallback(
     (entryId: string, choice: string | null) => {
       const reportId = reportIdsRef.current.get(entryId);
@@ -579,7 +579,7 @@ function Transmitter() {
         }}
         busy={joinBusy}
         error={joinError}
-        receiverUrl={`${serverUrl.replace(/\/+$/, "")}/receiver`}
+        commandPostUrl={`${serverUrl.replace(/\/+$/, "")}/cp`}
       />
     ) : modelMissing ? (
       <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
@@ -627,7 +627,7 @@ function Transmitter() {
             <Button label="Leave" kind="quiet" muted onPress={() => leaveMission(`Left ${joinedNow.name}.`)} />
           </View>
         ) : reach === "ok" && !missionList?.stored ? (
-          <Text style={[type.footnote, styles.noRecord]}>This coordinator keeps no record, so there are no missions: reports are placed, but no receiver shows them.</Text>
+          <Text style={[type.footnote, styles.noRecord]}>This coordinator keeps no record, so there are no missions: reports are placed, but no command post shows them.</Text>
         ) : null}
 
         {notice}

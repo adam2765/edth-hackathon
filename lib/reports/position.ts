@@ -1,7 +1,7 @@
 /**
  * Where a report or a tapped choice leaves the speaker. The same rule the phone applies to its own
  * marker (`positionAfter` in transmitter/src/transport.ts and the web page), worked out once on the
- * server and saved in the log, so the receiver and a replay only read positions.
+ * server and saved in the log, so the command post and a replay only read positions.
  */
 import type { Intent, Placement, Resolution } from "@/lib/geo/types";
 import type { UnitPosition } from "./types";

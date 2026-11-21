@@ -16,10 +16,10 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 ```
 app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs, session, callsign, seq)
-app/api/answer, app/api/sessions   the tapped choice in; missions: list, open, join, end, delete, and each one's log
-app/api/places              place search by name, for a mission's start point
-lib/reports/                missions and their logs: entry types (a contract with the receiver and the transmitter), store, record, foldLog
-components/Receiver.tsx     the receiver at /receiver: shared map, units, feed, replay; MissionPanel.tsx opens and ends missions
+app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, and its tracks placed by hand
+app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
+lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand)
+components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; MissionPanel.tsx opens and ends missions
 lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
@@ -68,7 +68,7 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. `tests/decisions.test.ts` checks the numbers.
 - The hooks in `.agents/hooks/` refuse reading `.env` files, writing keys into files, deleting outside the repo and worktrees outside `.claude/worktrees/`. Do not work around a refusal; ask the person to run the command.
 - Secrets live in env vars only. The repo is public.
-- `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the receiver. Change them on purpose, and say so in the decision line.
+- `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the command post. Change them on purpose, and say so in the decision line.
 - Do not deploy to production, push, or move the `prior-work-fri-1800` tag unless the person you are working for asks.
 - The extraction prompt (`systemPrompt()` in `lib/providers/extractor.ts`) changes only with an eval run before and after on both models, and no regression against `evals/baselines/` unless the person accepts it. The `prompt-tune` skill is the procedure; `prompt-attack` grows the cases.
 - Skills live in `.agents/skills/`, one folder each, so every agent reads the same ones.

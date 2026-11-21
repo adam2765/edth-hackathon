@@ -21,17 +21,17 @@ New to the project? Read these in order:
 | [overview.md](overview.md) | The challenge, judged items, our approach, timeline | Scope or schedule changes |
 | [architecture.md](architecture.md) | The parts and their block diagrams, where each step runs, what is built, the resolver in brief | A part is built, moved or deployed |
 | [contracts.md](contracts.md) | Report endpoint, intent, resolution, utterance, scenario and gazetteer files, provider interfaces | A contract changes, on purpose, with a decision line |
-| [plan.md](plan.md) | Receiver, missions (start, join, check in, end), local mode, transmitter, evaluation, demo | Work starts, finishes or changes scope |
+| [plan.md](plan.md) | Command post, missions (start, join, check in, end), local mode, transmitter, evaluation, demo | Work starts, finishes or changes scope |
 | [gazetteer.md](gazetteer.md) | How place data is built, same-name streets, adding an area, scaling | The build or the data changes |
 | [open-questions.md](open-questions.md) | Questions for the team and for Lysk | A question is asked, answered or dropped |
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
-| [tracks.md](tracks.md) | Tracks: screenshots of the receiver and the phone, the symbols, and diagrams of how a report becomes a track | The track rules or the screens for them change; retake the pictures |
+| [tracks.md](tracks.md) | Tracks: screenshots of the command post and the phone, the symbols, diagrams of how a report becomes a track, and placing tracks by hand | The track rules or the screens for them change; retake the pictures |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: four roles for the four of us, one of them evidence then pitch, and what we leave out to fit | The team agrees a split, or the mentors' answers move it |
-| [receiver-review.md](receiver-review.md) | The Saturday-night review of the receiver: what was fixed, and the decisions left for Alex | A decision in it is made; delete it when none are left |
+| [receiver-review.md](receiver-review.md) | The Saturday-night review of the receiver, now the command post: what was fixed, and the decisions left for Alex | A decision in it is made; delete it when none are left |
 | [handoff-prompt-tuning.md](handoff-prompt-tuning.md) | Handoff: tuning the extraction prompt with the eval and the two skills, where it stands, what is next | A cycle finishes; fold it into evals/README.md when the work settles |
 | [handoff-android-microphone.md](handoff-android-microphone.md) | Android PCM implemented; remaining recognition and timing checks | Delete it when validation is done |
 
