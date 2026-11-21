@@ -20,7 +20,7 @@ app/api/answer, app/api/sessions   the tapped choice in (from a phone or the com
 app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
 lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand)
 components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; MissionPanel.tsx opens and ends missions
-lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
+lib/providers/              Transcriber, IntentExtractor and ReplyReader interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
 lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report is about, whose a track is, where it is
@@ -31,7 +31,7 @@ data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, iziu
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
-evals/                      extraction eval: cases, baselines, saved runs, the prompt journal; the call-sign eval's cases
+evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign eval's cases
 .agents/skills/             skills for every agent: prompt-attack, prompt-tune, git-sync, pr (.claude/skills links here)
 .agents/hooks/              guard hooks for every agent: secrets, keys, deletes, worktrees (.claude/settings.json, .codex/hooks.json)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
@@ -53,6 +53,7 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
+npm run eval:replies        # score the reader of replies to a question (docs/ask-back.md); key or PROVIDER_MODE=local
 npm run eval:callsigns      # score the call-sign reader (docs/callsigns.md); no model, also in npm test
 ```
 

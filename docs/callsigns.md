@@ -1,6 +1,6 @@
 # Call signs from the words
 
-Who sent a radio report, read from its words and matched against the mission's roster [199]. Status on 21 Nov, 18:15 Paris time: the reader and its eval are built (`lib/geo/callsigns.ts`, `evals/callsigns.cases.json`). Nothing calls the reader yet: the coordinator still takes the call sign from the phone's join, and no contract has changed. Wiring it in is [step 2](#next-step-2), and waits for Alex.
+Who sent a radio report, read from its words and matched against the mission's roster [200]. Status on 21 Nov, 18:15 Paris time: the reader and its eval are built (`lib/geo/callsigns.ts`, `evals/callsigns.cases.json`). Nothing calls the reader yet: the coordinator still takes the call sign from the phone's join, and no contract has changed. Wiring it in is [step 2](#next-step-2), and waits for Alex.
 
 ## Why
 
