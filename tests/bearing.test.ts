@@ -29,7 +29,7 @@ describe("a bearing said, in degrees or mils [229]", () => {
   });
 
   it("leaves other numbers alone", () => {
-    for (const said of ["bearing in mind the church", "I'm at 60 rue de Paris", "Track 2 heading 090", "200 metres north", "bearing 400", "at 3 o'clock"]) {
+    for (const said of ["bearing zero sixty", "bearing in mind the church", "I'm at 60 rue de Paris", "Track 2 heading 090", "200 metres north", "bearing 400", "at 3 o'clock"]) {
       expect(bearingSaid(said), said).toBeNull();
     }
   });

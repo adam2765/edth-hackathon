@@ -225,6 +225,8 @@ export function bearingSaid(transcript: string): ClockSaid | null {
     const at = after ? i + 1 : i;
     let num = numberAt(toks, at);
     if (!num) continue;
+    // One spoken digit is not a bearing: "bearing zero sixty" would read as 0°. Better none.
+    if (num.spoken.length === 1) continue;
     // Said digit by digit, a bearing has three: "zero six zero, three hundred metres" is 060.
     if (num.spoken.length === 4 && !MILS_WORDS.has(toks[num.end] ?? "")) num = { n: Number(num.spoken.slice(0, 3)), end: num.end - 1, spoken: num.spoken.slice(0, 3) };
     const unit = toks[num.end];
