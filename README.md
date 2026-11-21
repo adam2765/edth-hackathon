@@ -135,7 +135,7 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 | 3 | ALPHA 1 | "Two enemy vehicles on Avenue de Paris, moving east." | "Track 1, hostile vehicle, count 2, Avenue de Paris." ALPHA 1 does not move |
 | 4 | BRAVO 2 | "I see a drone about 300 metres north of me." | "Track 2, unknown drone, 300 metres north of you." An estimate, ≈ |
 | 5 | BRAVO 2 | "Suspicious vehicle near the church." | "Track 3, suspect vehicle, Église Notre-Dame." Dashed hostile frame |
-| 6 | ALPHA 1 | "Enemy patrol near the cemetery." | Asks "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?"; tap **Cimetière Nord de Saint-Mandé** |
+| 6 | ALPHA 1 | "Enemy patrol near the cemetery." | Asks "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?"; answer **Cimetière Nord de Saint-Mandé** on the command post |
 | 7 | ALPHA 1 | "Track 1 moved to Avenue de Nogent." | "Track 1, now Avenue de Nogent." A dashed trail back to Avenue de Paris |
 | 8 | BRAVO 2 | "Track 2 is hostile." | "Track 2, hostile." The symbol turns red; the place stays |
 | 9 | BRAVO 2 | «Voiture civile devant la mairie.» | «Piste 5, véhicule civil, Mairie de Vincennes.» Neutral |
@@ -182,8 +182,9 @@ CI=1 EXPO_PUBLIC_SERVER_URL=http://127.0.0.1:3117 npx expo start --dev-client --
 
 Open **Transmitter** on the phone. If asked for a development server, enter
 `http://127.0.0.1:8082`. In Setup choose **This Mac** and **Phone: base**; download its
-model once. Create a mission on the command post and join it on the phone. Hold the talk
-button, wait for red, speak, then release. The report appears on the command post.
+model once. Open a mission on the command post with your call sign on its roster (ALPHA 1,
+say); the phone picks it. Hold the talk button, wait for red, say the call sign and where you
+are ("Alpha 1, at the town hall"), then release. The report appears on the command post.
 
 To stop, press **Ctrl+C** in each Terminal window. If a port is already in use, stop its
 old server before starting another. After reconnecting USB, repeat the two `adb reverse`
@@ -297,7 +298,7 @@ npx expo run:android       # build, install and start Metro
 # npx expo start --dev-client
 ```
 
-The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/cp`, create a mission and join it in the app.
+The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/cp` and open a mission with your call sign on its roster; the app picks it, or lists it when several are open.
 
 ### Web development and checks
 
@@ -339,9 +340,9 @@ Both local models miss "I'm at the Golden Gate." (8B leaves the name out, 3B tra
 
 ## Transmitter app and scenarios
 
-`transmitter/` is a small native app (Expo) that stands in for a field radio. It sends spoken reports to the same `/api/report` and shows and speaks the answer. A report comes from the microphone (hold to talk) or from a prepared clip, and both go down the same path, so the whole pipeline can be driven silently in a simulator. See [transmitter/README.md](transmitter/README.md) for how to build and run it.
+`transmitter/` is a small native app (Expo) that stands in for a field radio. It sends spoken reports to the same `/api/report`. Like a radio, it does not join, name itself or answer: the speaker says the call sign, the coordinator reads it from the words, and the operator answers questions on the command post [208]. A report comes from the microphone (hold to talk) or from a prepared clip, and both go down the same path, so the whole pipeline can be driven silently in a simulator. See [transmitter/README.md](transmitter/README.md) for how to build and run it.
 
-`scenarios/*.json` are scripted reports with the answer each one should get. `npm run scenarios` (on a Mac) makes the clips with synthetic English, French and Ukrainian voices. In the app, "Play scenario" sends every step and marks it ✓ or ✗; tapping one step sends it alone and leaves any question for you to answer.
+`scenarios/*.json` are scripted reports with the answer each one should get. `npm run scenarios` (on a Mac) makes the clips with synthetic English, French and Ukrainian voices. In the app, "Play scenario" sends every step and marks it ✓ or ✗; tapping one step sends it alone. Each step names its own call sign. A question stays open for the operator to answer on the command post.
 
 Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. The full scenario suite has not been checked on Android. On 21 Nov a Galaxy S10 sent two live town-hall reports through the offline Mac coordinator; both appeared at Mairie de Vincennes on the command post.
 
@@ -349,13 +350,13 @@ Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes s
 
 The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [176].
 
-A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
+A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Give it a roster too: the call signs on the radio net, split by commas [201]. The transmitter lists the open missions and picks one, like a radio tuned to a net; with one open, it picks it by itself. It does not join or name itself: a report goes to the roster unit whose call sign it starts with ("Alpha 1, at the town hall"), and one the coordinator is not sure of waits in the Unassigned tray for the operator [202, 203, 208]. A unit's first report is read from the start point, shown with ≈. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
-Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom holds the day's missions in the area: a blue stretch for each, gray where none was running, and a tick at every start and end [206]. Drag anywhere along it, or play at 1×, 10× or 30×; the replay never rests in the gray, and moving into another mission opens it. Page Up and Page Down jump from tick to tick. Live goes back to now. A unit silent for 3 minutes fades.
+Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until it is answered. The bar at the bottom holds the day's missions in the area: a blue stretch for each, gray where none was running, and a tick at every start and end [206]. Drag anywhere along it, or play at 1×, 10× or 30×; the replay never rests in the gray, and moving into another mission opens it. Page Up and Page Down jump from tick to tick. Live goes back to now. A unit silent for 3 minutes fades.
 
 **Tracks by hand** [177]. **Place track** (or P) opens a palette: whose (it starts on Unknown), what, how many and how sure. Click the map or find a place by name, drag the symbol if needed, add a source if you have one, and press Place. The track gets the next number. Click any track for its card: Change, Move, Gone (off the map, kept in the list and the log) and Put back. Every change is a `plot` line in the log, marked CP in the feed. The command post never places a unit.
 
-**Answering for a unit** [178]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The first answer stands, the phone's or the command post's.
+**Answering for a unit** [178]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The transmitter no longer answers, so this is where a question closes [208]. The first answer stands, whoever gave it.
 
 The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers, tracks placed by hand and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its command post stays empty [101].
 

@@ -1,13 +1,17 @@
 # Transmitter
 
 A small native app (Expo, React Native) that stands in for a field radio: it sends spoken
-position reports to the coordinator (`POST /api/report` on the web app in the folder above)
-and shows and speaks the coordinator's answer.
+position reports to the coordinator (`POST /api/report` on the web app in the folder above).
+Like a radio on a net, it does not join or name itself, and it does not answer questions
+([decision 208](../DECISIONS.md)). The speaker says the call sign ("Alpha 1, at the château"),
+the coordinator reads it from the words against the mission's roster, and the operator on the
+command post (`/cp`) places what it is unsure of and answers questions.
 
 ## One path, several sources
 
-Everything the app sends is an **utterance** (`src/types.ts`): audio or text, a call sign,
-start and end times and a sequence number. What produces an utterance can change; nothing
+Everything the app sends is an **utterance** (`src/types.ts`): audio or text, start and end
+times and a sequence number. Only a scenario step names a call sign, since a script speaks for
+several units; a report from the microphone has none. What produces an utterance can change; nothing
 after it does.
 
 | Source | What it is | Status |
@@ -20,35 +24,39 @@ after it does.
 
 The main screen is only for reporting. Top to bottom:
 
-- **Who and where:** the call sign, the area, the language, and the coordinator with a dot
+- **Where:** the mission's name, the area, the language, and the coordinator with a dot
   (green when it answers, red when it does not). Tapping it, or the gear, opens Setup.
-- **The mission**, once joined, with Leave. Before that, a **Join a mission** card lists the
-  coordinator's open missions (picked when there is only one) with the call sign, and the talk
-  button says "Join first". On joining, the unit starts around the mission's start point (≈) and
-  the phone asks for a check-in: "say where you are". The phone keeps its own id and the mission
-  in `transmitter.json` in its documents and rejoins on start. When the base ends the mission,
-  the phone says so within 5 seconds and offers the open ones. A coordinator that keeps no
-  record (the live site) has no missions: the phone reports without one, as before [114].
+- **Pick a mission**, like tuning to a net, until one is picked: a card lists the coordinator's
+  open missions, and the talk button says "Pick a mission". With only one open, it is picked for
+  you. Tapping one picks it: there is no call sign to type and nothing to join. The phone keeps
+  the code in `transmitter.json` in its documents, picks it again on start, and sends it with
+  each report. With other missions open, "Change" offers them. When the base ends the mission,
+  the phone says so within 5 seconds and offers the open ones; it waits for a pick, so it never
+  moves to another mission by itself. A coordinator that keeps no record (the live site) has no
+  missions: the phone reports without one [114, 208].
 - **A notice**, only when the next report would fail: the coordinator is not answering, or
   speech-to-text is set to the phone and its model is not downloaded.
-- **The talk button** and, under it, what happened last and the last known position. While
-  recording it turns red, counts the seconds, and a bar shows how much of the 15 seconds is used.
-- **A question card**, when the coordinator asks back. It sits directly under the talk button,
-  with the choices and "None of these". The choice tapped is sent to the coordinator
-  (`POST /api/answer`), so the command post's question closes too. Reports go to the mission joined;
-  the command post at `/cp` on the same coordinator shows it.
-- **Two tabs:** Scenarios (those for the mission's area: pick one, play it all, or tap one report) and Sent (every report
-  from this phone with the coordinator's answer and timings).
+- **The talk button** and, under it, one status line: listening, sending, sent, held for the
+  operator, or not sent and why. While recording it turns red, counts the seconds, and a bar
+  shows how much of the 15 seconds is used. The phone shows no answer: a question, and a report
+  the coordinator could not give to a unit, wait for the operator on the command post at `/cp`
+  [178, 203].
+- **Scenarios** for the mission's area: pick one, play it all, or tap one report. Each step
+  shows whether the coordinator answered as the script expects. A question stays open for the
+  operator: a step that expects one passes when the expected choice was offered. A later step
+  that depends on the answer passes only once the operator gives it.
 
-**Setup** is a sheet: call sign, area and language, which coordinator, where speech becomes text
-and the model download, sound, and scenario timing. The language is the one you speak, English by
-default: it goes with every report, Whisper on the phone listens for it, and questions come back
-in it. Scenarios use each report's own language instead ([decision 106](../DECISIONS.md)).
+**Setup** is a sheet: area and language, which coordinator, where speech becomes text and the
+model download, and scenario sound and timing. In a mission, the mission's area counts. The
+language is the one you speak, English by default: it goes with every report, Whisper on the
+phone listens for it, and the operator's questions are written in it. Scenarios use each
+report's own language instead ([decision 106](../DECISIONS.md)).
 
 The UI lives in `src/ui/`: `theme.ts` (colours, type and spacing, shared with the web app's
 palette), `controls.tsx` (segmented control, grouped rows, buttons), and one file each for the
-talk button, the scenario list, the sent list with the question card, the join card, and the
-Setup sheet. `src/mission.ts` lists and joins missions and keeps what the phone remembers.
+talk button, the scenario list, the mission card, and the Setup sheet. `src/mission.ts` lists
+missions and keeps the one picked. `src/speech.ts` is not used for now: it stays for hearing the
+operator's calls later.
 `App.tsx` holds the logic and composes them.
 
 ## Run it
@@ -103,8 +111,8 @@ Android phones are not covered yet: use the root README's steps.
 A development build loads its code from the computer running the dev server, so it knows that
 computer's address. It sends reports to the coordinator on that same computer, port 3117
 (`npm run dev -- -p 3117` in the folder above). Setup switches between "This Mac" and
-"Live site" (`https://edth-hackathon.vercel.app`), and the dot beside the call sign shows whether
-the coordinator answers (re-checked every 15 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
+"Live site" (`https://edth-hackathon.vercel.app`), and the dot beside the coordinator's name
+shows whether it answers (re-checked every 5 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
 For a phone, open the app with the computer's network name, not a numeric address:
 
@@ -210,9 +218,9 @@ Small and the iOS path were not tested in this Android change.
 ## What you hear
 
 A scenario sends its clips as data, so by default nothing is played: that is what makes it
-usable in a quiet room. The phone speaks only the coordinator's question ("Speak questions"
-in Setup), and only when the coordinator asks one. "Play scenario clips aloud" plays each clip
-through the phone's speaker before it is sent, for an audience. Sound comes out even with the ring switch on silent.
+usable in a quiet room. The phone speaks nothing: a radio hears the operator, not the
+coordinator, and the operator's calls do not reach the phone yet [208]. "Play clips aloud"
+(Setup, Scenarios) plays each clip through the phone's speaker before it is sent, for an audience. Sound comes out even with the ring switch on silent.
 
 ## Scenarios
 

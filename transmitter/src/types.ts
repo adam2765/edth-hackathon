@@ -1,10 +1,10 @@
 // The coordinator's reply types are shared with the server. These are type-only imports,
 // so nothing outside this folder ends up in the app bundle.
 import type { Affiliation, Candidate, Intent, Placement, Resolution, TrackKind } from "../../lib/geo/types";
-import type { JoinReply, MissionListReply, MissionSummary, UnitPosition } from "../../lib/reports/types";
+import type { HeldReason, MissionListReply, MissionSummary } from "../../lib/reports/types";
 
 export type { Candidate, Intent, Placement, Resolution };
-export type { JoinReply, MissionListReply, MissionSummary, UnitPosition };
+export type { MissionListReply, MissionSummary };
 
 export type AreaId = "vincennes" | "kyiv" | "izium";
 export type Lang = "en" | "fr" | "uk";
@@ -55,9 +55,13 @@ export interface Scenario {
  * knows the difference.
  */
 export interface Utterance {
-  /** Counts up per call sign, so the coordinator can spot gaps, duplicates and late arrivals. */
+  /** Counts up on this phone, so the coordinator can drop a report sent twice. */
   seq: number;
-  callsign: string;
+  /**
+   * Only for a scenario step, which is scripted and speaks for several units. A report from the
+   * microphone has none: like a radio's, its sender is read from its words [202].
+   */
+  callsign?: string;
   source: "mic" | "scenario" | "open_mic";
   /** Local file with the audio, when speech-to-text runs on the server. */
   audioUri?: string;
@@ -73,18 +77,32 @@ export interface Utterance {
   scenarioStepId?: string;
 }
 
+/** A radio report the coordinator did not give to a unit by itself: it waits for the operator [203]. */
+export interface HeldReport {
+  id: string;
+  reason: HeldReason;
+  /** What the operator is asked, not the speaker. */
+  question: string;
+  audio: string | null;
+}
+
+/**
+ * `POST /api/report`'s answer. A report that went to a unit has a `resolution`. A radio report
+ * the coordinator is not sure of has `held` instead [203]: null when holding it failed.
+ */
 export interface ReportReply {
   transcript: string;
   language: string | null;
   intent: Intent | null;
-  resolution: Resolution;
+  resolution?: Resolution;
+  held?: HeldReport | null;
   timings_ms: { stt: number; extract: number; resolve: number; total: number };
-  /** Set when the coordinator saved the report for the command post; send it back with the answer to a question. */
+  /** Set when the coordinator saved the report for the command post. */
   report_id?: string;
   /** The file name, when the coordinator kept the clip for tests (KEEP_CLIPS=1). */
   clip?: string;
   error?: string;
-  /** With an error: the mission has ended, so the phone should join another. */
+  /** With an error: the mission has ended, so the phone should pick another. */
   ended?: boolean;
 }
 
