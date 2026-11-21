@@ -22,7 +22,7 @@ Step-by-step setup for a teammate's computer, written so a coding agent (Claude 
 | 3. Offline mode | everyone; needs no key | 15 min, plus a 3 GB download |
 | 4. Hosted mode | only with a Mistral key; optional | 5 min |
 | 5. Transmitter on an iPhone | testing on a phone; Mac only | 30 to 45 min the first time |
-| 6. Transmitter on Android | Android phones; not yet tried by us | |
+| 6. Transmitter on Android | Android phones | |
 | 7. Daily start | everyone | |
 
 The coordinator runs in one of two modes. **Offline mode** runs intent extraction on this computer with Ollama and calls nothing outside it [83]. **Hosted mode** calls Mistral for speech-to-text and extraction, and needs a key. Both place reports the same way; offline mode takes text only, so a phone must use one of its own speech-to-text modes.
@@ -202,7 +202,9 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 ## 6. Transmitter on Android
 
-Not yet tried by us. It needs Android Studio, an Android SDK and a JDK; follow Expo's Android setup for SDK 58. Then `cd transmitter && npx expo run:android`. On Android the phone modes transcribe scenario clips, but the microphone still goes through the coordinator [75], so a microphone report needs hosted mode for now. That is not a reason to get a key: the fix, recording on the phone in a form Whisper can read, is written up in [handoff-android-microphone.md](handoff-android-microphone.md).
+Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
+
+For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the receiver stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the receiver. Recognition can ask back if it mishears a name.
 
 ## 7. Daily start
 

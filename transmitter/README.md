@@ -61,6 +61,8 @@ npx expo start --dev-client            # the dev server the app loads its code f
 
 `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
 Android: `npx expo run:android`. This is a native build, so Expo Go cannot run it.
+For the Mac USB workflow with Studio closed, use the root README's
+[command-line build and rebuild steps](../README.md#build-and-try-changes-without-android-studio).
 
 On a phone, sign with your own Apple ID: set `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
 before `npx expo run:ios --device`, because `dev.voicetomap.transmitter` belongs to Alex's team
@@ -96,7 +98,7 @@ only: use "Phone: base" or "Phone: small", not "Server" ([../docs/setup.md](../d
 Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
 ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
 speech-to-text. Results: `../scenarios/results/iphone13mini-via-mac-coordinator-2026-11-20.jsonl`.
-On-phone speech-to-text has not been run on a real phone yet.
+The Android microphone check is recorded below.
 
 ## Speech-to-text: on the server or on the phone
 
@@ -131,8 +133,16 @@ A step counts when the coordinator's answer is the expected one.
   this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
 - The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
 
-Phone modes transcribe scenario clips on both platforms. The microphone uses them on iOS only for
-now: Whisper needs uncompressed audio, which Android's recorder cannot write.
+Phone modes transcribe both scenario clips and the microphone on Android and iOS. Android uses
+the local Expo module in `modules/pcm-recorder` to write 16 kHz mono 16-bit PCM WAV with
+`AudioRecord`; iOS uses expo-audio. Both call the same Whisper function and send text through
+the existing report path. Rebuild the Android development app after adding the native module.
+
+Checked on 21 Nov on a Samsung Galaxy S10 (SM-G973U): microphone audio reaches the offline
+coordinator as text (`timings_ms.stt: 0`). Two live reports, "I am at the town hall in Vincennes",
+placed the unit at Mairie de Vincennes (±31 m) on the receiver. This verifies build and connections;
+recognition accuracy, old question cards and transcription speed remain separate runtime work.
+Small and the iOS path were not tested in this Android change.
 
 ## What you hear
 

@@ -1,5 +1,13 @@
 # Handoff: the Android microphone, transcribed on the phone
 
+**Status, 21 Nov:** the local Expo-module fallback below is implemented and installed on a
+Galaxy S10. It records PCM WAV and sends Whisper's text to the offline coordinator. Do not
+install the PCM-stream library proposed below. Current setup is in the root README's
+[USB daily startup](../README.md#daily-use-usb-android-phone-no-studio); Studio can stay closed.
+Two live town-hall reports reached the receiver correctly with base. Remaining runtime work:
+recognition accuracy, stale question cards and warm transcription timings with base and small;
+iOS was not tested in this change. The proposal below is retained until those checks finish.
+
 Written Friday 20 November, evening (Paris time), for the coding agent on the teammate's computer: an 8 GB MacBook Air with an Android phone. When the work is done, fold what is still true into `transmitter/README.md` and delete this file and its row in [README.md](README.md).
 
 ## Read this first: no Mistral key is needed
