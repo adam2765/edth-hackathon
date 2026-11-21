@@ -5,6 +5,7 @@
  * Otherwise Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
  */
 import type { Category, Direction, Intent, Relation } from "../geo/types";
+import { clockChecked } from "../geo/clock";
 import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
 import { fetchRetrying } from "./retry";
@@ -178,7 +179,10 @@ export function checkLanguage(said: Intent["language"], transcript: string, hint
   return said;
 }
 
-/** Coerce whatever came back into a valid Intent. With the transcript, the language is checked too. */
+/**
+ * Coerce whatever came back into a valid Intent. With the transcript, the language is checked too,
+ * and a clock direction said ("at 3 o'clock") sets the compass way [197].
+ */
 export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -189,7 +193,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
   const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1000 ? v : null);
   const dist = typeof o.distance_m === "number" && Number.isFinite(o.distance_m) && o.distance_m > 0 && o.distance_m <= MAX_DISTANCE_M ? Math.round(o.distance_m) : null;
   const said = pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en";
-  return {
+  const intent: Intent = {
     kind: pick(o.kind, ["position", "movement", "other"] as const) ?? "other",
     landmark_text: str(o.landmark_text),
     landmark_name: str(o.landmark_name),
@@ -208,6 +212,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
     track_text: str(tr?.text),
     track_heading: pick(tr?.heading, DIRECTIONS),
   };
+  return transcript === undefined ? intent : clockChecked(intent, transcript);
 }
 
 class ChatJsonExtractor implements IntentExtractor {
