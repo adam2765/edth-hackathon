@@ -28,6 +28,7 @@ New to the project? Read these in order:
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
 | [stt-comparison.md](stt-comparison.md) | Speech-to-text options measured on the scenario clips: Whisper base and small, Parakeet, Voxtral; the failures seen and a recommendation | An option is measured again, on real clips or a real phone |
+| [callsigns.md](callsigns.md) | Call signs read from a radio report's words and matched against the mission's roster: the rules, the eval and its scores, the limits, step 2 | The reader's rules change, or the eval is run on new cases |
 | [tracks.md](tracks.md) | Tracks: screenshots of the command post and the phone, the symbols, diagrams of how a report becomes a track, and placing tracks by hand | The track rules or the screens for them change; retake the pictures |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
@@ -47,6 +48,7 @@ Elsewhere in the repo:
 | [transmitter/README.md](../transmitter/README.md) | The native app: build, run, speech-to-text options |
 | [scenarios/README.md](../scenarios/README.md) | Scripted reports and their file format |
 | [evals/README.md](../evals/README.md) | The extraction eval: cases, how to run it, the latest scores |
+| [evals/callsigns.cases.json](../evals/callsigns.cases.json) | The call-sign eval's cases; how to run it is in [callsigns.md](callsigns.md#the-eval) |
 | [evals/journal.md](../evals/journal.md) | Every attack and tune of the extraction prompt |
 
 ## How these docs work
