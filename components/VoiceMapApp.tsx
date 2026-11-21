@@ -495,7 +495,8 @@ export default function VoiceMapApp() {
         const i = data.intent;
         // A move with no place named: say what it was worked out from.
         const moved = res.estimated && !target && i?.distance_m ? `${i.distance_m} m ${(i.direction ?? i.relation?.replace(/_of$/, "") ?? "").replace("_", "-")} of the last position` : null;
-        const label = target?.name ?? moved ?? "position";
+        const grid = res.evidence.rule === "grid_reference" ? res.evidence.detail.split(":")[0] : null; // "grid DQ 586 101" [223]
+        const label = target?.name ?? moved ?? grid ?? "position";
         outcome = applyPlacement({ pin: res.pin, radius_m: res.radius_m, heading_to: res.heading_to, estimated: res.estimated }, label);
         setPending(null);
         setStatus(outcome);
