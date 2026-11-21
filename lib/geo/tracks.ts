@@ -12,6 +12,7 @@
  * A report about a track never moves the speaker.
  */
 import { resolve, type ResolveInput } from "./resolver";
+import { blocksSaid } from "./blocks";
 import type { Affiliation, Candidate, Direction, Intent, Placement, Resolution, TrackKind, TrackResolution } from "./types";
 
 /** A track seen "on" a street or along a river is somewhere along it, not at the point nearest the observer. */
@@ -433,14 +434,21 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   }
 
   // Where the thing is, read as a position: a place with a relation, or a distance and a bearing
-  // from the observer. With a place, a compass word in `direction` is the way the thing is moving.
-  const where: Intent = { ...intent, kind: "position", relation, direction: hasPlace ? null : intent.direction };
+  // from the observer. With a place, a compass word in `direction` is the way the thing is moving,
+  // unless blocks are counted that way: "two blocks east on Avenue de Paris".
+  const where: Intent = { ...intent, kind: "position", relation, direction: hasPlace && !blocksSaid(transcript) ? null : intent.direction };
   const r = resolve({ ...input, intent: where });
   const evidence = { ...r.evidence, detail: `${reading.why}; ${r.evidence.detail}` };
 
   if (r.status === "ambiguous") return { status: "ambiguous", candidates: r.candidates.map(forTrack), question: r.question, evidence, track };
+  // Blocks that could not be counted: how far. From a place, the resolver's question names it.
+  if (r.evidence.rule === "blocks_uncounted") {
+    const q = ask(r.evidence.rule, r.evidence.detail, "how_far");
+    return hasPlace && r.question ? { ...q, question: r.question } : q;
+  }
   if (r.status === "unresolved" || !r.pin) {
-    const which: TrackPrompt = r.evidence.rule === "dead_reckoning_no_start" || r.evidence.rule === "crossing_no_start" ? "no_observer" : r.evidence.rule === "move_incomplete" ? "how_far" : "where";
+    const noStart = ["dead_reckoning_no_start", "crossing_no_start", "blocks_no_start"].includes(r.evidence.rule);
+    const which: TrackPrompt = noStart ? "no_observer" : r.evidence.rule === "move_incomplete" ? "how_far" : "where";
     return ask(r.evidence.rule, r.evidence.detail, which);
   }
 

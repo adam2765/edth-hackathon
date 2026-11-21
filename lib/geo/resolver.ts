@@ -8,6 +8,7 @@ import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosi
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
 import { canonTokens, categoryIsExplicit, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
+import { blocksSaid, crossingsAhead, MAX_BLOCKS, runsWay, type Ahead, type BlocksSaid } from "./blocks";
 
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
@@ -382,6 +383,11 @@ export function resolve(input: ResolveInput): Resolution {
       lemma = null;
     }
   }
+  // "Two blocks east", "two blocks east of rue X": counted along the street lines, never turned
+  // into metres by the model [51]. A distance said wins over a count.
+  const blocks = d == null && intent.kind !== "other" ? blocksSaid(transcript) : null;
+  const blockDir = compassSaid(intent);
+  if (blocks && blockDir) return countBlocks({ input, blocks, dir: blockDir, name, lemma, category, lang });
   if (!name && !category) {
     // "300 metres north of my last position" says the same as "moved 300 metres north".
     const bearing = intent.direction ? DIRECTION_DEG[intent.direction] : intent.relation ? COMPASS[intent.relation] : undefined;
@@ -609,6 +615,193 @@ export function resolve(input: ResolveInput): Resolution {
   }
   const cands = categoryCandidates(category, gazetteer, ref, intent, last);
   return decide(cands, "category", `${cands.length} ${category} within ${CATEGORY_RADIUS_M} m of ${refLabel}`);
+}
+
+// ---- counting blocks ----
+
+/** The compass way a report gave: "east of the church" before a direction of travel, which is "moving east". */
+function compassSaid(intent: Intent): Direction | null {
+  if (intent.relation && COMPASS[intent.relation] !== undefined) return intent.relation.replace(/_of$/, "") as Direction;
+  return intent.direction ?? null;
+}
+
+const DIR_SAY: Record<Lang, Record<Direction, string>> = {
+  en: { north: "north", north_east: "north-east", east: "east", south_east: "south-east", south: "south", south_west: "south-west", west: "west", north_west: "north-west" },
+  fr: { north: "au nord", north_east: "au nord-est", east: "à l'est", south_east: "au sud-est", south: "au sud", south_west: "au sud-ouest", west: "à l'ouest", north_west: "au nord-ouest" },
+  uk: { north: "на північ", north_east: "на північний схід", east: "на схід", south_east: "на південний схід", south: "на південь", south_west: "на південний захід", west: "на захід", north_west: "на північний захід" },
+};
+
+/** "How far east of Rue de Fontenay? Or name a place near it." Ukrainian leaves the place out: it would need its case ending. */
+function howFarQuestion(lang: Lang, dir: Direction, place: string | null): string {
+  if (lang === "fr") {
+    const of = place ? ` ${/^[aeiouyhàâéèêîôû]/i.test(place) ? "d'" : "de "}${place}` : "";
+    return `À quelle distance ${DIR_SAY.fr[dir]}${of} ? Ou donnez un lieu proche.`;
+  }
+  if (lang === "uk") return `Як далеко ${DIR_SAY.uk[dir]}? Або назвіть орієнтир поруч.`;
+  return `How far ${DIR_SAY.en[dir]}${place ? ` of ${place}` : ""}? Or name a place near it.`;
+}
+
+/** Half the block that ends at the crossing, so the circle reaches back to the middle of it. */
+const BLOCK_RADIUS_MAX_M = 150;
+const blockRadius = (block: number) => Math.min(BLOCK_RADIUS_MAX_M, Math.max(MOVE_MIN_RADIUS_M, Math.round(block / 2)));
+
+interface BlocksInput {
+  input: ResolveInput;
+  blocks: BlocksSaid;
+  dir: Direction;
+  name: string | null;
+  lemma: string | null;
+  category: Category | null;
+  lang: Lang;
+}
+
+/** A street to count along, from where the count starts. */
+interface Walk {
+  along: GazetteerFeature;
+  start: LatLon;
+  /** The start is the speaker's own place, so its circle counts too; a crossing is exact. */
+  fromSpeaker: boolean;
+  /** Metres from the reference point to the start. */
+  from: number;
+}
+
+/**
+ * "Two blocks east": the crossings ahead on a street, counted. From the speaker, along the street
+ * they are on that runs that way. From a street they name ("two blocks east of rue X"), along X
+ * itself if X runs that way, or along a street that crosses X and runs that way.
+ *
+ * "Two blocks" is the second crossing counting every street that meets this one, or the second
+ * counting only streets that cross it right through. When the two land on one crossing, the
+ * report is placed there; when they do not, the app asks which. It asks how far when it cannot count.
+ */
+function countBlocks(a: BlocksInput): Resolution {
+  const { input, blocks, dir, name, lemma, category, lang } = a;
+  const { gazetteer, lastPosition: last, now } = input;
+  const bearing = DIRECTION_DEG[dir];
+  const n = blocks.n;
+  let place: string | null = null;
+  const howFar = (rule: string, detail: string): Resolution => ({
+    status: "unresolved",
+    candidates: [],
+    question: howFarQuestion(lang, dir, place),
+    evidence: { rule, detail },
+  });
+  const counted = n == null ? "some blocks" : `${n} block${n === 1 ? "" : "s"}`;
+
+  const streets = gazetteer.filter((f) => f.category === "street" && f.lines?.length);
+  const byId = new Map(streets.map((f) => [f.id, f]));
+  const crossings = crossingsOf(gazetteer);
+  const ref: LatLon = last ?? input.areaCentre ?? DEFAULT_CENTRE;
+  const fresh = !!last && now - last.ts < FRESH_MS;
+  const walks: Walk[] = [];
+
+  const fromPlace = !!name || (!!category && category !== "street" && category !== "other" && category !== "intersection");
+  let named: GazetteerFeature[] = [];
+  if (fromPlace) {
+    if (!name) return howFar("blocks_uncounted", `${counted} ${dir} of a ${category}: blocks are counted from a street or from the speaker`);
+    const queries = [...new Set([lemma, name].filter((q): q is string => !!q))];
+    const found = searchByName(queries, gazetteer).filter((m) => m.feature.category === "street" && m.feature.lines?.length);
+    const best = found[0]?.score ?? 0;
+    named = found.filter((m) => m.score >= GOOD_SCORE && m.score >= best - SCORE_MARGIN).map((m) => m.feature);
+    place = named[0]?.name ?? lemma ?? name;
+    if (!named.length) return howFar("blocks_uncounted", `no street called "${lemma ?? name}": blocks are counted from a street or from the speaker`);
+  } else if (!last) {
+    return { status: "unresolved", candidates: [], question: unresolvedPrompt(lang, "no_start"), evidence: { rule: "blocks_no_start", detail: `${counted} ${dir} with no last position to count from` } };
+  }
+  if (n == null) return howFar("blocks_uncounted", `${counted} ${dir}: no count said`);
+  if (n > MAX_BLOCKS) return howFar("blocks_uncounted", `${n} blocks ${dir}: more than ${MAX_BLOCKS} are not counted`);
+
+  if (fromPlace) {
+    for (const x of named) {
+      // "Two blocks east of rue X" when X itself runs east: along X, from the speaker's point on it.
+      if (last) {
+        const p = nearestPointOnLines(last, x.lines!);
+        if (runsWay(x, p, bearing)) walks.push({ along: x, start: p, fromSpeaker: true, from: distanceM(ref, p) });
+      }
+      // Along each street that crosses X and runs that way, from the crossing.
+      for (const c of crossings) {
+        if (!c.streets.includes(x.id)) continue;
+        for (const id of c.streets) {
+          const w = byId.get(id);
+          if (!w || id === x.id || w.name.toLowerCase() === x.name.toLowerCase()) continue;
+          if (runsWay(w, c, bearing)) walks.push({ along: w, start: { lat: c.lat, lon: c.lon }, fromSpeaker: false, from: distanceM(ref, c) });
+        }
+      }
+    }
+  } else if (last) {
+    // From the speaker: the streets they are on that run that way.
+    for (const s of streets) {
+      const p = nearestPointOnLines(last, s.lines!);
+      const off = distanceM(last, p);
+      if (off <= ON_STREET_M && runsWay(s, p, bearing)) walks.push({ along: s, start: p, fromSpeaker: true, from: off });
+    }
+  }
+
+  // One start per street, the nearest; none farther than a named place would be looked for.
+  const nearest = new Map<string, Walk>();
+  for (const w of walks) {
+    const prev = nearest.get(w.along.id);
+    if (w.from <= CATEGORY_RADIUS_M && (!prev || w.from < prev.from)) nearest.set(w.along.id, w);
+  }
+  const where = place ? `from ${place}` : "from the last position";
+  if (!nearest.size) return howFar("blocks_uncounted", `${counted} ${dir} ${where}: no street there runs ${dir}`);
+
+  // Count along each street: the n-th crossing counting every street that meets it, and counting
+  // only the streets that cross it right through. A street with fewer than n crossings ahead drops out.
+  const counts = [...nearest.values()]
+    .sort((x, y) => x.from - y.from)
+    .map((w) => {
+      const { every, through } = crossingsAhead(w.along, w.start, bearing, crossings, byId);
+      const ends: { end: Ahead; block: number }[] = [];
+      for (const list of [every, through]) {
+        const end = list[n - 1];
+        if (end && !ends.some((e) => e.end.c.id === end.c.id)) ends.push({ end, block: end.dist - (n >= 2 ? list[n - 2].dist : 0) });
+      }
+      const say = (list: Ahead[]) => (list[n - 1] ? `${crossStreets(list[n - 1].c, w.along.id)} at ${Math.round(list[n - 1].dist)} m` : `only ${list.length}`);
+      return { w, ends, note: `along ${w.along.name}: every crossing → ${say(every)}, through crossings → ${say(through)}` };
+    })
+    .filter((x) => x.ends.length);
+  if (!counts.length) return howFar("blocks_uncounted", `${counted} ${dir} ${where}: fewer than ${n} crossing(s) ahead on ${[...nearest.values()].map((w) => w.along.name).join(", ")}`);
+
+  // The speaker's own street when it is one of them; otherwise the nearest, if it is much nearer than the next.
+  let picked = counts;
+  const own = last?.street ? counts.filter((x) => x.w.along.id === last.street) : [];
+  if (own.length) picked = own;
+  else if (counts.length > 1 && fresh && counts[0].w.from < NEAREST_RATIO * counts[1].w.from) picked = [counts[0]];
+  picked = picked.slice(0, MAX_CHOICES);
+
+  const cands: Candidate[] = [];
+  const ends = new Map<string, Crossing>();
+  for (const { w, ends: found } of picked) {
+    for (const { end, block } of found) {
+      if (cands.some((c) => c.id === end.c.id)) continue;
+      ends.set(end.c.id, end.c);
+      cands.push({
+        id: end.c.id,
+        name: crossingName(end.c, w.along.id),
+        category: "intersection",
+        lat: end.c.lat,
+        lon: end.c.lon,
+        distance_m: Math.round(distanceM(ref, end.c)),
+        streets: end.c.streets,
+        placement: { pin: { lat: end.c.lat, lon: end.c.lon }, radius_m: blockRadius(block) + (w.fromSpeaker && last ? startRadius(last) : 0), estimated: true },
+      });
+    }
+  }
+  const detail = `${counted} ${dir} ${where}; ${picked.map((x) => x.note).join("; ")}`;
+  if (cands.length === 1) return resolvedFrom(cands[0], cands, "blocks_counted", detail);
+
+  const top = cands.slice(0, MAX_CHOICES);
+  // On one street the choices are the streets that cross it: "Which crossing on Avenue de Paris: Rue de Colmar, or Rue de Montreuil?"
+  const one = picked.length === 1 ? picked[0].w.along : null;
+  const short = one ? top.map((c) => crossStreets(ends.get(c.id)!, one.id)) : [];
+  const useShort = !!one && short.every(Boolean) && new Set(short).size === short.length;
+  return {
+    status: "ambiguous",
+    candidates: top,
+    question: crossingQuestion(useShort ? short : choiceLabels(top, lang), useShort ? one!.name : null, lang),
+    evidence: { rule: "blocks_ambiguous", detail: `${detail}; the counts disagree, or more than one street runs ${dir}` },
+  };
 }
 
 function categoryCandidates(category: Category, gazetteer: GazetteerFeature[], ref: LatLon, intent: Intent, last: LastPosition | null | undefined): Candidate[] {
