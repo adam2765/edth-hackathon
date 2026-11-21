@@ -313,7 +313,7 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 
 Environment options are in `.env.example`. Hosted mode needs `MISTRAL_API_KEY` in
 `.env.local`; never commit a key. Without one, use offline mode. Extraction can also
-use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.
+use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`. `MISTRAL_STT_DIARIZE=0` stops asking Mistral to tell speakers apart.
 
 ### Offline: models on this computer
 
