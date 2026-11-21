@@ -67,7 +67,7 @@ Work one rule at a time, in this loop:
 | Mistral Small (hosted) | 319 of 357 | 2 | 0.8 s |
 | Ministral 3 3B (local) | 237 of 357 | 9 | 3.4 s (shared GPU) |
 
-Done: the eval, the skills, two attacks, two sets of cases from code changes, and three tunes (two places in one report; a side word alone, "Friendly at the town hall.", is a track; a thing given only a compass way, "Enemy vehicle to the east.", is a track). The offline model is the target of the last one; its hosted costs were accepted [194].
+Done: the eval, the skills, two attacks, two sets of cases from code changes, and three tunes (two places in one report; a side word alone, "Friendly at the town hall.", is a track; a thing given only a compass way, "Enemy vehicle to the east.", is a track). The offline model is the target of the last one; its hosted costs were accepted [196].
 
 ## Next, in order
 
@@ -76,7 +76,7 @@ Done: the eval, the skills, two attacks, two sets of cases from code changes, an
 3. **"Outside" read as near** (`p-outside`) and **«за» read as near** on the 3B model (`uk-behind`): the relation rule.
 4. **"Copy that, moving out" read as a movement** (`o-moving-out`): the rule for `other`.
 5. **Attack the rules with few cases:** crossings, lemmas on the 3B model, distances in words.
-6. **Two compass words in one track report on the 3B model:** a way and a heading ("Two trucks to the north, moving west.", `t-compass-heading`; `a-compass-*`), and `t-trucks`, which lost its heading in the compass-only tune. Code checks the words since [186], so this is about the fields, not the pin. On hosted, `a-compass-6` asks instead of placing since that tune [194].
+6. **Two compass words in one track report on the 3B model:** a way and a heading ("Two trucks to the north, moving west.", `t-compass-heading`; `a-compass-*`), and `t-trucks`, which lost its heading in the compass-only tune. Code checks the words since [186], so this is about the fields, not the pin. On hosted, `a-compass-6` asks instead of placing since that tune [196].
 
 Not a prompt cycle, but waiting on one: "I'm at Vincent station." pins a school named Vincent d'Indy through the resolver ([known-gaps.md](known-gaps.md)). Add it as a case once the resolver asks back there ([evals/README.md](../evals/README.md#open) has the details).
 

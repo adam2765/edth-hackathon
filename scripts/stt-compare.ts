@@ -4,14 +4,15 @@
  *
  *   npx tsx scripts/stt-compare.ts whisper <ggml-model.bin> <out.jsonl> [--no-hints]
  *   npx tsx scripts/stt-compare.ts parakeet <parakeet-cli> <ggml-parakeet.bin> <out.jsonl>
- *   npx tsx scripts/stt-compare.ts voxtral <out.jsonl> [--no-bias]         (needs MISTRAL_API_KEY)
+ *   npx tsx scripts/stt-compare.ts coordinator <out.jsonl> [--no-bias]     (MISTRAL_API_KEY, or PROVIDER_MODE=local and npm run stt)
  *   REPORT_STORE_DIR=<dir> npx tsx scripts/stt-compare.ts score <out.jsonl> <label>=<transcripts.jsonl | script> ...
  *
  * whisper: whisper.cpp's `whisper-cli` on this computer stands in for whisper.rn on the phone, with
  *   what the transmitter passes (transmitter/src/stt.ts): the step's language pinned (decision 106),
  *   the area's hint names as the prompt (decision 73), 4 threads, greedy decoding.
  * parakeet: whisper.cpp's `parakeet-cli`; it takes no language and no prompt.
- * voxtral: the coordinator's own transcriber and its 100 bias terms, as `POST /api/report` calls it.
+ * coordinator (was voxtral): the coordinator's own transcriber, as `POST /api/report` calls it, with
+ *   the step's language: Voxtral with 100 bias terms in hosted mode, whisper-server in offline mode.
  * score: runs each scenario as the transmitter does (transmitter/App.tsx): a fresh mission, steps in
  *   order, the transcript sent as `text` with the step's language, and a question answered with the
  *   step's `choose`. `script` sends the scenario's own words: the ceiling. Uses hosted mode unless
@@ -120,7 +121,7 @@ function parakeet(cli: string, model: string, out: string) {
   );
 }
 
-async function voxtral(out: string, bias: boolean) {
+async function coordinator(out: string, bias: boolean) {
   const { getTranscriber } = await import("../lib/providers/transcriber");
   const { biasTerms, loadGazetteer } = await import("../lib/geo/gazetteer");
   const t = getTranscriber();
@@ -132,7 +133,7 @@ async function voxtral(out: string, bias: boolean) {
       const file = existsSync(m4a) ? m4a : join(clipsDir, sc.id, `${step.id}.wav`);
       const mime = file.endsWith(".m4a") ? "audio/mp4" : "audio/wav";
       const s = performance.now();
-      const r = await t.transcribe(new Blob([readFileSync(file)], { type: mime }), mime, terms);
+      const r = await t.transcribe(new Blob([readFileSync(file)], { type: mime }), mime, terms, { language: step.lang });
       const row = { scenario: sc.id, step: step.id, lang: step.lang, said: step.text, heard: r.text, ms_stt: Math.round(performance.now() - s) };
       console.log(`${sc.id}/${step.id} ${row.ms_stt} ms  ${step.text} -> ${row.heard}`);
       rows.push(row);
@@ -226,7 +227,7 @@ async function main() {
   // whisper-cli must be on the PATH (Homebrew: brew install whisper-cpp).
   if (cmd === "whisper" && pos.length === 2) whisper(pos[0], pos[1], !flags.has("--no-hints"));
   else if (cmd === "parakeet" && pos.length === 3) parakeet(pos[0], pos[1], pos[2]);
-  else if (cmd === "voxtral" && pos.length === 1) await voxtral(pos[0], !flags.has("--no-bias"));
+  else if ((cmd === "coordinator" || cmd === "voxtral") && pos.length === 1) await coordinator(pos[0], !flags.has("--no-bias"));
   else if (cmd === "score" && pos.length >= 2) await score(pos[0], pos.slice(1));
   else {
     console.error(readFileSync(__filename, "utf8").split("*/")[0]);
