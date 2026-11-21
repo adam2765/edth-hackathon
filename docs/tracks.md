@@ -6,14 +6,14 @@ Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-
 
 ## The pictures
 
-The command post pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 14:00 to 14:10, in mission `vincennes-1` on a fresh coordinator. The coordinator ran on the Mac in offline mode (the 3B model). Both units' reports were typed, and all 11 steps got the answer the script expects. Track 7 was then placed by hand. The phone pictures come from an earlier run, 10:40 to 10:43 in mission `vincennes-15`, in hosted mode (Mistral), with ALPHA 1 the transmitter in the iPhone 16 Pro simulator playing the script's clips. Every sighting is made up.
+The command post pictures come from one run of the tracks script ([README](../README.md#vincennes-with-tracks)) on Saturday 21 November, 14:16 to 14:19, in mission `vincennes-2` on a coordinator of its own. The coordinator ran on the Mac in offline mode (the 3B model). Both units' reports were typed. Ten of the 11 steps got the answer the script expects. In step 11 the model read "Enemy vehicle to the east" as about the speaker, so the app asked "Is that where you are, or something you see?" instead of how far east: still no track, as expected, but a different question (in the feed of the first picture). Track 7 was then placed by hand. The phone pictures come from an earlier run, 10:40 to 10:43 in mission `vincennes-15`, in hosted mode (Mistral), with ALPHA 1 the transmitter in the iPhone 16 Pro simulator playing the script's clips. Every sighting is made up.
 
 ### The command post at the end of the script
 
 ![The command post with six tracks and two units in Vincennes](images/tracks/cp-six-tracks.png)
 
 - **Units are dots, tracks are symbols.** ALPHA 1 (orange) and BRAVO 2 (blue) never moved: a report about a track does not move the speaker.
-- **Each track has a label:** number, what it is, the time it was last seen and who saw it ("T1 · hostile vehicle ×2, 14:04:26 · ALPHA 1").
+- **Each track has a label:** number, what it is, the time it was last seen and who saw it ("T1 · hostile vehicle ×2, 14:17:40 · ALPHA 1").
 - **A symbol that would hide a unit or another track is drawn a short way off,** with a thin line back to a small dot on its real point ([below](#when-symbols-would-overlap)). Track 5, a civilian car at the town hall where BRAVO 2 stands, is drawn above and to the left; Track 3 is drawn beside the church.
 - **A dotted line of sight** runs from the observer to each track it reported: ALPHA 1 to Tracks 4 and 6, BRAVO 2 to Track 2.
 - **A dashed trail** shows where a track was before. Track 1 was first seen on Avenue de Paris and moved to Avenue de Nogent.
@@ -208,7 +208,7 @@ Click a track on the map or in the list for its card:
 - **Gone:** off the map, after a confirm. It stays in the list, last, and in the log.
 - **Put back on the map**, for a gone track.
 
-<img src="images/tracks/cp-track-card.png" alt="Track 7's card: hostile people ×2, Square Virginia Woolf, ±50 m, placed by CP, source: drone feed, with Change, Move and Gone. On the map, Track 7 is labelled 14:10:17 · CP." width="600">
+<img src="images/tracks/cp-track-card.png" alt="Track 7's card: hostile people ×2, Square Virginia Woolf, ±50 m, placed by CP, source: drone feed, with Change, Move and Gone. On the map, Track 7 is labelled 14:18:39 · CP." width="600">
 
 A unit's later report about the track brings a gone track back, and a placed track takes reports like any other ("Track 4 moved to the station"). Every change is one `plot` line in the log, so a replay shows it when it happened, and the feed shows it under CP. The position comes from a person's click or a gazetteer place, never from a model. The command post places tracks only; a unit's position still comes only from what the unit says.
 
