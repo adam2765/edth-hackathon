@@ -7,7 +7,7 @@ import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
 import { resolve } from "../lib/geo/resolver";
 import { AFFILIATIONS, describeTrack, TRACK_KINDS, trackSymbolCode } from "../lib/geo/trackKinds";
-import { affiliationSaid, contactSaid, kindSaid, readSubject, resolveReport, TRACK_ON_LINE_M, trackNumberSaid, withTrackNumber } from "../lib/geo/tracks";
+import { affiliationSaid, compassChecked, compassWordsSaid, contactSaid, kindSaid, readSubject, resolveReport, TRACK_ON_LINE_M, trackNumberSaid, withTrackNumber } from "../lib/geo/tracks";
 import type { Intent, LastPosition } from "../lib/geo/types";
 import { sanitizeIntent, systemPrompt } from "../lib/providers/extractor";
 import { foldLog, TRACK_OLD_AFTER_MS } from "../lib/reports/fold";
@@ -261,10 +261,119 @@ describe("placing a track", () => {
   });
 });
 
+describe("the compass words: where it is, and the way it is going", () => {
+  const roles = (text: string) => compassWordsSaid(text).map((w) => `${w.dir}:${w.role}`);
+
+  it("a distance before the word puts the thing there; a verb of moving is the way it goes", () => {
+    expect(roles("Hostile drone, 1 km east, heading north.")).toEqual(["east:where", "north:going"]);
+    expect(roles("Two vehicles heading south, 500 metres west.")).toEqual(["south:going", "west:where"]);
+    expect(roles("Unknown contact moving north-east, about 300 metres north.")).toEqual(["north_east:going", "north:where"]);
+    expect(roles("Enemy vehicle north of the church")).toEqual(["north:where"]);
+    expect(roles("Convoy northbound")).toEqual(["north:going"]);
+    expect(roles("Enemy vehicle to the east")).toEqual(["east:unclear"]);
+  });
+
+  it("the speaker's own move and where a thing came from say neither", () => {
+    expect(roles("I'm moving north, enemy drone 1 km east")).toEqual(["north:self", "east:where"]);
+    expect(roles("Drone coming from the north")).toEqual(["north:from"]);
+  });
+
+  it("French and Ukrainian; French \"est\" is a compass word only as one", () => {
+    expect(roles("Drone ennemi à un kilomètre à l'est, il se dirige vers le nord.")).toEqual(["east:where", "north:going"]);
+    expect(roles("Drone ennemi à 300 mètres au nord-est")).toEqual(["north_east:where"]);
+    expect(roles("Le drone est à 300 mètres")).toEqual([]);
+    expect(roles("Drone à 300 mètres vers l'est")).toEqual(["east:where"]);
+    expect(roles("Ворожий дрон за кілометр на схід, летить на північ.")).toEqual(["east:where", "north:going"]);
+    expect(roles("Бачу дрон за триста метрів на північний схід від мене")).toEqual(["north_east:where"]);
+  });
+
+  const last = at(CASTLE, 30);
+  const place = (heard: string, read: Partial<Intent>) => {
+    const i = track({ track_kind: "drone", ...read });
+    return withTrackNumber(resolveReport({ ...base, intent: i, transcript: heard, lastPosition: last }), 7, i, heard);
+  };
+  const east = (r: ReturnType<typeof place>) => {
+    const pin = r.track!.placement!.pin!;
+    expect(Math.round(distanceM(last, pin))).toBe(1000);
+    expect(pin.lon).toBeGreaterThan(last.lon);
+    expect(Math.abs(pin.lat - last.lat)).toBeLessThan(1e-6);
+  };
+
+  it("swapped by the model: the pin goes the way the words say, with the heading they say", () => {
+    // ministral-3:3b, 21 November: east read as the heading and north as where the drone is.
+    const r = place("Hostile drone one kilometer east, moving north.", { distance_m: 1000, direction: "north", track_heading: "east" });
+    expect(r.status).toBe("resolved");
+    east(r);
+    expect(r.track).toMatchObject({ heading: "north", label: "1000 m east of ALPHA 1", say: "Track 7, hostile drone, 1000 metres east of you." });
+    expect(r.evidence.detail).toMatch(/compass words say moving north \(read east\), east of the observer \(read north\)/);
+    const fr = place("Drone ennemi à un kilomètre à l'est, il se dirige vers le nord.", { distance_m: 1000, direction: "north", track_heading: "east", language: "fr" });
+    east(fr);
+    expect(fr.track).toMatchObject({ heading: "north", say: "Piste 7, drone hostile, 1000 mètres à l'est de vous." });
+    const uk = place("Ворожий дрон за кілометр на схід, летить на північ.", { distance_m: 1000, direction: "north", track_heading: "east", language: "uk" });
+    east(uk);
+    expect(uk.track?.heading).toBe("north");
+  });
+
+  it("merged by the model: the words split them again", () => {
+    // ministral-3:3b, 21 November: "south" and "west" made one south-west; "north-east" taken as where it is.
+    const merged = resolveReport({ ...base, intent: track({ track_kind: "vehicle", track_count: 2, distance_m: 500, direction: "south_west", track_heading: "south" }), transcript: "Two vehicles heading south, 500 metres west.", lastPosition: last });
+    expect(merged.track?.placement?.pin?.lon).toBeLessThan(last.lon);
+    expect(merged.track).toMatchObject({ heading: "south", label: "500 m west of ALPHA 1" });
+    const family = resolveReport({ ...base, intent: track({ distance_m: 300, direction: "north_east" }), transcript: "Unknown contact moving north-east, about 300 metres north.", lastPosition: last });
+    expect(family.track).toMatchObject({ heading: "north_east", label: "300 m north of ALPHA 1" });
+  });
+
+  it("dropped by the model: the words give back where it is", () => {
+    // ministral-3:3b left out "east", and the app asked how far and which way.
+    const r = place("Hostile drone, 1 km east, heading north.", { distance_m: 1000, direction: null, track_heading: "north" });
+    expect(r.status).toBe("resolved");
+    east(r);
+    expect(r.track?.heading).toBe("north");
+  });
+
+  it("no heading that was not said: one compass word is not both", () => {
+    // "Hostel drone 1 km east", 21 November: the model copied "east" into the heading too.
+    const r = place("Hostel drone 1 km east", { distance_m: 1000, direction: "east", track_heading: "east" });
+    east(r);
+    expect(r.track?.heading).toBeNull();
+    const unclear = place("Enemy drone to the east", { direction: "east", track_heading: "east" });
+    expect(unclear.track?.heading).toBeNull();
+    expect(unclear.question).toMatch(/How far east/);
+    const self = place("I'm moving north, enemy drone 1 km east", { distance_m: 1000, direction: "east", track_heading: "north" });
+    east(self);
+    expect(self.track?.heading).toBeNull();
+  });
+
+  it("only the way it is going: the app asks where it is, and keeps the heading", () => {
+    const r = place("Hostile drone heading north", { direction: "north", track_heading: "north" });
+    expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "track_no_place" }, track: { heading: "north" } });
+    expect(r.question).toMatch(/^Where is it\?/);
+    const far = place("Hostile drone 1 km away, heading north", { distance_m: 1000, direction: "north", track_heading: "north" });
+    expect(far).toMatchObject({ status: "unresolved", evidence: { rule: "move_incomplete" }, track: { heading: "north" } });
+    expect(far.question).toBe("Which way is it from you? Give a compass direction, or name a place near it.");
+  });
+
+  it("with a place, the heading comes from the words, never from where it is", () => {
+    const moving = resolveReport({ ...base, intent: track({ landmark_name: "Bérault", relation: "at", track_kind: "vehicle" }), transcript: "Two vehicles at Bérault, moving east", lastPosition: last });
+    expect(moving.track?.heading).toBe("east");
+    const north = resolveReport({ ...base, intent: track({ landmark_name: "Bérault", relation: "north_of", track_heading: "north" }), transcript: "Enemy vehicle north of Bérault", lastPosition: last });
+    expect(north.track?.heading).toBeNull();
+  });
+
+  it("two different ways for the same role, or no compass word found: no change made from the words", () => {
+    const two = compassChecked(track({ distance_m: 1000, direction: "east" }), "Drone 1 km east, 2 km north", false);
+    expect(two.intent.direction).toBeNull();
+    const none = track({ distance_m: 1000, direction: "north_east", track_heading: "south" });
+    expect(compassChecked(none, "Drone 1 km NE, going S", false)).toEqual({ intent: none, why: null });
+    const same = track({ distance_m: 300, direction: "north" });
+    expect(compassChecked(same, "I see a drone about 300 metres north of me", false)).toEqual({ intent: same, why: null });
+  });
+});
+
 describe("what the app says back", () => {
   const placed = (lang: Intent["language"], transcript: string, p: Partial<Intent>) => {
     const i = track({ language: lang, landmark_name: "Bérault", relation: "at", ...p });
-    return withTrackNumber(resolveReport({ ...base, intent: i, transcript, lastPosition: at(CASTLE), tracks: [{ n: 3 }] }), 3, i);
+    return withTrackNumber(resolveReport({ ...base, intent: i, transcript, lastPosition: at(CASTLE), tracks: [{ n: 3 }] }), 3, i, transcript);
   };
 
   it("the number, what it is and where, in the speaker's language", () => {
@@ -283,17 +392,19 @@ describe("what the app says back", () => {
 
   it("from the observer: the distance and direction from them", () => {
     const i = track({ distance_m: 300, direction: "north_east", language: "uk" });
-    const r = withTrackNumber(resolveReport({ ...base, intent: i, transcript: "Бачу дрон за триста метрів на північний схід від мене", lastPosition: at(CASTLE) }), 4, i);
+    const heard = "Бачу дрон за триста метрів на північний схід від мене";
+    const r = withTrackNumber(resolveReport({ ...base, intent: i, transcript: heard, lastPosition: at(CASTLE) }), 4, i, heard);
     expect(r.track?.say).toBe("Об'єкт 4, невідомий дрон, 300 метрів на північний схід від вас.");
   });
 
   it("a question starts with the number; with no mission the words say there is no number", () => {
     const i = track({ landmark_category: "town_hall", relation: "in_front_of" });
-    const ask = resolveReport({ ...base, intent: i, transcript: "Enemy vehicle in front of the town hall", lastPosition: at(CASTLE) });
-    expect(withTrackNumber(ask, 5, i).question).toMatch(/^Track 5\. Which town hall: /);
-    expect(withTrackNumber(ask, 5, i).track?.say).toBeUndefined();
+    const heard = "Enemy vehicle in front of the town hall";
+    const ask = resolveReport({ ...base, intent: i, transcript: heard, lastPosition: at(CASTLE) });
+    expect(withTrackNumber(ask, 5, i, heard).question).toMatch(/^Track 5\. Which town hall: /);
+    expect(withTrackNumber(ask, 5, i, heard).track?.say).toBeUndefined();
     const j = track({ landmark_name: "Bérault", relation: "at" });
-    const unsaved = withTrackNumber(resolveReport({ ...base, intent: j, transcript: "Enemy vehicle at Bérault", lastPosition: at(CASTLE) }), null, j);
+    const unsaved = withTrackNumber(resolveReport({ ...base, intent: j, transcript: "Enemy vehicle at Bérault", lastPosition: at(CASTLE) }), null, j, "Enemy vehicle at Bérault");
     expect(unsaved.track).toMatchObject({ n: null, say: "Hostile vehicle, Bérault. Not numbered: no mission." });
   });
 });

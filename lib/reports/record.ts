@@ -222,7 +222,7 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     if (t && resolution.status !== "unresolved") {
       // The same count as tracks placed at the command post.
       const n = t.n ?? nextTrackNumber(entries);
-      resolution = input.intent ? withTrackNumber(resolution, n, input.intent) : { ...resolution, track: { ...t, n } };
+      resolution = input.intent ? withTrackNumber(resolution, n, input.intent, input.transcript) : { ...resolution, track: { ...t, n } };
       const from = input.lastPosition;
       track = {
         n,
