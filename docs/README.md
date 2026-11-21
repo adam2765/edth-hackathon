@@ -32,6 +32,7 @@ New to the project? Read these in order:
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: four roles for the four of us, one of them evidence then pitch, and what we leave out to fit | The team agrees a split, or the mentors' answers move it |
 | [receiver-review.md](receiver-review.md) | The Saturday-night review of the receiver: what was fixed, and the decisions left for Alex | A decision in it is made; delete it when none are left |
+| [handoff-prompt-tuning.md](handoff-prompt-tuning.md) | Handoff: tuning the extraction prompt with the eval and the two skills, where it stands, what is next | A cycle finishes; fold it into evals/README.md when the work settles |
 | [handoff-android-microphone.md](handoff-android-microphone.md) | Android PCM implemented; remaining recognition and timing checks | Delete it when validation is done |
 
 Elsewhere in the repo:
@@ -45,6 +46,7 @@ Elsewhere in the repo:
 | [transmitter/README.md](../transmitter/README.md) | The native app: build, run, speech-to-text options |
 | [scenarios/README.md](../scenarios/README.md) | Scripted reports and their file format |
 | [evals/README.md](../evals/README.md) | The extraction eval: cases, how to run it, the latest scores |
+| [evals/journal.md](../evals/journal.md) | Every attack and tune of the extraction prompt |
 
 ## How these docs work
 
