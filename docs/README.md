@@ -43,6 +43,7 @@ Elsewhere in the repo:
 | [AGENTS.md](../AGENTS.md) | Instructions for coding agents; Claude Code and Codex read the same file |
 | [transmitter/README.md](../transmitter/README.md) | The native app: build, run, speech-to-text options |
 | [scenarios/README.md](../scenarios/README.md) | Scripted reports and their file format |
+| [evals/README.md](../evals/README.md) | The extraction eval: cases, how to run it, the latest scores |
 
 ## How these docs work
 

@@ -29,6 +29,7 @@ data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, iziu
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
+evals/                      extraction eval: transcripts with expected intent fields, and saved runs
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
 tests/                      vitest
 docs/                       design docs, one Markdown file per topic; start at docs/README.md
@@ -45,6 +46,7 @@ npx tsc --noEmit            # type-check (excludes transmitter/)
 npm run lint
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (network)
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
+npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
 ```
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`.

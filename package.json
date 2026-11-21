@@ -11,7 +11,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
-    "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts"
+    "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts",
+    "eval:extract": "tsx scripts/eval-extraction.ts"
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",

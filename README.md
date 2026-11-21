@@ -132,6 +132,7 @@ PROVIDER_MODE=local npm run dev -- -p 3117     # offline mode: no key, needs Oll
 
 ```bash
 npm test             # resolver unit tests
+npm run eval:extract # score intent extraction on evals/extraction.cases.json (needs a key, or PROVIDER_MODE=local)
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes, kyiv or izium)
 ```
 
