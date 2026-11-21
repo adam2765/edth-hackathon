@@ -174,6 +174,8 @@ export async function POST(req: Request) {
       // About the speaker, or about a track the speaker sees: the words decide, and the resolver places either.
       resolve: (intent, text) => resolveReport({ intent, transcript: text, lastPosition, now, gazetteer, areaCentre: area.centre, tracks, observer: callsign }),
       gazetteer,
+      last: lastPosition,
+      now,
       alsoReport: (text) => kindSaid(text) != null || affiliationSaid(text) != null || trackNumberSaid(text) != null,
     });
     const { intent, resolution } = read;
