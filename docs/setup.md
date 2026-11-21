@@ -40,7 +40,7 @@ prepared or downloaded on the phone. Its existing setup command is now a quick r
 notice. Existing native libraries stay compatible, so this change needs a JavaScript reload,
 not a native rebuild. Scenarios use their compressed audio through the same report path.
 
-For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper-cpp ffmpeg`). Build prepares the pinned Whisper turbo and VAD models on the host, about 575 MB.
+For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper.cpp ffmpeg`). Build prepares the pinned Whisper turbo and VAD models on the host, about 575 MB.
 Ask before these system installs and large downloads. Start validates existing models and
 starts whisper-server; it does not download them. `WHISPER_MODEL_FILE` can provide a local
 copy of the pinned turbo model instead of a download.

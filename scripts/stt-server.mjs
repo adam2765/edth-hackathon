@@ -73,8 +73,6 @@ async function prepare(model) {
 }
 
 try {
-  if (!has("whisper-server", "--help")) throw new Error("whisper-server not found. Install whisper.cpp (macOS: brew install whisper-cpp); see docs/setup.md.");
-  if (!has("ffmpeg", "-version")) throw new Error("ffmpeg not found. Install ffmpeg (macOS: brew install ffmpeg); see docs/setup.md.");
   const preparing = process.argv.includes("--prepare");
   if (!preparing) {
     for (const model of [WHISPER, VAD]) {
@@ -84,13 +82,15 @@ try {
   const whisper = await prepare(WHISPER);
   const vad = await prepare(VAD);
   if (preparing) { console.log("Coordinator speech models ready (checksums verified)."); process.exit(0); }
+  if (!has("whisper-server", "--help")) throw new Error("whisper-server not found. Install whisper.cpp (macOS: brew install whisper.cpp); see docs/setup.md.");
+  if (!has("ffmpeg", "-version")) throw new Error("ffmpeg not found. Install ffmpeg (macOS: brew install ffmpeg); see docs/setup.md.");
   console.log(`Whisper large-v3-turbo and Silero VAD ready (checksums verified). Starting whisper-server on 127.0.0.1:${port}.`);
   // --convert: ffmpeg turns the browser's webm and the phone's m4a into the WAV Whisper reads.
   const args = ["-m", whisper, "--host", "127.0.0.1", "--port", port, "--convert", "--vad", "--vad-model", vad];
   const server = spawn("whisper-server", args, { stdio: "inherit" });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => server.kill(signal));
   server.on("error", (error) => { console.error(error.message); process.exitCode = 1; });
-  server.on("exit", (code) => process.exit(code ?? 0));
+  server.on("exit", (code, signal) => process.exit(code ?? (["SIGINT", "SIGTERM"].includes(signal) ? 0 : 1)));
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

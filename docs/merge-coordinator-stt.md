@@ -19,3 +19,13 @@ No upstream extraction prompt is changed or evaluated as part of this task.
 Local transcription needs whisper.cpp’s whisper-server, ffmpeg and about 575 MB of pinned
 host models. They are not installed or downloaded without approval. Focused provider and
 start/stop checks use stubs; a live phone-to-coordinator microphone check follows setup.
+
+Setup on Brian’s Mac, 21 November: host tools installed and turbo/VAD model checksums
+verified after approval. The two obsolete Android document models were removed (238 MB),
+keeping app settings. Model preparation runs independently of the runtime binaries; Start
+checks the binaries. The real CPU Whisper startup/health/shutdown check passed. A GPU
+startup attempt inside the coding tool failed allocating Metal memory. Normal Terminal
+Build/Start then succeeded with GPU Whisper and extraction warm-up; coordinator health
+returned `ready: true`. The updated phone app loaded and its old model directory stayed
+empty. A real microphone report is still unmeasured. An unexpected
+Whisper signal exit now reports failure instead of exit code zero.
