@@ -1,6 +1,6 @@
 # Handoff: tuning the intent-extraction prompt
 
-Written Saturday 21 November, late morning (Paris time), for whoever picks up the prompt work next, person or coding agent. The work is ongoing, not a one-off: when it settles, fold what is still true into [evals/README.md](../evals/README.md) and delete this file and its row in [README.md](README.md).
+Written Saturday 21 November, late morning (Paris time), updated after the side-word tune, for whoever picks up the prompt work next, person or coding agent. The work is ongoing, not a one-off: when it settles, fold what is still true into [evals/README.md](../evals/README.md) and delete this file and its row in [README.md](README.md).
 
 ## What this work is
 
@@ -13,7 +13,7 @@ The goal is fewer **wrong pins**: a pin or a heading on the map at a place the s
 1. [evals/README.md](../evals/README.md): the eval, the case format, how to read a run, the scores so far, the open questions.
 2. [evals/journal.md](../evals/journal.md): every attack and tune so far, what it found, what was accepted.
 3. [.agents/skills/prompt-attack/SKILL.md](../.agents/skills/prompt-attack/SKILL.md) and [.agents/skills/prompt-tune/SKILL.md](../.agents/skills/prompt-tune/SKILL.md): the two procedures. A coding agent loads them as skills (`prompt-attack`, `prompt-tune`); a person follows them by hand.
-4. Decisions [153], [159] and [169] in [DECISIONS.md](../DECISIONS.md): why the eval works the way it does, and the first tune.
+4. Decisions [153], [159], [169] and [179] in [DECISIONS.md](../DECISIONS.md): why the eval works the way it does, and the two tunes.
 
 ## Where things are
 
@@ -60,22 +60,22 @@ Work one rule at a time, in this loop:
 3. **Record**: new baselines from the accepted runs, a decision line, a journal entry, the scores table in `evals/README.md`, and `docs/known-gaps.md` if a gap opened or closed.
 4. **Commit** when the person asks: the prompt change, the baselines, the run files, and the records together.
 
-## Where it stands (21 Nov, prompt `5f066fb66b`, 75 cases)
+## Where it stands (21 Nov, prompt `4c9ef72e73`, 85 cases)
 
 | Model | Case results passed | Wrong pins | Median |
 |---|---|---|---|
-| Mistral Small (hosted) | 209 of 225 | 0 | 0.7 s |
-| Ministral 3 3B (local) | 156 of 225 | 9 | 2.6 s |
+| Mistral Small (hosted) | 237 of 255 | 0 | 0.7 s |
+| Ministral 3 3B (local) | 174 of 255 | 12 | 2.3 s |
 
-Done: the eval, the skills, one attack and one tune (two places in one report).
+Done: the eval, the skills, one attack and two tunes (two places in one report; a side word alone, "Friendly at the town hall.", is a track).
 
 ## Next, in order
 
-1. **Example names leak into the 3B model's answers.** It writes "Bérault", from two of the prompt's examples ("Moving towards Bérault", "Track 3 moved to Bérault"), for "Two blocks past the church" and "Je suis derrière l'hôtel de ville", and pins the unit at Bérault metro (`p-blocks`, `fr-hdv`). Tune: rewrite the examples' Vincennes and Kyiv names to names in no gazetteer, then check the hosted model did not lose anything. This also touches decision [104] (the 3B model labelling English as Ukrainian after Kyiv examples).
+1. **Example names leak into the 3B model's answers.** It writes "Bérault", from two of the prompt's examples ("Moving towards Bérault", "Track 3 moved to Bérault"), for "Two blocks past the church" and "Je suis derrière l'hôtel de ville", and pins the unit at Bérault metro (`fr-hdv`; `p-blocks` until the side-word tune). It also reads "From Bérault metro, moving towards the town hall." as going to Bérault, like the example (`a-two-places-2`). Tune: rewrite the examples' Vincennes and Kyiv names to names in no gazetteer, then check the hosted model did not lose anything. This also touches decision [104] (the 3B model labelling English as Ukrainian after Kyiv examples).
 2. **Generic words written as names:** "pharmacy", "park", "cimetière" come back as `landmark_name` (`a-two-places-3`, `-4`, `-5`). Attack and tune the `landmark_name` rule.
 3. **"Outside" read as near** (`p-outside`) and **«за» read as near** on the 3B model (`uk-behind`): the relation rule.
 4. **"Copy that, moving out" read as a movement** (`o-moving-out`): the rule for `other`.
-5. **Attack the rules with few cases:** tracks (7 cases), crossings, lemmas on the 3B model, distances in words.
+5. **Attack the rules with few cases:** tracks (17 cases, 10 of them side words), crossings, lemmas on the 3B model, distances in words.
 
 Not a prompt cycle, but waiting on one: "I'm at Vincent station." pins a school named Vincent d'Indy through the resolver ([known-gaps.md](known-gaps.md)). Add it as a case once the resolver asks back there ([evals/README.md](../evals/README.md#open) has the details).
 
