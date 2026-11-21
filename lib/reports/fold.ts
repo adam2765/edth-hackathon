@@ -8,7 +8,7 @@ import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
 import { describeTrack } from "../geo/trackKinds";
-import type { JoinEntry, LogEntry, PlotEntry, ReportEntry, StartPoint, TrackSighting, UnitPosition } from "./types";
+import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, Sender, StartPoint, TrackSighting, UnitPosition } from "./types";
 
 /** The command post's colour in the feed: a slate grey no call sign is given. */
 export const CP_COLOUR = "#334155";
@@ -43,7 +43,7 @@ export interface UnitState {
   positionTs: number | null;
   /** Earlier positions, oldest first. */
   trail: { lat: number; lon: number; ts: number }[];
-  /** Last join, report or answer from this call sign. */
+  /** Last join, report or answer from this call sign; 0 for a call sign on the roster not heard yet. */
   lastHeard: number;
   pending: Pending | null;
   /** When it joined the mission; null for a call sign that reported without joining (no mission). */
@@ -97,8 +97,11 @@ export interface TrackState {
 }
 
 export interface FeedItem {
-  /** A report, a call sign joining, or something the command post did to a track. */
-  kind: "report" | "join" | "plot";
+  /**
+   * A report, a call sign joining, something the command post did to a track, or a note of what it
+   * did with a held radio report (added a call sign, dismissed the report).
+   */
+  kind: "report" | "join" | "plot" | "note";
   /** The report's or the join's id. */
   id: string;
   ts: number;
@@ -118,6 +121,8 @@ export interface FeedItem {
   answer: { ts: number; choice: string | null; name: string | null; by: string | null } | null;
   /** The mission ended while the question was open, so it can no longer be answered. */
   expired: boolean;
+  /** For a radio report: how its sender was found [202]. */
+  sender?: Sender;
 }
 
 export interface MissionState {
@@ -132,7 +137,12 @@ export interface MissionState {
 export interface SessionState {
   /** Null for a session from before missions. */
   mission: MissionState | null;
+  /** Roster call signs first, in roster order, then any other that joined or reported. */
   units: UnitState[];
+  /** The call signs a radio report can go to [201]. */
+  roster: string[];
+  /** Radio reports waiting for the operator, oldest first [203]. */
+  held: HeldEntry[];
   /** By number. */
   tracks: TrackState[];
   /** Newest first. */
@@ -144,13 +154,32 @@ export interface SessionState {
   area: AreaId | null;
 }
 
-/** Colours by call sign, from the whole log, so a call sign keeps its colour through a replay. */
+/** Colours by call sign, from the whole log, so a call sign keeps its colour through a replay. Roster order first. */
 export function colourMap(entries: LogEntry[]): Map<string, string> {
   const m = new Map<string, string>();
+  const give = (c: string) => {
+    if (!m.has(c)) m.set(c, UNIT_COLOURS[m.size % UNIT_COLOURS.length]);
+  };
   for (const e of entries) {
-    if ((e.kind === "report" || e.kind === "join" || e.kind === "answer") && !m.has(e.callsign)) m.set(e.callsign, UNIT_COLOURS[m.size % UNIT_COLOURS.length]);
+    if (e.kind === "mission") (e.roster ?? []).forEach(give);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster") give(e.callsign);
   }
   return m;
+}
+
+/** How a radio report's sender was found, in words for the feed [202]. */
+export function describeSender(s: Sender): string {
+  const words = s.heard ? `“${s.heard}”` : "no call sign";
+  switch (s.how) {
+    case "exact":
+      return `Call sign heard: ${words}.`;
+    case "near":
+      return `Call sign heard: ${words}, close to this one only.`;
+    case "reply":
+      return "No call sign: taken as the reply to this unit's open question.";
+    case "operator":
+      return `Call sign heard: ${words}. Given to this unit by the command post.`;
+  }
 }
 
 export function describePosition(p: UnitPosition): string {
@@ -235,6 +264,11 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   let last: number | null = null;
   let area: AreaId | null = null;
   let mission: MissionState | null = null;
+  const roster: string[] = [];
+  const held = new Map<string, HeldEntry>();
+  const enlist = (c: string) => {
+    if (!roster.includes(c)) roster.push(c);
+  };
 
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
@@ -375,6 +409,42 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     if (e.kind === "mission") {
       mission = { name: e.name, area: e.area, start: e.start, opened: e.ts, ended: null };
       area = e.area;
+      // The roster's units are listed from the start, not heard yet [201].
+      for (const c of e.roster ?? []) {
+        enlist(c);
+        unitFor(c, e.area);
+      }
+      continue;
+    }
+
+    if (e.kind === "held") {
+      held.set(e.id, e);
+      continue;
+    }
+
+    if (e.kind === "roster" || e.kind === "dismiss") {
+      const was = e.held ? held.get(e.held) : undefined;
+      if (e.kind === "dismiss") held.delete(e.held);
+      else {
+        enlist(e.callsign);
+        unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      }
+      feed.set(e.id, {
+        kind: "note",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: mission?.area ?? area ?? "vincennes",
+        transcript: was?.transcript ?? "",
+        status: "resolved",
+        outcome: e.kind === "roster" ? `Added ${e.callsign} to the roster.` : was?.transcript ? `Dismissed a radio report: “${was.transcript}”` : "Dismissed a radio report.",
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: null,
+      });
       continue;
     }
 
@@ -394,6 +464,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
 
     if (e.kind === "join") {
+      enlist(e.callsign);
       const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
       const again = u.joined != null;
       u.joined ??= e.ts;
@@ -456,6 +527,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       const r = e.resolution;
       // A report about a track: the unit was heard, and does not move. It owes the answer to any question.
       const seen = e.track ? seeTrack(e, e.track) : null;
+      // A held radio report the operator gave to this unit leaves the tray [203].
+      if (e.sender?.held) held.delete(e.sender.held);
       if (e.position && !seen) {
         move(u, e.position, e.ts);
         u.street = streetAfter(u.street, r.candidates.find((c) => c.id === r.evidence.feature_id));
@@ -480,6 +553,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         answer: null,
         expired: false,
         track: seen ? seen.track.n : null,
+        ...(e.sender ? { sender: e.sender } : {}),
       });
       continue;
     }
@@ -522,6 +596,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   return {
     mission,
     units: [...units.values()],
+    roster,
+    held: [...held.values()],
     tracks: [...tracks.values()].sort((a, b) => a.n - b.n),
     feed: [...feed.values()].sort((a, b) => b.ts - a.ts),
     first,

@@ -1,6 +1,6 @@
 # Call signs from the words
 
-Who sent a radio report, read from its words and matched against the mission's roster [200]. Status on 21 Nov, 18:15 Paris time: the reader and its eval are built (`lib/geo/callsigns.ts`, `evals/callsigns.cases.json`). Nothing calls the reader yet: the coordinator still takes the call sign from the phone's join, and no contract has changed. Wiring it in is [step 2](#next-step-2), and waits for Alex.
+Who sent a radio report, read from its words and matched against the mission's roster [200]. Status on 21 Nov, 18:45 Paris time: the reader and its eval are built (`lib/geo/callsigns.ts`, `evals/callsigns.cases.json`), and the coordinator uses it for radio reports, with the mission's roster, the command post's Unassigned tray and two guards ([In the coordinator](#in-the-coordinator), decisions 201 to 205). A phone that joins still names itself.
 
 ## Why
 
@@ -85,13 +85,34 @@ What this does not show: every transcript is written by hand, in the way speech-
 - **The sender is the first call sign.** "Bravo 2 is at the church", said by another unit without its own call sign, reads BRAVO 2. The position is still BRAVO 2's, so the marker is right; "Bravo 2 is 200 metres north of me" would not be.
 - **Numbers in English, French and Ukrainian only,** with some Russian. Ukrainian ordinals («перший») are not numbers here.
 
-## Next: step 2
+## In the coordinator
 
-These change contracts, each with its own decision line, and wait for Alex:
+Built on 21 Nov (Alex: "Yes, start step 2"). The code is `lib/reports/radio.ts` (who sent it, the guards), `lib/reports/record.ts` (saving), `app/api/report/route.ts` and `app/api/sessions/[code]/held/[id]/route.ts`. The fields are in [contracts.md](contracts.md).
 
-- The mission gains a roster that the operator sets when opening it (`POST /api/sessions`, `components/MissionPanel.tsx`).
-- An unknown call sign that checks in ("CHARLIE 3, checking in") asks the operator to add it or pick an existing unit. Only the operator's click adds one.
-- A report keeps the call sign as heard and how it matched.
-- The command post gets an "Unassigned" tray with the report's words and audio, and "assign to" for the operator.
-- Two guards ask the operator instead of acting: an implausible move ("ALPHA 2 moved 3 km in 20 s. Was that ALPHA 1?"), with the 15 m/s reachability check of decision 188; and a reply with no call sign while a question to one unit is open and recent, which goes to that unit.
-- The roster goes to Voxtral as hints. The offline Whisper turbo takes no prompt [195], so offline matching must cope without them, as the eval assumes.
+**The roster [201].** The operator types the call signs on the radio net when opening a mission, split by commas. The operator can add one later from the tray. A phone that joins puts its call sign on the roster too. The units list shows each roster unit from the start, "On roster, not heard yet". Only the operator adds a call sign: **a transcript never creates a unit.**
+
+**A radio report [202]** is a report to a mission with no `callsign` field. The coordinator reads the sender from the words:
+
+| The reader answers | What happens |
+|---|---|
+| One unit, exact or near | The report goes to that unit, as if it had come from its phone. It keeps the call sign as heard and how it matched. The model reads only the words after the call sign: with "Charlie 3," in front, the offline model read "Charlie 3, checking in, at the town hall." as a sighting of something else. |
+| No call sign, one unit's question open in the last 2 minutes | It is that unit's reply, and goes to it [204]. It is then read as a new report, as a phone's would be: spoken answers are not built yet [199]. |
+| Ask which, a call sign not on the roster, no call sign, the command post speaking, no words | Held for the operator. |
+
+**The Unassigned tray [203].** A held report waits at the top of the command post's side panel with its words, its recording and the question for the operator ("Heard “Alpha”. Which unit sent this: ALPHA 1 or ALPHA 2?", "CHARLIE 3 is not on the roster. Add it, or give the report to a unit."). The operator can give it to a unit it may be from, to any unit on the roster, add the call sign it read ("Add CHARLIE 3") or one typed in, or dismiss it. Each is asked once more first. A report given to a unit is read again from where that unit was when the report came in, since "200 metres north of me" depends on who said it. The first decision stands. The recording is kept on the coordinator under `.data/sessions/audio/`, and moves to `deleted/` with the mission.
+
+**Two guards [204]** ask the operator instead of acting:
+
+- **A move the unit could not have made.** A radio report that would put a unit farther than 15 m/s allows from its last fix, plus that fix's size and 100 m (the check of decision 188), is held: "ALPHA 2 moved 3.0 km in 20 s. Was that ALPHA 1?". The units named are those that could have got there. A unit still at the start point, or never placed, has no fix to measure from, so its first place is not checked. Phones are not checked: a phone names itself.
+- **A reply with no call sign.** As in the table: to a unit only when exactly one unit's question is open and was asked in the last 2 minutes. Two open questions: held, asking which.
+
+**Roster hints [205].** The roster's call signs go first in the hints sent to Voxtral with a radio report, so it writes them as the roster does. The offline Whisper turbo takes no prompt [195], so offline the reader works from what Whisper wrote, as the eval assumes.
+
+### Not done
+
+- **No real radio audio yet.** Radio reports were checked typed and in tests. The next measure is real clips through Whisper and Voxtral.
+- **A reply with no call sign can replace the question.** It goes to the unit, then is read as a new report, since spoken answers are not built [199]. Tried on the offline model: "The first one." in reply to "Which town hall?" became a new question about the château. Wiring the reply reader in is the fix.
+- **An answer is not checked for reachability.** The far-move guard checks a radio report's own place, not the place an answer picks later.
+- **A `far` report's place is not drawn on the map** while it waits; the tray says it in words.
+- **A report given from the tray is dated when the operator gave it,** not when it came in. The next reachability check for that unit then counts from the later time, so it is a little stricter.
+- **The command post's call sign is the default list.** `opts.station` is not set from the mission yet.

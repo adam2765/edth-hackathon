@@ -18,8 +18,11 @@ export type CallsignMatch =
   | { kind: "unit"; callsign: string; how: CallsignHow; heard: string; why: string }
   /** More than one roster entry is close, or one is and the words may name a unit not on the roster. */
   | { kind: "ask"; candidates: string[]; heard: string; why: string }
-  /** No sender on the roster. `read` is a call sign heard that is not on it ("DELTA 4"), if any. */
-  | { kind: "unassigned"; heard: string | null; read: string | null; why: string };
+  /**
+   * No sender on the roster. `read` is a call sign heard that is not on it ("DELTA 4"), if any.
+   * `station` is set when the command post is the one speaking ("ALPHA 1, this is BASE").
+   */
+  | { kind: "unassigned"; heard: string | null; read: string | null; why: string; station?: true };
 
 export interface CallsignOptions {
   /** The command post's own call signs: who is being called, never the sender. Default `STATION_CALLSIGNS`. */
@@ -389,7 +392,7 @@ export function matchCallsign(transcript: string, roster: string[], opts: Callsi
   if (first) {
     const at = seqAt(toks, first.end, INTRO);
     if (at > first.end && stationAt(toks, at, stations) > at) {
-      return { ...none, why: `the command post is speaking, to "${heardOf(toks, first)}"` }; // "ALPHA 1, this is BASE", "Соколе, я База"
+      return { ...none, station: true, why: `the command post is speaking, to "${heardOf(toks, first)}"` }; // "ALPHA 1, this is BASE", "Соколе, я База"
     }
     if (at > first.end) {
       const second = readAt(toks, at, entries);

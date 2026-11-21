@@ -34,6 +34,16 @@ export const MAX_SPEED_MS = 15;
 /** Slack for the size of a place and the error of a position, metres. */
 const REACH_SLACK_M = 100;
 
+/**
+ * How far a speaker could have gone since their last position, metres: 15 m/s for the time since
+ * it, plus the position's uncertainty and 100 m [188]. A radio report that would move a unit
+ * farther waits for the operator [204].
+ */
+export function reachM(last: LastPosition, now: number): number {
+  const elapsed_s = Math.max(0, now - last.ts) / 1000;
+  return MAX_SPEED_MS * elapsed_s + Math.max(last.uncertainty_m ?? 0, last.radius_m ?? 0) + REACH_SLACK_M;
+}
+
 /** ">>" anywhere, or a dash at the very start or straight after the end of a sentence. */
 const VOICE_MARK = /\s*>>+\s*|(?:^|(?<=[.!?…»”"]))\s*[-–—]\s+/u;
 /** Sounds, not words: "[BLANK_AUDIO]", "(wind blowing)", "*sighs*". */
@@ -170,7 +180,7 @@ export function combineVoices(
   // last position. A voice that cannot be checked (a movement, an open question, no place) is kept.
   if (last && now != null) {
     const elapsed_s = Math.max(0, now - last.ts) / 1000;
-    const reach_m = MAX_SPEED_MS * elapsed_s + Math.max(last.uncertainty_m ?? 0, last.radius_m ?? 0) + REACH_SLACK_M;
+    const reach_m = reachM(last, now);
     const far: string[] = [];
     const reachable = said.filter((r) => {
       const res = r.resolution;

@@ -8,7 +8,7 @@
  * - `none`: keeps nothing (default on Vercel, where files are neither kept nor shared between
  *   instances). Reports still get their answer; the command post says the site keeps no record.
  */
-import { appendFile, mkdir, open, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { LogEntry, MissionEntry } from "./types";
 
@@ -23,7 +23,14 @@ export interface ReportStore {
   sessions(): Promise<{ kept: string[]; used: string[] }>;
   /** Moves a session's log out of the list, into `deleted/`. False if there was none. */
   remove(session: string): Promise<boolean>;
+  /** Keeps the recording of a held radio report, for the operator to listen to [203]. False if not kept. */
+  saveAudio(session: string, file: string, data: Buffer): Promise<boolean>;
+  /** The recording, or null when there is none. */
+  readAudio(session: string, file: string): Promise<Buffer | null>;
 }
+
+/** A recording's file name as kept: an entry id and an audio extension. */
+export const AUDIO_FILE = /^[a-z0-9]+-[a-z0-9]+\.(wav|m4a|mp4|aac|caf|webm|ogg|mp3|bin)$/;
 
 class NoStore implements ReportStore {
   readonly kind = "none" as const;
@@ -39,6 +46,12 @@ class NoStore implements ReportStore {
   }
   async remove(): Promise<boolean> {
     return false;
+  }
+  async saveAudio(): Promise<boolean> {
+    return false;
+  }
+  async readAudio(): Promise<Buffer | null> {
+    return null;
   }
 }
 
@@ -99,14 +112,38 @@ export class FileStore implements ReportStore {
     const from = this.file(session);
     const bin = path.join(this.dir, "deleted");
     await mkdir(bin, { recursive: true });
+    const stamp = Date.now();
     try {
-      await rename(from, path.join(bin, `${session}~${Date.now()}.jsonl`));
+      await rename(from, path.join(bin, `${session}~${stamp}.jsonl`));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw err;
     }
     this.cache.delete(session);
+    // Its held reports' recordings go with it [203].
+    await rename(path.join(this.dir, "audio", session), path.join(bin, `${session}~${stamp}.audio`)).catch(() => {});
     return true;
+  }
+
+  /** Recordings of held radio reports sit in `audio/<session>/` beside the logs [203]. */
+  private audioFile(session: string, file: string): string {
+    if (!/^[a-z0-9_-]+$/.test(session) || !AUDIO_FILE.test(file)) throw new Error(`bad audio file: ${session}/${file}`);
+    return path.join(this.dir, "audio", session, file);
+  }
+
+  async saveAudio(session: string, file: string, data: Buffer): Promise<boolean> {
+    const to = this.audioFile(session, file);
+    await mkdir(path.dirname(to), { recursive: true });
+    await writeFile(to, data);
+    return true;
+  }
+
+  async readAudio(session: string, file: string): Promise<Buffer | null> {
+    try {
+      return await readFile(this.audioFile(session, file));
+    } catch {
+      return null;
+    }
   }
 
   async list(session: string, after = 0): Promise<{ total: number; entries: LogEntry[] }> {
