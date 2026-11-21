@@ -80,7 +80,7 @@ Checked on Friday night, 20 November.
 
 | Built | Not done |
 |---|---|
-| One speaker's path, end to end, on the live site: Vincennes and central Kyiv | The live site keeps no reports, so its receiver is empty. It also lags `main`. |
+| One speaker's path, end to end, on the live site: Vincennes and central Kyiv | The live site keeps no reports, so its receiver is empty. |
 | Shared map, call signs, replay; missions that open, are joined and end | A run with two or three real phones and a projector |
 | Native app on an iPhone, with speech-to-text on the phone | The Android microphone ([handoff](handoff-android-microphone.md)) |
 | Offline mode: intent on the Mac through Ollama, no key needed | The offline network, HTTPS and the offline map |

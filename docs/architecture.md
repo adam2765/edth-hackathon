@@ -8,7 +8,7 @@ One speaker's path works end to end on the live site, in two areas and three lan
 - **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It keeps missions: each report in a mission goes to that mission's log, and the unit's last position comes from that log [99, 107, 108].
 - **Receiver**: the shared map at the base station, with every call sign and a replay. `/receiver`; it opens and ends missions and otherwise only shows [98, 113].
 - **Mission**: one run, with a code, an area and an optional start point. Phones join it before they report [107, 114].
-- **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`, and since 21 November `izium`, on `main` and not deployed).
+- **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`, and since 21 November `izium`). All three are on the live site.
 
 ```
 transmitters                 coordinator (Next.js, Vercel cdg1 or the Mac)           receiver (/receiver)
@@ -48,7 +48,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Resolver | `lib/geo/resolver.ts` | Pure function, unit-tested (`npm test`) |
 | Gazetteers | `data/gazetteer.vincennes.json` (1,108 places), `data/gazetteer.kyiv.json` (2,840), rebuilt 20 November; `data/gazetteer.izium.json` (714), built Saturday 21 November | Built with `npm run gazetteer -- <area>`; the running app never calls Overpass. See [gazetteer.md](gazetteer.md). Izium is a town near the front in Kharkiv Oblast; its 9 demo reports were typed into the coordinator with hosted Mistral, 9 of 9. Not spoken yet. |
 | Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web in a worker, so the page keeps responding [105]. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |
-| Stated distances, eight compass points, dead reckoning | resolver and extractor | On `main`, **not deployed** |
+| Stated distances, eight compass points, dead reckoning | resolver and extractor | Live since the deploy of 21 November |
 | Native transmitter (Expo 58, React Native) | `transmitter/` | Runs in the iPhone simulator and, since 20 Nov, on an iPhone 13 mini through the coordinator on a Mac: Kyiv scenario 10 of 10 steps, round trip 1.2 to 1.9 s [79]. Not yet on Android. |
 | On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices. A third, `izium-demo.json` (9 steps, 21 November), has no clips yet: `npm run scenarios` makes them. |
@@ -57,7 +57,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 
-**Deploys.** The live site is https://edth-hackathon.vercel.app. It is deployed with the Vercel CLI from Alex's account; the project is not connected to GitHub, so a push does not deploy. Production is at commit `384d7aa`, behind `main`.
+**Deploys.** The live site is https://edth-hackathon.vercel.app. It is deployed with the Vercel CLI from Alex's account; the project is not connected to GitHub, so a push does not deploy. Production is at commit `e030cc3`, deployed on Saturday 21 November at 09:10 and checked with typed reports in all three areas. The live site keeps no reports, so it has no missions and its receiver stays empty [101]. `.vercelignore` says what the CLI must not upload: it does not read `.gitignore` [144]. Before changing it, look at what would go up with `vercel deploy --prod --dry`.
 
 **Repo.** https://github.com/beverage/edth-hackathon is public. Commit author emails are therefore public too.
 

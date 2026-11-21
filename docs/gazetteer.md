@@ -62,7 +62,7 @@ A coordinator that is running picks up a new area only when the import and the f
 
 ## Izium, added Saturday 21 November
 
-A third area: Ізюм, a town in Kharkiv Oblast on both banks of the Siverskyi Donets, with 45,000 to 50,000 people before 2022. It was occupied from April to September 2022 and is known for that. It is under Ukrainian control; about 29,000 people lived in its community in 2025 (Suspilne). Status of everything below: Saturday 21 November, 02:00 Paris time. On `main`, not deployed.
+A third area: Ізюм, a town in Kharkiv Oblast on both banks of the Siverskyi Donets, with 45,000 to 50,000 people before 2022. It was occupied from April to September 2022 and is known for that. It is under Ukrainian control; about 29,000 people lived in its community in 2025 (Suspilne). Status of everything below: Saturday 21 November, 02:00 Paris time. On the live site since the deploy of 21 November, 09:10.
 
 **Why Izium.** It is the only candidate with enough in OpenStreetMap for the demo, and nobody disputes who holds it. Lysk's sentences work there: a named station, two cathedrals and a church, a central square, a river, a district hospital, 503 streets. It also has real ambiguity: two churches 345 m and 620 m from the central square, a street and a lane both called Шевченка, three waterways within reach of one spot.
 

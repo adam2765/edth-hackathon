@@ -3,7 +3,7 @@
 EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map updates.
 When a report could mean more than one place, the app asks back instead of guessing.
 
-Live: https://edth-hackathon.vercel.app (stage 1, single user, no auth). Two areas: Vincennes (English, French) and central Kyiv (Ukrainian, English), switched at the top of the page or with `?area=kyiv`. A third, Izium (Ukrainian, English), a town near the front in Kharkiv Oblast, is on `main` and not deployed (`?area=izium`, 21 November).
+Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no reports, so its receiver stays empty). Three areas, switched at the top of the page or with `?area=kyiv`: Vincennes (English, French), central Kyiv (Ukrainian, English) and Izium (Ukrainian, English), a town near the front in Kharkiv Oblast (`?area=izium`). Deployed from `main` on 21 November.
 
 ## How it works
 
