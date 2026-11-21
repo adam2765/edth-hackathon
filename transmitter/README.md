@@ -64,9 +64,39 @@ Android: `npx expo run:android`. This is a native build, so Expo Go cannot run i
 For the Mac USB workflow with Studio closed, use the root README's
 [command-line build and rebuild steps](../README.md#build-and-try-changes-without-android-studio).
 
-On a phone, sign with your own Apple ID: set `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
-before `npx expo run:ios --device`, because `dev.voicetomap.transmitter` belongs to Alex's team
-(`app.config.ts`). Every step, with checks: [../docs/setup.md](../docs/setup.md).
+On a phone, sign with your own Apple ID: put `APPLE_TEAM_ID` and your own `TRANSMITTER_BUNDLE_ID`
+in `transmitter/.env.local` (ignored by git), because `dev.voicetomap.transmitter` belongs to
+Alex's team (`app.config.ts`). Expo's commands and `npm run phones` read that file; a value set in
+the shell wins. Every step, with checks: [../docs/setup.md](../docs/setup.md).
+
+## Updating the phones
+
+One command on the Mac, with Metro and the coordinator running:
+
+```bash
+cd transmitter && npm run phones
+```
+
+It updates every iPhone connected to the Mac, by cable or on the same network, and opens the
+app on Metro there. A development build loads its code from Metro, so most updates need no
+install: after a change to `App.tsx` or `src/`, or a pull, the script only reopens the app. While
+Metro runs, saved changes also reach the open apps by themselves.
+
+The app is built and installed again only when its native side changed: a native package,
+`app.json`, `app.config.ts` and the variables it reads, or Expo itself. Expo's fingerprint of
+those is kept in `.expo/phones.json`, so the script knows. After such a change it runs
+`npx expo prebuild --platform ios --clean` once, then builds for each phone (decision 207). The
+first build takes several minutes; each further phone takes less. A phone that does not have
+the app yet gets it the same way, so a teammate's iPhone only needs to be plugged in, unlocked,
+trusted, and in Developer Mode.
+
+| Option | Does |
+|---|---|
+| `--check` | Says what it would do for each phone, and changes nothing |
+| `--rebuild` | Builds and installs again. With a free Apple ID the app stops opening after 7 days; the script warns a day before |
+| `--device "<name or UDID>"` | One phone only |
+
+Android phones are not covered yet: use the root README's steps.
 
 ## Which coordinator it talks to
 
