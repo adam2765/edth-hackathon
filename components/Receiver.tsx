@@ -16,11 +16,14 @@ import styles from "./Receiver.module.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const POLL_MS = 1000;
+/** With no mission on screen, how often the list of missions is read. */
+const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
 const SPEEDS = [1, 10, 30];
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-// The bottom leaves room for the replay bar; the right for the zoom buttons.
-const MAP_PADDING = { top: 70, bottom: 120, left: 60, right: 80 };
+// The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
+// label, which is wider than its marker.
+const MAP_PADDING = { top: 80, bottom: 130, left: 90, right: 90 };
 
 type LatLon = { lat: number; lon: number };
 
@@ -45,8 +48,24 @@ function arrowFeatures(from: LatLon, to: LatLon, color: string, op: number): Geo
   ];
 }
 
+// Always the 24-hour clock with seconds, whatever the browser's language is set to. Local time.
+const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+
 function fmtTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return CLOCK.format(ts);
+}
+
+/** The day, when it is not today's: an ended mission is often yesterday's. Null for today. */
+function otherDay(ts: number, now: number): string | null {
+  const d = DAY.format(ts);
+  return now > 0 && d !== DAY.format(now) ? d : null;
+}
+
+/** A moment for a label: the time, with the day in front when it is not today. */
+function fmtWhen(ts: number, now: number): string {
+  const d = otherDay(ts, now);
+  return d ? `${d}, ${fmtTime(ts)}` : fmtTime(ts);
 }
 
 function fmtAgo(ms: number): string {
@@ -58,7 +77,19 @@ function fmtAgo(ms: number): string {
 
 function fmtSpan(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+/**
+ * A wide screen is taken for a projector or a wall screen, read from across the room: the panels
+ * and the map's labels are drawn larger. The same steps as `--z` in Receiver.module.css.
+ */
+function screenScale(): number {
+  const w = window.innerWidth;
+  return w >= 2300 ? 1.6 : w >= 1700 ? 1.25 : 1;
 }
 
 // The page's address says which mission is shown, so a projector's tab can be reloaded or shared.
@@ -81,12 +112,22 @@ function showSession(code: string | null, replace = false) {
   window.dispatchEvent(new Event(LOCATION_EVENT));
 }
 
-function unitStatus(u: UnitState, silent: boolean, now: number): { text: string; tone: "ok" | "ask" | "muted" } {
-  if (u.pending) return { text: `Awaiting answer: ${u.pending.question}`, tone: "ask" };
-  if (silent) return { text: `Silent for ${fmtAgo(now - u.lastHeard)}${u.position ? ` · last at ${u.position.label}` : ""}`, tone: "muted" };
-  if (!u.position) return { text: u.joined != null ? "Joined · not placed yet" : "Not placed yet", tone: "muted" };
+type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
+
+/**
+ * A unit's state as one word (so it is never told by colour alone) and one line of detail.
+ * An open question comes first, even for a silent unit: it is the one that needs the operator.
+ */
+function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): { tag: string; text: string; tone: UnitTone } {
+  if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
   const p = u.position;
-  return { text: `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, tone: "ok" };
+  const where = p ? `${p.label} · ±${p.radius_m} m` : "";
+  if (silent) {
+    const last = p ? `Last at ${p.estimated ? "≈ " : ""}${where}` : "Never placed.";
+    return { tag: "Silent", text: silentAtEnd ? `Silent for ${silentAtEnd} when the mission ended. ${last}` : last, tone: "silent" };
+  }
+  if (!p) return { tag: "Not placed", text: u.joined != null ? "Joined. Waiting for a check-in." : "Waiting for a check-in.", tone: "none" };
+  return p.estimated ? { tag: "≈ Estimate", text: where, tone: "estimate" } : { tag: "Placed", text: where, tone: "placed" };
 }
 
 export default function Receiver() {
@@ -117,6 +158,8 @@ export default function Receiver() {
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  /** The map has taken long to load: with no network it never does, and the page should say so. */
+  const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
   const [mapSize, setMapSize] = useState("");
 
@@ -129,28 +172,36 @@ export default function Receiver() {
 
   // ---------- which mission ----------
   // No mission in the address: show the newest open one, or open the missions menu.
+  // It keeps looking, so a mission opened from another screen shows up here, and the connection
+  // light stays true while no mission is shown.
   useEffect(() => {
     if (session) return;
     let stop = false;
-    (async () => {
+    let first = true;
+    const look = async () => {
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
         if (!res.ok || stop) return;
         const data = (await res.json()) as MissionListReply;
+        if (stop) return;
         setStored(data.stored);
         setLastOk(Date.now());
         const open = data.missions.find((m) => m.ended == null);
         if (open) showSession(open.code, true);
         else {
           setNoMission(true);
-          if (data.stored) setPanelOpen(true);
+          if (data.stored && first) setPanelOpen(true);
         }
+        first = false;
       } catch {
         // The connection light shows it.
       }
-    })();
+    };
+    look();
+    const id = setInterval(look, LIST_POLL_MS);
     return () => {
       stop = true;
+      clearInterval(id);
     };
   }, [session]);
 
@@ -221,8 +272,11 @@ export default function Receiver() {
   const colours = useMemo(() => colourMap(entries), [entries]);
   const full = useMemo(() => foldLog(entries, Number.POSITIVE_INFINITY, colours), [entries, colours]);
   const view = useMemo(() => (mode === "live" ? full : foldLog(entries, replayT, colours)), [mode, full, entries, replayT, colours]);
-  const effNow = mode === "live" ? now : replayT;
   const mission = full.mission;
+  const ended = mission?.ended ?? null;
+  // The moment the picture stands for. An ended mission is shown as it was when it ended, so its
+  // units do not all read as silent for the hours since.
+  const effNow = mode === "live" ? (ended ?? now) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
   const rangeStart = full.first != null ? full.first - 2000 : 0;
   const rangeEnd = full.last != null ? full.last + 2000 : 0;
@@ -320,13 +374,23 @@ export default function Receiver() {
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
         map.addLayer({ id: "pos", type: "circle", source: "pos", paint: { "circle-radius": 9, "circle-color": ["get", "color"], "circle-opacity": op, "circle-stroke-color": "#fff", "circle-stroke-width": 3, "circle-stroke-opacity": op } });
-        // Call sign and time of the last update next to each marker, as in Lysk's brief.
+        // Call sign and time of the last update next to each marker, as in Lysk's brief. The call
+        // sign is bold; the label keeps its own opacity, so a silent unit's name stays readable.
         map.addLayer({
           id: "pos-label",
           type: "symbol",
           source: "pos",
-          layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 14, "text-offset": [0, 1.2], "text-anchor": "top", "text-allow-overlap": true, "text-ignore-placement": true },
-          paint: { "text-color": "#16212c", "text-halo-color": "#ffffff", "text-halo-width": 2, "text-opacity": op },
+          layout: {
+            "text-field": ["format", ["get", "name"], { "text-font": ["literal", ["Noto Sans Bold"]] }, "\n", {}, ["get", "when"], { "font-scale": 0.9 }],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 15,
+            "text-line-height": 1.25,
+            "text-offset": [0, 1.1],
+            "text-anchor": "top",
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: { "text-color": "#16212c", "text-halo-color": "#ffffff", "text-halo-width": 2.5, "text-opacity": ["get", "labelOp"] },
         });
         setMapReady(true);
       });
@@ -339,6 +403,12 @@ export default function Receiver() {
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (mapReady) return;
+    const t = setTimeout(() => setMapSlow(true), 12_000);
+    return () => clearTimeout(t);
+  }, [mapReady]);
 
   // Draw every unit: marker with call sign and time, circle, trail, movement arrow.
   useEffect(() => {
@@ -368,9 +438,14 @@ export default function Receiver() {
       const k = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
       const group = together.get(k) ?? [u];
       const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
-      const label = labelled.has(k) ? "" : `${group.map((x) => x.callsign).join(" · ")}\n${p.estimated ? "≈ " : ""}${fmtTime(newest)}`;
+      // The first unit of a group carries the label for all of them. "silent" is written out,
+      // because a faded marker alone is easy to miss on a projector.
+      const first = !labelled.has(k);
+      const allSilent = group.every(isSilent);
+      const name = first ? group.map((x) => (isSilent(x) && !allSilent ? `${x.callsign} (silent)` : x.callsign)).join(" · ") : "";
+      const when = first ? `${p.estimated ? "≈ " : ""}${fmtTime(newest)}${allSilent ? " · silent" : ""}` : "";
       labelled.add(k);
-      pos.push({ type: "Feature", properties: { color, op, label }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
+      pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
       acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
       if (p.heading_to) {
         // From the marker, the middle of the circle, so the trail stays visible up to it.
@@ -385,6 +460,16 @@ export default function Receiver() {
     set("arrow", arrows);
     set("target", targets);
   }, [view, isSilent, mapReady]);
+
+  // On a projector or a wall screen, the map's labels and markers grow with the panels.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const k = screenScale();
+    map.setLayoutProperty("pos-label", "text-size", Math.round(15 * k));
+    map.setLayoutProperty("start-label", "text-size", Math.round(13 * k));
+    map.setPaintProperty("pos", "circle-radius", Math.round(9 * k));
+  }, [mapReady, mapSize]);
 
   // The start point, shown while the mission is the one on screen.
   const start = mission?.start ?? null;
@@ -401,7 +486,8 @@ export default function Receiver() {
     (map.getSource("start") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
   }, [start, mapReady]);
 
-  // Open questions: each choice numbered on the map in its unit's colour.
+  // Open questions: each choice numbered on the map, ringed in its unit's colour and named with
+  // its call sign, so two units' choices are not told apart by colour alone.
   const pendings = useMemo(() => view.units.filter((u) => u.pending), [view]);
   useEffect(() => {
     const map = mapRef.current;
@@ -409,15 +495,28 @@ export default function Receiver() {
     candMarkers.current.forEach((m) => m.remove());
     candMarkers.current = [];
     if (!map || !ml || !mapReady) return;
+    // Two units asked about the same place share one marker with both names; drawn apart, the
+    // second would hide the first.
+    const spots = new Map<string, { n: number; name: string; lat: number; lon: number; units: UnitState[] }>();
     for (const u of pendings) {
       u.pending!.candidates.forEach((c, i) => {
-        const el = document.createElement("div");
-        el.className = styles.candMarker;
-        el.style.background = u.colour;
-        el.textContent = String(i + 1);
-        el.title = `${u.callsign}, choice ${i + 1}: ${c.name}`;
-        candMarkers.current.push(new ml.Marker({ element: el }).setLngLat([c.lon, c.lat]).addTo(map));
+        const k = `${i}|${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
+        const spot = spots.get(k) ?? { n: i + 1, name: c.name, lat: c.lat, lon: c.lon, units: [] };
+        spot.units.push(u);
+        spots.set(k, spot);
       });
+    }
+    for (const s of spots.values()) {
+      const el = document.createElement("div");
+      el.className = styles.candMarker;
+      if (s.units.length === 1) el.style.borderColor = s.units[0].colour;
+      el.textContent = String(s.n);
+      el.title = `${s.units.map((u) => u.callsign).join(", ")}, choice ${s.n}: ${s.name}`;
+      const who = document.createElement("span");
+      who.className = styles.candWho;
+      who.textContent = s.units.map((u) => `${u.callsign}?`).join(" · ");
+      el.appendChild(who);
+      candMarkers.current.push(new ml.Marker({ element: el }).setLngLat([s.lon, s.lat]).addTo(map));
     }
   }, [pendings, mapReady]);
 
@@ -501,25 +600,48 @@ export default function Receiver() {
   const closePanel = useCallback(() => setPanelOpen(false), []);
 
   // ---------- page ----------
-  const connected = now > 0 && now - lastOk < (session ? 3500 : 60_000);
-  const ended = mission?.ended ?? null;
+  const connected = now > 0 && now - lastOk < (session ? 3500 : LIST_POLL_MS * 2.5);
+  /** The coordinator answered before and has stopped: what is on screen may be out of date. */
+  const lost = !!session && lastOk > 0 && now > 0 && !connected;
   const latest = view.feed[0];
+  /** An ended mission shown as it ended, not replayed. */
+  const atEnd = mode === "live" && ended != null;
   const sliderValue = mode === "live" ? rangeEnd : Math.min(Math.max(replayT, rangeStart), rangeEnd);
 
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <div className={styles.brand}>
+        <h1 className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
           Voice-to-Map <span className={styles.brandSub}>Receiver</span>
-        </div>
+        </h1>
         {mission ? (
           <div className={styles.missionHead}>
-            <span className={styles.missionTitle}>{mission.name}</span>
+            <span className={styles.missionTitle} title={mission.name}>
+              {mission.name}
+            </span>
             <span className={styles.chip} title="Phones join this mission by picking it from the list on the coordinator">
               code <strong>{session}</strong>
             </span>
-            {ended != null ? <span className={styles.endedChip}>Ended {fmtTime(ended)}</span> : null}
+            {/* What is on screen, in words: an ended mission, a replay, or the present. */}
+            {ended != null ? (
+              <span className={styles.stateChip} data-state="ended">
+                Ended {fmtWhen(ended, now)}
+              </span>
+            ) : mode === "replay" ? (
+              <span className={styles.stateChip} data-state="replay">
+                Replay
+              </span>
+            ) : lost ? (
+              <span className={styles.stateChip} data-state="lost">
+                No contact
+              </span>
+            ) : (
+              <span className={styles.stateChip} data-state="live">
+                <span className={styles.stateDot} aria-hidden="true" />
+                Live
+              </span>
+            )}
           </div>
         ) : session ? (
           <div className={styles.chip} title="A session from before missions">
@@ -531,9 +653,7 @@ export default function Receiver() {
         {mission && ended == null ? (
           confirmEnd ? (
             <span className={styles.confirm} role="group" aria-label="End this mission?">
-              <span className={styles.confirmText} title="Phones can no longer report to it. It stays here for replay.">
-                End this mission?
-              </span>
+              <span className={styles.confirmText}>End this mission? Reports stop. It stays here for replay.</span>
               <button type="button" className={styles.dangerBtn} onClick={endMission}>
                 End mission
               </button>
@@ -564,7 +684,7 @@ export default function Receiver() {
         <div className={styles.spacer} />
         <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
           <span className={styles.connDot} aria-hidden="true" />
-          {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? "Reconnecting…" : "Connecting…"}
+          {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
         </div>
         <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
           Missions ▾
@@ -579,17 +699,48 @@ export default function Receiver() {
             Follow units
           </button>
         ) : null}
-        {mode === "replay" ? (
-          <div className={styles.replayBadge}>Replay · {fmtTime(replayT)}</div>
-        ) : ended != null ? (
-          <div className={styles.endedBanner}>Mission ended at {fmtTime(ended)}. Press ▶ to replay it.</div>
-        ) : null}
+        {/* A frame round the map says "this is a replay" from across the room. */}
+        {mode === "replay" ? <div className={styles.replayFrame} aria-hidden="true" /> : null}
+        <div className={styles.mapNotes}>
+          {!mapReady ? (
+            <div className={styles.mapNote} role="status">
+              {mapSlow ? "The map has not loaded yet. It needs the network for its tiles. Units and reports still show in the lists." : "Loading the map…"}
+            </div>
+          ) : null}
+          {lost ? (
+            <div className={styles.lostBanner} role="alert">
+              No answer from the coordinator since {fmtTime(lastOk)}. The map may be out of date.
+            </div>
+          ) : null}
+          {mode === "replay" ? (
+            <div className={styles.replayBadge}>Replay · {fmtWhen(replayT, now)}</div>
+          ) : ended != null ? (
+            <div className={styles.endedBanner}>
+              Mission ended {otherDay(ended, now) ? `on ${otherDay(ended, now)} ` : ""}at {fmtTime(ended)}. Press ▶ to replay it.
+            </div>
+          ) : null}
+        </div>
 
         <div className={styles.replayBar}>
-          <button type="button" className={styles.liveBtn} aria-pressed={mode === "live"} onClick={goLive}>
-            <span className={styles.liveDot} aria-hidden="true" /> Live
+          <button
+            type="button"
+            className={styles.liveBtn}
+            aria-pressed={mode === "live" && !!session}
+            disabled={!session}
+            data-stale={ended != null ? "ended" : lost ? "lost" : undefined}
+            onClick={goLive}
+            title={ended != null ? "Show the mission as it ended" : "Show the present and follow the units"}
+          >
+            <span className={styles.liveDot} aria-hidden="true" /> {ended != null ? "At end" : "Live"}
           </button>
-          <button type="button" className={styles.playBtn} onClick={togglePlay} disabled={!entries.length} aria-label={playing ? "Pause replay" : "Play replay"}>
+          <button
+            type="button"
+            className={styles.playBtn}
+            onClick={togglePlay}
+            disabled={!entries.length}
+            aria-label={playing ? "Pause replay" : "Play replay"}
+            title={playing ? "Pause the replay" : "Replay from the start"}
+          >
             {playing ? "❚❚" : "▶"}
           </button>
           <input
@@ -609,15 +760,23 @@ export default function Receiver() {
             aria-valuetext={entries.length ? fmtTime(sliderValue) : undefined}
           />
           <div className={styles.time}>
-            {mode === "live" ? (
-              <>Live{now ? ` · ${fmtTime(now)}` : ""}</>
+            {mode === "replay" ? (
+              <>
+                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(rangeEnd - replayT)} left</span>
+              </>
+            ) : ended != null ? (
+              <>Ended · {fmtTime(ended)}</>
+            ) : !session ? (
+              // No mission on screen, so nothing is live: only the clock.
+              <>{now ? fmtTime(now) : ""}</>
             ) : (
               <>
-                {fmtTime(replayT)} <span className={styles.muted}>−{fmtSpan(rangeEnd - replayT)}</span>
+                {lost ? "No contact" : "Live"}
+                {now ? ` · ${fmtTime(now)}` : ""}
               </>
             )}
           </div>
-          <div className={styles.segmentedSmall} role="group" aria-label="Replay speed">
+          <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
             {SPEEDS.map((s) => (
               <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
                 {s}×
@@ -641,9 +800,11 @@ export default function Receiver() {
                     ? "No mission is open. Open one from Missions, then join it from the phones."
                     : "Looking for an open mission…"
                   : mission
-                    ? ended != null
-                      ? "Nobody joined this mission."
-                      : `Waiting for units to join “${mission.name}”. On each phone: pick this mission, enter a call sign, and join.`
+                    ? mode === "replay"
+                      ? "No unit had joined at this time."
+                      : ended != null
+                        ? "Nobody joined this mission."
+                        : `Waiting for units to join “${mission.name}”. On each phone: pick this mission, enter a call sign, and join.`
                     : entries.length
                       ? "Nobody has reported yet."
                       : `No mission with the code “${session}”. Pick one from Missions.`}
@@ -652,18 +813,28 @@ export default function Receiver() {
             <ul className={styles.units}>
               {view.units.map((u) => {
                 const silent = isSilent(u);
-                const st = unitStatus(u, silent, effNow);
+                const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - u.lastHeard) : null);
                 return (
                   <li key={u.callsign}>
-                    <button type="button" className={styles.unit} data-silent={silent || undefined} data-ask={!!u.pending || undefined} onClick={() => flyToUnit(u)} disabled={!u.position}>
+                    <button type="button" className={styles.unit} data-tone={st.tone} onClick={() => flyToUnit(u)} disabled={!u.position} title={u.position ? "Show on the map" : undefined}>
                       <span className={styles.unitDot} style={{ background: u.colour }} aria-hidden="true" />
                       <span className={styles.unitMain}>
-                        <span className={styles.unitName}>{u.callsign}</span>
-                        <span className={styles.unitStatus} data-tone={st.tone}>
-                          {st.text}
+                        <span className={styles.unitTop}>
+                          <span className={styles.unitName}>{u.callsign}</span>
+                          <span className={styles.pill} data-status={st.tone}>
+                            {st.tag}
+                          </span>
                         </span>
+                        <span className={styles.unitStatus}>{st.text}</span>
                       </span>
-                      <span className={styles.unitTime}>{u.lastHeard ? fmtTime(u.lastHeard) : ""}</span>
+                      {/* How long since it was last heard, then the time itself. An ended mission
+                          has no "ago": the picture is the one at its end. */}
+                      {u.lastHeard && effNow ? (
+                        <span className={styles.unitTime}>
+                          {atEnd ? null : <span className={styles.unitAge}>{fmtAgo(effNow - u.lastHeard)} ago</span>}
+                          <span>{fmtTime(u.lastHeard)}</span>
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -676,6 +847,7 @@ export default function Receiver() {
           <h2 id="feed-h" className={styles.h2}>
             Reports <span className={styles.count}>{view.feed.filter((f) => f.kind === "report").length}</span>
           </h2>
+          {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
             {view.feed.map((f) => {
               if (f.kind === "join") {
@@ -683,7 +855,8 @@ export default function Receiver() {
                   <li key={f.id}>
                     <button type="button" className={styles.joinItem} data-selected={selected === f.id || undefined} onClick={() => flyToItem(f)} disabled={!f.position}>
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
-                      <span className={styles.itemCall} style={{ borderColor: f.colour }}>
+                      <span className={styles.itemCall}>
+                        <span className={styles.itemDot} style={{ background: f.colour }} aria-hidden="true" />
                         {f.callsign}
                       </span>
                       <span className={styles.joinText}>{f.outcome}</span>
@@ -692,16 +865,30 @@ export default function Receiver() {
                 );
               }
               const open = f.status === "ambiguous" && !f.answer && !f.expired;
+              // The same words as the units list, so a state has one name on the page.
+              const estimate = f.status === "resolved" && !!f.position?.estimated;
+              const pill = open
+                ? { tone: "ask", tag: "Awaiting answer" }
+                : f.expired
+                  ? { tone: "none", tag: "Not answered" }
+                  : f.status === "ambiguous"
+                    ? { tone: "answered", tag: "Answered" }
+                    : estimate
+                      ? { tone: "estimate", tag: "≈ Estimate" }
+                      : f.status === "resolved" && f.position
+                        ? { tone: "placed", tag: "Placed" }
+                        : { tone: "none", tag: "Not placed" };
               return (
                 <li key={f.id}>
                   <button type="button" className={styles.item} data-selected={selected === f.id || undefined} data-open={open || undefined} onClick={() => flyToItem(f)}>
                     <span className={styles.itemHead}>
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
-                      <span className={styles.itemCall} style={{ borderColor: f.colour }}>
+                      <span className={styles.itemCall}>
+                        <span className={styles.itemDot} style={{ background: f.colour }} aria-hidden="true" />
                         {f.callsign}
                       </span>
-                      <span className={styles.pill} data-status={open ? "open" : f.status}>
-                        {open ? "Awaiting answer" : f.expired ? "Not answered" : f.status === "ambiguous" ? "Answered" : f.status === "resolved" ? "Placed" : "Not placed"}
+                      <span className={styles.pill} data-status={pill.tone}>
+                        {pill.tag}
                       </span>
                     </span>
                     <span className={styles.said}>{f.transcript ? `“${f.transcript}”` : "(no words heard)"}</span>
@@ -710,11 +897,13 @@ export default function Receiver() {
                       <ol className={styles.choices}>
                         {f.candidates.map((c, i) => (
                           <li key={c.id}>
-                            <span className={styles.choiceN} style={{ background: f.colour }}>
+                            <span className={styles.choiceN} style={{ borderColor: f.colour }}>
                               {i + 1}
                             </span>
-                            {c.name}
-                            {c.town ? ` (${c.town})` : ""} <span className={styles.muted}>· {c.category.replace("_", " ")}</span>
+                            <span>
+                              {c.name}
+                              {c.town ? ` (${c.town})` : ""} <span className={styles.muted}>· {c.category.replace("_", " ")}</span>
+                            </span>
                           </li>
                         ))}
                       </ol>

@@ -20,8 +20,11 @@ interface Props {
   onClose: () => void;
 }
 
+// Day and 24-hour time, whatever the browser's language is set to. Local time.
+const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
 function fmtWhen(ts: number): string {
-  return new Date(ts).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return WHEN.format(ts);
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -36,6 +39,8 @@ async function errorOf(res: Response): Promise<string> {
 export default function MissionPanel({ current, defaultArea, onPick, onClose }: Props) {
   const [list, setList] = useState<MissionListReply | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The list could not be read. Kept apart from `error`, so the next good read clears it. */
+  const [unreachable, setUnreachable] = useState(false);
   const [area, setArea] = useState<AreaId>(defaultArea);
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
@@ -50,8 +55,9 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
       const res = await fetch("/api/sessions", { cache: "no-store" });
       if (!res.ok) throw new Error(await errorOf(res));
       setList((await res.json()) as MissionListReply);
+      setUnreachable(false);
     } catch {
-      setError("Could not reach the coordinator.");
+      setUnreachable(true);
     }
   }, []);
 
@@ -235,9 +241,12 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                           onClose();
                         }}
                       >
-                        <span className={styles.missionName}>{m.name}</span>
+                        <span className={styles.missionName}>
+                          {m.name}
+                          {m.code === current ? <span className={styles.shownTag}>On screen</span> : null}
+                        </span>
                         <span className={styles.muted}>
-                          {m.code} · {plural(m.units, "unit", "units")} · opened {fmtWhen(m.opened)}
+                          {m.code} · {plural(m.units, "unit", "units")} · {plural(m.reports, "report", "reports")} · opened {fmtWhen(m.opened)}
                         </span>
                       </button>
                     </li>
@@ -265,17 +274,20 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                           onClose();
                         }}
                       >
-                        <span className={styles.missionName}>{m.name}</span>
+                        <span className={styles.missionName}>
+                          {m.name}
+                          {m.code === current ? <span className={styles.shownTag}>On screen</span> : null}
+                        </span>
                         <span className={styles.muted}>
-                          {m.code} · {plural(m.reports, "report", "reports")} · ended {fmtWhen(m.ended!)}
+                          {m.code} · {plural(m.units, "unit", "units")} · {plural(m.reports, "report", "reports")} · ended {fmtWhen(m.ended!)}
                         </span>
                       </button>
                       {confirmDelete === m.code ? (
-                        <span className={styles.confirm}>
-                          <button type="button" className={styles.dangerBtn} onClick={() => remove(m.code)}>
+                        <span className={styles.confirm} role="group" aria-label={`Delete ${m.name}?`}>
+                          <button type="button" className={styles.dangerBtn} onClick={() => remove(m.code)} aria-label={`Yes, delete ${m.name}`}>
                             Delete
                           </button>
-                          <button type="button" className={styles.linkBtn} onClick={() => setConfirmDelete(null)}>
+                          <button type="button" className={styles.linkBtn} onClick={() => setConfirmDelete(null)} aria-label={`Keep ${m.name}`}>
                             Keep
                           </button>
                         </span>
@@ -291,9 +303,9 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
             ) : null}
           </>
         )}
-        {error ? (
+        {error || unreachable ? (
           <p className={styles.error} role="alert">
-            {error}
+            {error ?? "No answer from the coordinator. The list may be out of date."}
           </p>
         ) : null}
       </div>
