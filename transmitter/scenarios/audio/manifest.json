@@ -1,4 +1,13 @@
 {
+  "audio/izium-demo/i1.m4a": "27dee6e5401123b9",
+  "audio/izium-demo/i2.m4a": "664d753bbf739dec",
+  "audio/izium-demo/i3.m4a": "5e110f043c8e5d16",
+  "audio/izium-demo/i4.m4a": "eccda96e8b251460",
+  "audio/izium-demo/i5.m4a": "7706f19ac932c767",
+  "audio/izium-demo/i6.m4a": "3a0807466aeaf017",
+  "audio/izium-demo/i7.m4a": "46082b0701884948",
+  "audio/izium-demo/i8.m4a": "75db550e4aba3d28",
+  "audio/izium-demo/i9.m4a": "0bbf34d4adf28379",
   "audio/kyiv-demo/k1.m4a": "a61821fffc21c014",
   "audio/kyiv-demo/k2.m4a": "66b235a189a6297f",
   "audio/kyiv-demo/k3.m4a": "df1b48e5fb9887d8",
@@ -7,5 +16,16 @@
   "audio/vincennes-demo/v1.m4a": "2822b313afd4d0ed",
   "audio/vincennes-demo/v2.m4a": "8fbf7d8aad7177ba",
   "audio/vincennes-demo/v3.m4a": "55320104b1663a23",
-  "audio/vincennes-demo/v4.m4a": "1885a595cfa6a154"
+  "audio/vincennes-demo/v4.m4a": "1885a595cfa6a154",
+  "audio/vincennes-tracks/t1.m4a": "2822b313afd4d0ed",
+  "audio/vincennes-tracks/t2.m4a": "8e9a8a4b46c6aa8f",
+  "audio/vincennes-tracks/t3.m4a": "da52c5bf5be692ab",
+  "audio/vincennes-tracks/t4.m4a": "232651220e869c34",
+  "audio/vincennes-tracks/t5.m4a": "82118920a215c83b",
+  "audio/vincennes-tracks/t6.m4a": "4771826cc6a85209",
+  "audio/vincennes-tracks/t7.m4a": "d77f2af3ff0ad02f",
+  "audio/vincennes-tracks/t8.m4a": "2220c7a6cd018167",
+  "audio/vincennes-tracks/t9.m4a": "46eb6241f783fe12",
+  "audio/vincennes-tracks/t10.m4a": "6da4222ea22bbca3",
+  "audio/vincennes-tracks/t11.m4a": "59a10434fa66896c"
 }

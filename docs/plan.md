@@ -259,7 +259,7 @@ Still open, for Alex:
 - **Where a range comes from** (step 5): only when said, set at the base, or a table by kind in code.
 - **Operator edits:** whether the operator may change or close a track by click. It makes the receiver editable, the same question as decision 1 of the [receiver review](receiver-review.md).
 - **Unit colours:** the fifth unit colour is a pink-red (`#e0367a`). Hostile tracks are red, so a fifth call sign would be a red-ish friendly dot. Not changed yet.
-- **A demo script with tracks.** There is none. It should use made-up sightings, and not in Izium [140].
+- **A demo script with tracks.** Written: `scenarios/vincennes-tracks.json`, 11 made-up steps in Vincennes ([README](../README.md#vincennes-with-tracks)). Still to choose: whether it, or a short version of it, goes into the Demo Day run.
 
 ## Local mode
 

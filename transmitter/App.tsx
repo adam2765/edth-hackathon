@@ -75,8 +75,19 @@ function evaluate(step: ScenarioStep, reply: ReportReply, chosen?: Candidate): {
   if (step.expect.heading_to && r.heading_to?.id !== step.expect.heading_to) {
     return { pass: false, note: `expected heading to ${step.expect.heading_to}, got ${r.heading_to?.id ?? "none"}` };
   }
+  // Who the report was about: a track, where the step expects one, and otherwise the speaker.
+  const want = step.expect.track;
+  if (want && !r.track) return { pass: false, note: "expected a report about a track, got one about the speaker" };
+  if (!want && r.track && r.status !== "unresolved") return { pass: false, note: "read as a report about a track" };
+  if (want && r.track) {
+    // Numbers count from 1 in a new mission, so a script with tracks is run in one.
+    if (want.n !== undefined && r.track.n !== want.n) return { pass: false, note: `expected Track ${want.n}, got ${r.track.n == null ? "no number (not in a mission)" : `Track ${r.track.n}`}` };
+    if (want.affiliation !== undefined && r.track.affiliation !== want.affiliation) return { pass: false, note: `expected ${want.affiliation ?? "no word for whose it is"}, got ${r.track.affiliation ?? "none"}` };
+    if (want.kind !== undefined && r.track.kind !== want.kind) return { pass: false, note: `expected ${want.kind}, got ${r.track.kind ?? "none"}` };
+  }
   if (step.choose && !chosen) return { pass: false, note: `choice ${step.choose} was not offered` };
-  return { pass: true, note: chosen ? `asked, chose ${chosen.name}` : r.status };
+  const about = r.track?.n != null ? `Track ${r.track.n}, ` : "";
+  return { pass: true, note: chosen ? `${about}asked, chose ${chosen.name}` : `${about}${r.status}` };
 }
 
 export default function App() {

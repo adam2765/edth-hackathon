@@ -101,6 +101,16 @@ describe("who the report is about", () => {
     expect(readSubject(intent({ landmark_category: "church" }), "Enemy at the church").subject).toBe("unclear");
   });
 
+  it("unclear when the model reads the speaker but the words name a thing and whose it is", () => {
+    // Hosted Mistral read this as where the speaker is, 21 November.
+    expect(readSubject(intent({ landmark_name: "Vincennes", landmark_category: "metro_station" }), "Our drone team is at Vincennes station.").subject).toBe("unclear");
+    expect(readSubject(intent({ landmark_category: "cemetery", relation: "near" }), "Civilian car near the cemetery").subject).toBe("unclear");
+    // A friendly word with no kind of thing is still the speaker: "our" is said about places too.
+    expect(readSubject(intent({ landmark_category: "church", relation: "near" }), "We are at our rally point near the church").subject).toBe("self");
+    // A kind of thing with no word for whose it is, read as the speaker, stays the speaker.
+    expect(readSubject(intent({ landmark_category: "church", relation: "next_to" }), "I'm next to the car park by the church").subject).toBe("self");
+  });
+
   it("the model does not decide whose a track is", () => {
     const r = readSubject(track({ track_kind: "vehicle" }), "Vehicle at Bérault");
     expect(r).toMatchObject({ subject: "track", affiliation: null });

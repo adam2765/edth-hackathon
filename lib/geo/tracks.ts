@@ -181,6 +181,9 @@ export interface Reading {
  *   - The model says track, and the words name neither: unclear.
  *   - The model says self, and a hostile or suspect word was said: unclear. Moving a friendly
  *     marker onto an enemy's place, or the other way round, is the mistake this guards against.
+ *   - The model says self, and the words name a kind of thing and whose it is ("our drone team is
+ *     at the station", "civilian car near the cemetery"): unclear. Hosted Mistral read the first
+ *     as the speaker's own position and moved the unit there.
  *   - Otherwise the speaker, as before tracks existed.
  */
 export function readSubject(intent: Intent, transcript: string): Reading {
@@ -199,6 +202,9 @@ export function readSubject(intent: Intent, transcript: string): Reading {
   }
   if (affiliation === "hostile" || affiliation === "suspect") {
     return { ...base, subject: "unclear", why: `read as the speaker's own position, but a ${affiliation} word was said` };
+  }
+  if (affiliation && wordKind) {
+    return { ...base, subject: "unclear", why: `read as the speaker's own position, but the words name a ${affiliation} ${wordKind}` };
   }
   return { ...base, ref: null, kind: null, subject: "self", why: "the speaker's own position" };
 }

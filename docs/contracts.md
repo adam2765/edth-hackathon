@@ -121,7 +121,7 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 
 ## Scenario file
 
-`scenarios/<id>.json`: steps with a time offset, call sign, language, the words, the answer the coordinator should give (`status`, `feature_id`, `heading_to`) and which choice to tap if it asks back. Because every step says what should happen, a run gives a score [62]. Format in [scenarios/README.md](../scenarios/README.md).
+`scenarios/<id>.json`: steps with a time offset, call sign, language, the words, the answer the coordinator should give (`status`, `feature_id`, `heading_to`, and for a report about a track `track: { n, affiliation, kind }`) and which choice to tap if it asks back. Because every step says what should happen, a run gives a score [62]. Format in [scenarios/README.md](../scenarios/README.md).
 
 ## Gazetteer file
 

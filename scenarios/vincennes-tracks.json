@@ -1,0 +1,18 @@
+{
+  "id": "vincennes-tracks",
+  "title": "Vincennes with tracks (made up)",
+  "area": "vincennes",
+  "steps": [
+    { "id": "t1", "t": 0, "callsign": "ALPHA 1", "lang": "en", "text": "I'm at Bérault metro.", "expect": { "status": "resolved", "feature_id": "node/9415191169" } },
+    { "id": "t2", "t": 8, "callsign": "BRAVO 2", "lang": "fr", "text": "Je suis à la mairie de Vincennes.", "expect": { "status": "resolved", "feature_id": "way/83816816" } },
+    { "id": "t3", "t": 16, "callsign": "ALPHA 1", "lang": "en", "text": "Two enemy vehicles on Avenue de Paris, moving east.", "expect": { "status": "resolved", "feature_id": "street/avenue-de-paris", "track": { "n": 1, "affiliation": "hostile", "kind": "vehicle" } } },
+    { "id": "t4", "t": 26, "callsign": "BRAVO 2", "lang": "en", "text": "I see a drone about 300 metres north of me.", "expect": { "status": "resolved", "track": { "n": 2, "affiliation": null, "kind": "drone" } } },
+    { "id": "t5", "t": 36, "callsign": "BRAVO 2", "lang": "en", "text": "Suspicious vehicle near the church.", "expect": { "status": "resolved", "feature_id": "way/83814063", "track": { "n": 3, "affiliation": "suspect", "kind": "vehicle" } } },
+    { "id": "t6", "t": 46, "callsign": "ALPHA 1", "lang": "en", "text": "Enemy patrol near the cemetery.", "expect": { "status": "ambiguous", "track": { "n": 4, "affiliation": "hostile", "kind": "people" } }, "choose": "way/35318711" },
+    { "id": "t7", "t": 58, "callsign": "ALPHA 1", "lang": "en", "text": "Track 1 moved to Avenue de Nogent.", "expect": { "status": "resolved", "feature_id": "street/avenue-de-nogent", "track": { "n": 1 } } },
+    { "id": "t8", "t": 68, "callsign": "BRAVO 2", "lang": "en", "text": "Track 2 is hostile.", "expect": { "status": "resolved", "track": { "n": 2, "affiliation": "hostile" } } },
+    { "id": "t9", "t": 76, "callsign": "BRAVO 2", "lang": "fr", "text": "Voiture civile devant la mairie.", "expect": { "status": "resolved", "feature_id": "way/83816816", "track": { "n": 5, "affiliation": "neutral", "kind": "vehicle" } } },
+    { "id": "t10", "t": 86, "callsign": "ALPHA 1", "lang": "en", "text": "Friendly drone team at Vincennes station.", "expect": { "status": "resolved", "feature_id": "node/1730998187", "track": { "n": 6, "affiliation": "friendly", "kind": "drone_team" } } },
+    { "id": "t11", "t": 96, "callsign": "BRAVO 2", "lang": "en", "text": "Enemy vehicle to the east.", "expect": { "status": "unresolved" } }
+  ]
+}

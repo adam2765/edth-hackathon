@@ -1,6 +1,6 @@
 // The coordinator's reply types are shared with the server. These are type-only imports,
 // so nothing outside this folder ends up in the app bundle.
-import type { Candidate, Intent, Placement, Resolution } from "../../lib/geo/types";
+import type { Affiliation, Candidate, Intent, Placement, Resolution, TrackKind } from "../../lib/geo/types";
 import type { JoinReply, MissionListReply, MissionSummary, UnitPosition } from "../../lib/reports/types";
 
 export type { Candidate, Intent, Placement, Resolution };
@@ -23,7 +23,17 @@ export interface ScenarioStep {
   callsign: string;
   lang: Lang;
   text: string;
-  expect: { status: Resolution["status"]; feature_id?: string; heading_to?: string };
+  expect: {
+    status: Resolution["status"];
+    feature_id?: string;
+    heading_to?: string;
+    /**
+     * For a report about a track: its number, whose it is (null when no word said so) and its kind.
+     * Only the fields given are checked. Numbers count from 1 in a new mission. Without `track`,
+     * a report that places something must be about the speaker.
+     */
+    track?: { n?: number; affiliation?: Affiliation | null; kind?: TrackKind };
+  };
   /** Candidate id to pick when the coordinator asks back. */
   choose?: string;
   /** Bundled clip (a Metro asset id). */

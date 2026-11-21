@@ -69,7 +69,7 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 | "Track 3 moved to the station" | a new sighting of Track 3, with a trail from the last one |
 | "Track 3 is hostile" | only what it is changes |
 | "Track 9 …" when the mission has no Track 9 | `unresolved`: "There is no Track 9 in this mission." |
-| The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said | `unresolved`: "Is that where you are, or something you see?" |
+| The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said, or when the words name a thing and whose it is ("our drone team is at the station") | `unresolved`: "Is that where you are, or something you see?" |
 
 A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the receiver a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. After 10 minutes with no report it is shown as old. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone", range rings, and edits by the operator.
 
@@ -117,6 +117,26 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 | 7 | «Я біля церкви.» | Asks «Яка церква: Спасо-Преображенський собор чи Хрестовоздвиженська церква?»; tap **Спасо-Преображенський собор** |
 | 8 | "Passing the next intersection, heading west." | The next crossing to the west, Залікарняна вулиця / Старопоштова вулиця. In three runs of four the model read "passing" as moving: an arrow to it and the marker half way (≈). In the other, a pin on it, ±30 m |
 | 9 | «Я біля Центральної районної лікарні.» | Pin at the district hospital, ±80 m, not one of the eight other clinics nearby |
+
+### Vincennes, with tracks
+
+`scenarios/vincennes-tracks.json`. Two units report what they see; every sighting is made up. It is set in Vincennes, not Izium, where the demo names no unit or position [140]. Start a new mission so the numbers count from 1. Checked on 21 November: 11 of 11 typed through hosted Mistral and through the local 3B model, and 11 of 11 as synthetic-voice clips through the coordinator. Not yet spoken by a person or sent from a phone.
+
+| # | Who | Say | Expected |
+|---|---|---|---|
+| 1 | ALPHA 1 | "I'm at Bérault metro." | Check-in: pin at Bérault |
+| 2 | BRAVO 2 | «Je suis à la mairie de Vincennes.» | Check-in: pin at the town hall |
+| 3 | ALPHA 1 | "Two enemy vehicles on Avenue de Paris, moving east." | "Track 1, hostile vehicle, count 2, Avenue de Paris." ALPHA 1 does not move |
+| 4 | BRAVO 2 | "I see a drone about 300 metres north of me." | "Track 2, unknown drone, 300 metres north of you." An estimate, ≈ |
+| 5 | BRAVO 2 | "Suspicious vehicle near the church." | "Track 3, suspect vehicle, Église Notre-Dame." Dashed hostile frame |
+| 6 | ALPHA 1 | "Enemy patrol near the cemetery." | Asks "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?"; tap **Cimetière Nord de Saint-Mandé** |
+| 7 | ALPHA 1 | "Track 1 moved to Avenue de Nogent." | "Track 1, now Avenue de Nogent." A dashed trail back to Avenue de Paris |
+| 8 | BRAVO 2 | "Track 2 is hostile." | "Track 2, hostile." The symbol turns red; the place stays |
+| 9 | BRAVO 2 | «Voiture civile devant la mairie.» | «Piste 5, véhicule civil, Mairie de Vincennes.» Neutral |
+| 10 | ALPHA 1 | "Friendly drone team at Vincennes station." | "Track 6, friendly drone team, Vincennes." A track, not ALPHA 1's position |
+| 11 | BRAVO 2 | "Enemy vehicle to the east." | No track: "How far is it, and which way? Or name a place near it." |
+
+At the end the map has six tracks and both units are still where they checked in. Step 7 names a street, not the castle: "moved to the castle" makes the local model ask castle or station.
 
 ## Run locally
 
