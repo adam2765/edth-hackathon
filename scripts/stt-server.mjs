@@ -1,4 +1,4 @@
-// Speech-to-text on the coordinator in offline mode (decision 193): fetches Whisper large-v3-turbo
+// Speech-to-text on the coordinator in offline mode (decision 194): fetches Whisper large-v3-turbo
 // and the Silero voice-activity model once into models/ (git-ignored), checksums checked, then runs
 // whisper.cpp's whisper-server on this computer only.
 // Run: npm run stt (in its own terminal, beside the coordinator and Ollama).

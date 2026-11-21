@@ -4,7 +4,7 @@
  *           where the speaker changes, the transcript gets a ">>" mark, the same mark
  *           lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
  *   local   Whisper large-v3-turbo in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
- *           (decision 193). Audio never leaves the computer. It does not tell speakers apart.
+ *           (decision 194). Audio never leaves the computer. It does not tell speakers apart.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  */
 import { providerMode, whisperUrl } from "./mode";

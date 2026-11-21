@@ -25,7 +25,7 @@ Step-by-step setup for a teammate's computer, written so a coding agent (Claude 
 | 6. Transmitter on Android | Android phones | |
 | 7. Daily start | everyone | |
 
-The coordinator runs in one of two modes. **Offline mode** runs speech-to-text (Whisper, in whisper-server) and intent extraction (Ollama) on this computer and calls nothing outside it [83, 193]. **Hosted mode** calls Mistral for both, and needs a key. Both place reports the same way.
+The coordinator runs in one of two modes. **Offline mode** runs speech-to-text (Whisper, in whisper-server) and intent extraction (Ollama) on this computer and calls nothing outside it [83, 194]. **Hosted mode** calls Mistral for both, and needs a key. Both place reports the same way.
 
 ## 1. Tools
 

@@ -304,7 +304,7 @@ Until track C is done, the command post's map still loads from OpenFreeMap and n
 | A | Serve the app from the MacBook over HTTPS the phones accept | 1 to 3 h |
 | A | Prove on iOS and Android, mobile data off, that the microphone opens | 0.5 h |
 | B. Models | The `PROVIDER_MODE` switch | done |
-| B | Local speech-to-text: Whisper large-v3-turbo in whisper-server (whisper.cpp), 574 MB, `npm run stt` [193]. Not needed for the transmitter, which sends text | done |
+| B | Local speech-to-text: Whisper large-v3-turbo in whisper-server (whisper.cpp), 574 MB, `npm run stt` [194]. Not needed for the transmitter, which sends text | done |
 | B | Local extraction: Ministral 3 3B through Ollama with the same schema, 3 GB. Built; the prompt is not tuned for it yet | done |
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
@@ -316,11 +316,11 @@ A, B and C can run in parallel.
 Things already found:
 
 - **No PMTiles needed.** Both areas together are 164 tiles with a margin for panning, so a plain folder of files does. OpenFreeMap allows offline downloads up to 3,000 tiles.
-- **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, turbo gets no names at all: on the scenario clips they gained nothing and twice put a word in the transcript [193].
+- **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, turbo gets no names at all: on the scenario clips they gained nothing and twice put a word in the transcript [194].
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].
 - **On the MacBook now:** Ollama 0.40.16 with `ministral-3:3b` and `ministral-3:8b`; whisper.cpp 1.9.5 (Homebrew) with large-v3-turbo; ffmpeg present; no local certificate tool.
-- **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone. Audio sent to the coordinator is close to it: turbo takes about 1.2 s per clip on the M1 Pro, so 3 to 5 s in all, 4.1 s in the middle [193].
+- **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone. Audio sent to the coordinator is close to it: turbo takes about 1.2 s per clip on the M1 Pro, so 3 to 5 s in all, 4.1 s in the middle [194].
 
 Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localhost`). Offline, no public certificate is possible for a private address. Options:
 
