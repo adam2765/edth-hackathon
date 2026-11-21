@@ -35,6 +35,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 | No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
+| A clock direction instead ("200 metres at 3 o'clock", "à 3 heures", "на 3 години") | read in code, not by the model: 12 o'clock is north, as on the map, and each hour is 30°. Reckoned on that bearing; two different clock directions in one report ask which way [198] |
 | The same with no last position | `unresolved`: "I don't know where you started", asks for a place |
 | No place, and only a distance or only a direction ("heading north") | `unresolved`: asks for a distance and a compass direction, or a landmark |
 | "Passing the next intersection", on a known street | the nearest crossing ahead on that street, if the unit's last two fixes ran along it; otherwise `ambiguous` between the nearest crossing each way |
