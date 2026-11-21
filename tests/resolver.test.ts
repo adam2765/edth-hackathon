@@ -81,7 +81,7 @@ describe("resolver", () => {
   });
 
   // Mission vincennes-21: "friendly at Vincennes Metro" put the track at the RER station, the only
-  // station called exactly "Vincennes"; the metro with that name in it is Château de Vincennes [180].
+  // station called exactly "Vincennes"; the metro with that name in it is Château de Vincennes [181].
   describe("a metro word with the whole name of a train station", () => {
     const RER = gaz.find((f) => f.id === "node/1730998187")!;
     const run = (transcript: string, from = MAIRIE_VINCENNES, language: Intent["language"] = "en") =>

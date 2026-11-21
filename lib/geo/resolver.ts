@@ -562,7 +562,7 @@ export function resolve(input: ResolveInput): Resolution {
     }
     // "Vincennes metro": the station called exactly "Vincennes" is the RER, and the metro station
     // with that name in it is "Château de Vincennes". The whole name and the word "metro" point to
-    // two places, so ask, even when one of them is near [180].
+    // two places, so ask, even when one of them is near [181].
     if (category === "metro_station" && metroIsExplicit(transcript, saidForExplicit)) {
       const trains = good.filter((m) => m.feature.category === "metro_station");
       const metros = all.filter((m) => m.feature.category === "metro_station" && m.feature.subtype === "metro" && m.score >= GOOD_SCORE && !good.includes(m));
