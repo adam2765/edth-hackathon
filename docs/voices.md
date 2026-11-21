@@ -78,7 +78,7 @@ Clips are recordings of people's voices. They stay on the computer, git ignores 
 | Rain | 10 of 16 |
 | Fireworks (bangs) | 8 of 16 |
 
-Steady noise barely hurts, even as loud as the voice: the place names sent as hints carry badly heard words ("Явиля Центральна районна лікарня" still placed). Rain and bangs mask syllables, and some clips came back empty. 13 of the 14 misses asked or placed nothing. One pinned a wrong place: "I'm at Izium station" under rain at 0 dB came back as "А на Ізюмській станції" and pinned the weather station 3.3 km away; since [185] that asks between the station and the weather station. An earlier run with artificial noise (63 clips: pink noise, radio band, clipping, a very quiet voice) placed every clip down to 5 dB.
+Steady noise barely hurts, even as loud as the voice: the place names sent as hints carry badly heard words ("Явиля Центральна районна лікарня" still placed). Rain and bangs mask syllables, and some clips came back empty. An empty transcript gets "I didn't catch that. Speak closer to the microphone and try again." (in the report's language) since [192]. 13 of the 14 misses asked or placed nothing. One pinned a wrong place: "I'm at Izium station" under rain at 0 dB came back as "А на Ізюмській станції" and pinned the weather station 3.3 km away; since [185] that asks between the station and the weather station. An earlier run with artificial noise (63 clips: pink noise, radio band, clipping, a very quiet voice) placed every clip down to 5 dB.
 
 Not covered: real voices, wind on the microphone itself, and noise that starts or stops mid-sentence.
 
