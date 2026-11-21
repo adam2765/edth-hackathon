@@ -27,6 +27,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Named place, one good match | `resolved` |
 | A name said whole, and a longer name that contains it ("Софійського собору": the cathedral, and its bell tower "Дзвіниця Софійського собору") | the whole name wins, even with a Ukrainian case ending that makes it score lower |
 | Named place, several good matches (e.g. "Château de Vincennes" = castle and metro station) | `ambiguous`, unless a category word outside the name ("…metro station") narrows it |
+| "Metro" said, and the whole name is a train station ("Vincennes metro": the RER station is "Vincennes", the metro is "Château de Vincennes") | `ambiguous` between the two, even when one is near; "Vincennes station" and "Vincennes RER" still mean the RER [181] |
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |

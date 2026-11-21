@@ -2,7 +2,7 @@
 
 A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
-Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 181]. This page shows what it looks like and how a report becomes a track.
+Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 182]. This page shows what it looks like and how a report becomes a track.
 
 ## The pictures
 

@@ -188,12 +188,25 @@ export function stripCategoryWords(name: string): { core: string; category: Cate
  */
 export function categoryIsExplicit(transcript: string, name: string, category: Category): boolean {
   if (category === "other") return false;
+  return wordsOutsideName(transcript, name).some((t) => isCategoryWord(t, category));
+}
+
+/** Words that say a metro, not a train: "Vincennes metro" is not plainly the RER station "Vincennes". */
+const METRO_WORDS = ["metro", "subway", "underground", "tube", "метро"];
+
+/** Was a metro word said outside the proper name? "Vincennes metro" yes; "Vincennes station" no. */
+export function metroIsExplicit(transcript: string, name: string): boolean {
+  return wordsOutsideName(transcript, name).some((t) => METRO_WORDS.includes(t));
+}
+
+/** The transcript's tokens once the name's tokens are taken out, one for one. */
+function wordsOutsideName(transcript: string, name: string): string[] {
   const residual = canonTokens(transcript);
   for (const t of canonTokens(name)) {
     const i = residual.indexOf(t);
     if (i >= 0) residual.splice(i, 1);
   }
-  return residual.some((t) => isCategoryWord(t, category));
+  return residual;
 }
 
 function levenshtein(a: string, b: string): number {
