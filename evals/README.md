@@ -15,6 +15,7 @@ npm run eval:extract -- --no-compare --no-save    # no comparison, no results fi
 npm run eval:outcomes                             # add outcomes to cases that have none
 npm run eval:outcomes -- --check                  # check outcomes still match the resolver
 npm run eval:format                               # one case per line, after editing the file
+npm run eval:baseline -- evals/results/<run>.jsonl  # a saved full run as the baseline, no rerun
 ```
 
 The script calls the same `getExtractor()` and `systemPrompt()` as the coordinator, so it scores whatever prompt and model the app would use. The language is not pinned, so the model's own label is scored after the check on the letters [104]. It is not part of `npm test`, because it needs a key or Ollama. `tests/evalCases.test.ts` checks the cases file in `npm test`, with no model: every case's expected fields must score clean and get their own outcome from the resolver.
@@ -58,7 +59,7 @@ Each run prints a **prompt id**, a hash of every area's prompt and the schema. T
 
 `baselines/<model>.json` is the committed reference run for each model: each case's verdict by majority over its rounds, and its wrong pins. When a baseline exists, every run is compared with it and lists regressions (passed, now fails), new wrong pins, improvements, and cases the baseline does not have. The run **exits 1 on a regression**, or on a new wrong pin when both runs used `--resolve`.
 
-Save a baseline only from a full run (`--resolve --repeat 3`, no filters), and only when a prompt change has been accepted. `prompt-tune` says when.
+Save a baseline only from a full run (`--resolve --repeat 3`, no filters), and only when a prompt change has been accepted. `prompt-tune` says when. `--save-baseline` writes it from the run in progress; `npm run eval:baseline -- <results file>` writes it from a run already saved, and refuses one that used filters, missed a case or scored another prompt.
 
 Runs are saved to `results/<model>-<time>.jsonl`: one header line with the prompt id and the summary, then one line per case and round with the full intent and the resolver's answer.
 
@@ -69,27 +70,31 @@ Two skills, adapted from levelang's, drive the work. They live in `.agents/skill
 - **`prompt-attack <rule>`** writes 5 to 10 reports built to break one rule, has a second, independent reading check the expected answers, runs them three times, and adds the confirmed ones as `adversarial` cases. It never edits the prompt.
 - **`prompt-tune <rule>`** takes the baseline, diagnoses the rule's failures, edits `systemPrompt()`, runs the full corpus on both models, refuses regressions, and records the change in `DECISIONS.md` and the journal.
 
-Both write to [`journal.md`](journal.md): what was attacked or tuned, what was found, what was accepted as a model limit.
+Both write to [`journal.md`](journal.md): what was attacked or tuned, what was found, what was accepted as a model limit. [docs/handoff-prompt-tuning.md](../docs/handoff-prompt-tuning.md) has the whole process, where it stands and what is next.
 
 ## Scores
 
-Full corpus, `--resolve --repeat 3`, prompt `a6871d1ee3`, on the MacBook (M1 Pro), 21 Nov:
+Full corpus, `--resolve --repeat 3`, on the MacBook (M1 Pro). The baselines hold the latest row for each model.
 
-| Model | Case results passed | Wrong pins | Flaky cases | Median |
-|---|---|---|---|---|
-| Mistral Small (hosted) | 182 of 195 (93%) | 0 | 1 | 0.7 s |
-| Ministral 3 3B (local) | 150 of 195 (77%) | 0 | 0 | 2.6 s |
+| Date | Prompt | Cases | Model | Case results passed | Wrong pins | Flaky | Median |
+|---|---|---|---|---|---|---|---|
+| 21 Nov | `a6871d1ee3` | 65 | Mistral Small (hosted) | 182 of 195 (93%) | 0 | 1 | 0.7 s |
+| 21 Nov | `a6871d1ee3` | 65 | Ministral 3 3B (local) | 150 of 195 (77%) | 0 | 0 | 2.6 s |
+| 21 Nov | `a6871d1ee3` | 75 | Mistral Small (hosted) | 199 of 225 (88%) | 7 | 2 | 0.7 s |
+| 21 Nov | `a6871d1ee3` | 75 | Ministral 3 3B (local) | 156 of 225 (69%) | 15 | 0 | 2.7 s |
+| 21 Nov | `5f066fb66b` | 75 | Mistral Small (hosted) | **209 of 225 (93%)** | **0** | 1 | 0.7 s |
+| 21 Nov | `5f066fb66b` | 75 | Ministral 3 3B (local) | 156 of 225 (69%) | **9** | 0 | 2.6 s |
 
-Hosted misses, every round: "outside" read as near; two places in one report ("Leaving the church, heading to the cemetery", "Je quitte la mairie, direction le parc") kept the place being left; "Copy that, moving out" became a movement. With no start position each gets a question back. With one, two places is a wrong pin: see the attack below. "Стою біля аптеки" was flaky (near, 2 of 3).
+The 75-case rows add the two-places attack; `5f066fb66b` is the two-places tune. Both are in the journal.
 
-The 3B model gave the same answer in all three rounds for every case. It fails 15 cases every time: the three above (except two places) plus names in the wrong script ("Golden Gate", "Khreshchatyk" written in Cyrillic), some Ukrainian lemmas, «за» as near, "I'm on rue de Fontenay" as a movement, and the French "char" (tank) as artillery. Its 9 outcome misses are all questions where a pin was wanted.
+Hosted misses now, every round: "outside" read as near (`p-outside`); "Copy that, moving out" as a movement (`o-moving-out`); generic words written as names ("pharmacy", "park", "cimetière" in `a-two-places-3`, `-4`, `-5`), which asks back but is against the name rule.
 
-## Attack: two places, 21 Nov
-
-10 `adversarial` cases (`a-two-places-1` to `-10`), each starting where the speaker says they are, as in a mission. Hosted Mistral, 3 rounds: 4 hold, 3 fail or are flaky without harm, and 3 put a **wrong pin**. "Going past the church towards the cemetery" and "Je suis devant l'église, je vais au cimetière" send the unit to the church; "Я возле Золотых ворот, иду к Майдану" places it at the Golden Gate. The local 3B model gives 5 wrong pins in 10. The rule holds when the destination comes first or the start is a named place. It breaks when the place being left has a type word of its own (church, Golden Gate) and the destination follows. Next: `prompt-tune two-places`.
+The 3B model gives the same answer in every round, so its misses are not noise. It still fails names in the wrong script ("Golden Gate", "Khreshchatyk" in Cyrillic), some Ukrainian lemmas, «за» as near, "I'm on rue de Fontenay" as a movement, and generic words as names. Its 9 wrong pins: `a-two-places-4` (the street it is on, not the pharmacy), and `p-blocks` and `fr-hdv`, where it writes "Bérault", a name from the prompt's examples that was not said.
 
 ## Open
 
+- **The 3B model copies example names.** "Bérault" is in two of the prompt's examples and turned up in two reports that never said it, once the two-places tune changed the prompt. The next tune: swap the Vincennes names in the examples for names in no gazetteer.
 - **May the model repair a misheard name?** Asked "I'm at bear oh metro.", hosted Mistral writes "Bérault", the right station, though the prompt says to copy only what was said. The case accepts both a question and Bérault. Repairing names helps with speech-to-text errors but is a guess the resolver cannot see.
-- **The expected answers were written by one person (an agent) and checked only by the rules.** The Ukrainian cases need a native speaker.
+- **`p-two-places` and `fr-leaving` have no start position,** so they can never show a wrong pin. Giving them one changes their expected outcome: the person's call.
+- **The expected answers were written by agents and checked only against the rules.** The Ukrainian and Russian cases need a native speaker.
 - **Typed text only.** Layer 3, real voices through speech-to-text, is not started.

@@ -95,11 +95,12 @@ If the change covers a form of the rule no case tests, add cases for it, followi
 
 Only when the person accepts the change:
 
-1. Save new baselines for both models, from a full run each:
+1. Save new baselines for both models from the Phase 4 runs, which are saved in `evals/results/`:
    ```bash
-   npm run eval:extract -- --resolve --repeat 3 --save-baseline
-   PROVIDER_MODE=local npm run eval:extract -- --resolve --repeat 3 --save-baseline
+   npm run eval:baseline -- evals/results/<hosted run>.jsonl
+   npm run eval:baseline -- evals/results/<local run>.jsonl
    ```
+   It refuses a run of another prompt, so if the prompt changed after a run, run again with `--save-baseline`.
 2. Append one decision line to `DECISIONS.md`: the rule, what changed in the prompt, the before and after on both models (cases passed, wrong pins, median time), and the person's words.
 3. Append a dated entry to `evals/journal.md`:
    ```

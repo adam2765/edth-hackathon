@@ -1,17 +1,17 @@
 {
   "extractor": "ollama:ministral-3:3b",
-  "prompt_id": "a6871d1ee3",
-  "at": "2026-11-21T09:23:41.788Z",
+  "prompt_id": "5f066fb66b",
+  "at": "2026-11-21T09:57:34.418Z",
   "repeat": 3,
   "resolve": true,
   "summary": {
     "cases": {
-      "passed": 150,
-      "total": 195
+      "passed": 156,
+      "total": 225
     },
     "heldOut": {
-      "passed": 141,
-      "total": 186
+      "passed": 147,
+      "total": 216
     },
     "inPrompt": {
       "passed": 9,
@@ -19,32 +19,32 @@
     },
     "fields": {
       "kind": {
-        "passed": 153,
-        "total": 162
+        "passed": 186,
+        "total": 192
       },
       "landmark_name": {
         "passed": 78,
-        "total": 96
+        "total": 117
       },
       "landmark_name_lemma": {
-        "passed": 33,
-        "total": 42
+        "passed": 42,
+        "total": 51
       },
       "landmark_category": {
-        "passed": 129,
-        "total": 135
+        "passed": 150,
+        "total": 156
       },
       "relation": {
-        "passed": 141,
-        "total": 150
+        "passed": 165,
+        "total": 177
       },
       "language": {
-        "passed": 111,
-        "total": 114
+        "passed": 123,
+        "total": 126
       },
       "subject": {
-        "passed": 195,
-        "total": 195
+        "passed": 225,
+        "total": 225
       },
       "direction": {
         "passed": 33,
@@ -59,7 +59,7 @@
         "total": 12
       },
       "track_kind": {
-        "passed": 15,
+        "passed": 18,
         "total": 18
       },
       "track_ref": {
@@ -71,7 +71,7 @@
         "total": 3
       },
       "track_heading": {
-        "passed": 3,
+        "passed": 0,
         "total": 3
       }
     },
@@ -82,11 +82,11 @@
       },
       "fr": {
         "passed": 27,
-        "total": 30
+        "total": 33
       },
       "uk": {
-        "passed": 48,
-        "total": 60
+        "passed": 57,
+        "total": 69
       },
       "distance": {
         "passed": 21,
@@ -97,23 +97,23 @@
         "total": 3
       },
       "paraphrase": {
-        "passed": 27,
+        "passed": 24,
         "total": 39
       },
       "trap": {
-        "passed": 12,
-        "total": 15
+        "passed": 6,
+        "total": 18
       },
       "filler": {
         "passed": 9,
-        "total": 9
+        "total": 12
       },
       "mixed": {
-        "passed": 6,
-        "total": 9
+        "passed": 9,
+        "total": 12
       },
       "stt_error": {
-        "passed": 3,
+        "passed": 6,
         "total": 6
       },
       "other": {
@@ -123,16 +123,24 @@
       "track": {
         "passed": 18,
         "total": 21
+      },
+      "adversarial": {
+        "passed": 9,
+        "total": 30
+      },
+      "two-places": {
+        "passed": 9,
+        "total": 30
       }
     },
     "outcomes": {
-      "passed": 186,
-      "total": 195
+      "passed": 207,
+      "total": 225
     },
-    "wrongPins": 0,
+    "wrongPins": 9,
     "flaky": 0,
-    "medianMs": 2634,
-    "p90Ms": 3237
+    "medianMs": 2629,
+    "p90Ms": 3279
   },
   "cases": {
     "s-v1": {
@@ -304,10 +312,10 @@
       "wrong_pins": 0
     },
     "p-blocks": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
-      "wrong_pins": 0
+      "wrong_pins": 3
     },
     "p-left": {
       "pass": false,
@@ -370,10 +378,10 @@
       "wrong_pins": 0
     },
     "fr-hdv": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
-      "wrong_pins": 0
+      "wrong_pins": 3
     },
     "fr-hotel": {
       "pass": true,
@@ -442,8 +450,8 @@
       "wrong_pins": 0
     },
     "e-berault": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -490,8 +498,8 @@
       "wrong_pins": 0
     },
     "t-trucks": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -502,8 +510,8 @@
       "wrong_pins": 0
     },
     "t-char": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -520,6 +528,66 @@
       "wrong_pins": 0
     },
     "t-jammer": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-1": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-2": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-3": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-4": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 3
+    },
+    "a-two-places-5": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-6": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-7": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-8": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-9": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-two-places-10": {
       "pass": true,
       "passes": 3,
       "rounds": 3,

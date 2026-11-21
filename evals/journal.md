@@ -21,3 +21,12 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - Pattern: the rule holds when the destination comes first or the start is a bare name; it breaks when the place being left carries a type word and the destination follows. No example in the prompt shows two places.
 - Added a-two-places-1 to -10. Not in the baselines yet. Existing p-two-places and fr-leaving have no start, so they cannot show a wrong pin; adding one is a change to their expectations, left for the person.
 - Next: prompt-tune two-places. Also for the tune: the "au" conflict between the relation list and the movement rule.
+
+## 2026-11-21, tune: two-places [mistral:mistral-small-latest, checked on ollama:ministral-3:3b]
+
+- Baseline: prompt `a6871d1ee3`, 75 cases. Hosted 199 of 225, 7 wrong pins (a-two-places-5, -9, -10). Local 156 of 225, 15 wrong pins (a-two-places-2, -4, -5, -9, -10).
+- Diagnosis. Three structural problems, not one weak line: the relation list gave "au" as at while "je vais au" is going (a-5); the crossing rule taught "passing X" as being at X (a-9); the prompt allows Russian but listed no Russian movement words (a-10). The rule itself was one sentence with no example. "Pharmacy" and "park" written as names belong to the landmark_name rule and were left for another cycle.
+- Change (prompt `5f066fb66b`): "je vais à / au" and "иду к" as movement words; "к" as towards, and "à, au, в, у after a verb of going are towards, not at"; the two-places rule rewritten (either order, any language, a place left or passed is never the landmark, a WRONG/RIGHT pair, "was at X, now at Y" is Y), with examples on places in no gazetteer (bakery, post office, market). A first version made "Passing the next intersection, heading west" (s-i8) a movement 2 rounds in 3; one more line says a crossing with no destination keeps the crossing rule.
+- After: hosted 209 of 225, 0 wrong pins, no regression, p-two-places and fr-leaving now pass; median 0.72 s against 0.69 s. Local 156 of 225, 9 wrong pins; regressions p-blocks and fr-hdv (new wrong pins: "Bérault", an example name, written for reports that never said it) and t-trucks (heading lost). Median 2.6 s, unchanged.
+- Accepted by Alex with the local regressions ("We need to keep tuning, but commit what we have so far"). Baselines saved from the two runs above (`eval:baseline`).
+- Next: the Bérault leak on the 3B model (example names), then landmark_name for generic words.
