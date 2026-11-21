@@ -103,12 +103,12 @@ export function Row({
   );
 }
 
-export function SwitchRow({ label, note, value, onValueChange }: { label: string; note?: string; value: boolean; onValueChange: (v: boolean) => void }) {
+export function SwitchRow({ label, note, value, onValueChange, disabled = false }: { label: string; note?: string; value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <Row
       label={label}
       note={note}
-      right={<Switch value={value} onValueChange={onValueChange} trackColor={{ true: color.accent, false: color.line }} ios_backgroundColor={color.line} accessibilityLabel={label} />}
+      right={<Switch disabled={disabled} value={value} onValueChange={onValueChange} trackColor={{ true: color.accent, false: color.line }} ios_backgroundColor={color.line} accessibilityLabel={label} />}
     />
   );
 }

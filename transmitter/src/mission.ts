@@ -67,6 +67,8 @@ export function callsignKey(s: string): string {
 export interface Saved {
   /** This phone's id: one phone per call sign in a mission. */
   device: string;
+  /** Configured coordinator, remembered without requiring another address entry. */
+  server?: string;
   /** The mission joined, to rejoin on start. */
   joined?: { server: string; code: string; callsign: string };
 }

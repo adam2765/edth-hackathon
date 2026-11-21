@@ -209,7 +209,7 @@ Receiver:
 Transmitter, before the talk button can be used:
 
 ```
-Coordinator: This Mac ●            (as today)
+Coordinator: Configured host ●     (Hosts placeholder)
 Mission:     Vincennes walk ▾      (open missions on that coordinator; picked if only one)
 Call sign:   ALPHA 1               [Join]
 → joined: "Check in: say where you are"
@@ -317,7 +317,7 @@ Things already found:
 
 - **No PMTiles needed.** Both areas together are 164 tiles with a margin for panning, so a plain folder of files does. OpenFreeMap allows offline downloads up to 3,000 tiles.
 - **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position.
-- **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
+- **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#install-once) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].
 - **On the MacBook now:** Ollama 0.40.16 with `ministral-3:3b` and `ministral-3:8b`; no Whisper; ffmpeg present; no local certificate tool.
 - **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone.
@@ -335,6 +335,9 @@ The native transmitter sidesteps this: it may use plain `http://` on the local n
 Open calls for Alex: whose phones (ours only, or any phone); travel router or the Mac's hotspot; Ukrainian offline or English and French only (a small model may handle Ukrainian dictionary forms poorly); Mistral's open models first for the European story, or whichever is fastest.
 
 ## Transmitter
+
+- **Startup:** Build changed components with `npm run build`; `npm start` restarts the servers and `npm stop` stops processes. Open the phone app and tap Connect. Start/Stop mission controls are on the receiver. Hosts lists discovered coordinators; the phone automatically joins the newest running mission; developer overrides and direct console commands remain. See [setup](setup.md).
+- **Scope:** phone voice-to-text is a development stub. Keep the fixed model and defaults; do not build a future provider framework for it.
 
 - **Built:** on-device speech-to-text with Whisper (`whisper.rn`), fixed to `ggml-base-q5_1`. Setup prepares the model on the Mac; the app installs it from an asset automatically. Both microphone and scenarios send text, with no server mode or model controls. Android uses the local PCM module; iOS uses expo-audio. Historical comparisons and remaining runtime checks are in [transmitter/README.md](../transmitter/README.md).
 - **Later, about one day:** an open microphone with no button, cutting at pauses. Tuning against hall noise is the risk. The microphone is muted while the app speaks a question, and the coordinator learns to drop non-reports and duplicates. Screen-off listening is another half day and not planned.

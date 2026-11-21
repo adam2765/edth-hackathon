@@ -2,6 +2,22 @@
 
 One speaker's path works end to end on the live site, in two areas and three languages. The shared receiver works on a coordinator that runs on a computer; the live site does not keep reports yet. Local mode and the evaluation harness are not finished. Status as of Friday 20 November, evening.
 
+## Build, start and stop (21 November)
+
+`npm run build` fingerprints source/dependencies, builds changed components and loads a
+changed or missing phone app on the connected device. `npm start` stops existing project
+servers and starts Ollama, coordinator/web server and Metro; it does not build or launch
+the phone app. `npm stop` stops project components and the connected phone app. The private
+local process controller exits on Stop. The normal Next output is `.next`; state is `.run`.
+
+The phone detects the configured coordinator, offers Connect, and shows whether a mission
+is running. Start mission/Stop mission live on the receiver. Phones automatically join the newest running mission and follow newer missions between reports. Open missions survive server
+restarts. Hosts lists reachable coordinators from the USB/Metro bootstrap and Bonjour LAN discovery; developer settings and direct console commands
+remain. Phone voice-to-text stays a fixed development stub. See [setup](setup.md).
+
+`/api/health` returns Ready after local model warm-up, or after a hosted provider is
+configured. Hosted readiness checks configuration, not live provider availability.
+
 ## The parts
 
 - **Transmitter**: anything that captures a spoken report. Today that is the phone web page and a native app in `transmitter/`. Lysk's real users may well use radios; the coordinator does not care where a report comes from [58].

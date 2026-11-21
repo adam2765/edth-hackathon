@@ -5,9 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "predev": "node scripts/copy-maplibre-worker.mjs && node scripts/prepare-tts.mjs",
-    "build": "next build",
-    "prebuild": "node scripts/copy-maplibre-worker.mjs && node scripts/prepare-tts.mjs",
-    "start": "next start",
+    "build": "node scripts/host.mjs build",
+    "start": "node scripts/host.mjs start",
     "lint": "eslint",
     "test": "vitest run",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
@@ -15,9 +14,16 @@
     "eval:extract": "tsx scripts/eval-extraction.ts",
     "eval:format": "tsx scripts/eval-format.ts",
     "eval:outcomes": "tsx scripts/eval-outcomes.ts",
-    "eval:baseline": "tsx scripts/eval-baseline.ts"
+    "eval:baseline": "tsx scripts/eval-baseline.ts",
+    "stop": "node scripts/host.mjs stop",
+    "build:web": "next build --webpack",
+    "prebuild:web": "node scripts/copy-maplibre-worker.mjs && node scripts/prepare-tts.mjs",
+    "start:coordinator": "next start -p 3117",
+    "start:ollama": "ollama serve",
+    "start:phone": "npm run start --prefix transmitter -- --dev-client --port 8082"
   },
   "dependencies": {
+    "bonjour-service": "^1.4.4",
     "maplibre-gl": "^6.19.0",
     "milsymbol": "^3.0.5",
     "next": "16.4.6",

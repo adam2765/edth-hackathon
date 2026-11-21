@@ -146,7 +146,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
           <>
             <section className={styles.panelSection} aria-labelledby="new-h">
               <h2 id="new-h" className={styles.h2}>
-                New mission
+                Start mission
               </h2>
               <div className={styles.field}>
                 <span className={styles.label} id="area-l">
@@ -220,7 +220,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                 <p className={styles.hint}>Optional. Units that join start here, shown with ≈, until they say where they are.</p>
               </div>
               <button type="button" className={styles.primaryBtn} onClick={create} disabled={busy}>
-                {busy ? "Opening…" : "Open mission"}
+                {busy ? "Starting…" : "Start mission"}
               </button>
             </section>
 

@@ -140,189 +140,50 @@ At the end the map has six tracks and both units are still where they checked in
 
 ## Run locally
 
-The daily procedure is for this Mac and a USB Android phone. For a new computer, start
-with [Install and build once](#install-and-build-once).
-
-### Daily use: USB Android phone, no Studio
-
-Use **three Terminal windows**, one for each service. Leave all three open. Android Studio
-and an emulator are not needed. Connect the phone to the Mac with a **USB data cable**
-(not a charging-only cable), unlock it, and keep it connected throughout this procedure.
-
-**1. Ollama — runs the local language model.** Paste into the first window:
+Install tools once using [setup](docs/setup.md). Connect and unlock the phone, then use
+these three commands from the project directory:
 
 ```bash
-OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 /opt/homebrew/bin/ollama serve
+npm run build
+npm start
+npm stop
 ```
 
-**2. Coordinator — runs the receiver and processes reports.** In the second window:
-
-```bash
-cd ~/Projects/edth-hackathon
-PROVIDER_MODE=local npm run start -- -p 3117
-```
-
-Wait for `Ready`, then open **http://localhost:3117/receiver** in the Mac's browser.
-
-**3. Phone connection — serves the transmitter over USB.** In the third window:
-
-```bash
-export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
-adb -d reverse tcp:3117 tcp:3117
-adb -d reverse tcp:8082 tcp:8082
-cd ~/Projects/edth-hackathon/transmitter
-CI=1 EXPO_PUBLIC_SERVER_URL=http://127.0.0.1:3117 npm run start -- --dev-client --localhost --port 8082 --max-workers 2
-```
-
-Open **Transmitter** on the phone. If asked for a development server, enter
-`http://127.0.0.1:8082`. In Setup choose **This Mac**. Speech recognition is always on the phone;
-its model is installed automatically from the setup-provided app asset. Create a mission on the receiver and join it on the phone. Hold the talk
-button, wait for red, speak, then release. The report appears on the receiver.
-
-To stop, press **Ctrl+C** in each Terminal window. If a port is already in use, stop its
-old server before starting another. After reconnecting USB, repeat the two `adb reverse`
-commands in a free terminal.
-
-This uses the built coordinator to avoid the receiver flicker seen with `next dev`.
-After coordinator code changes, stop its server, run `npm run build` at the repo root,
-and start it again. After phone JavaScript changes, restart window 3 and reopen the app.
-
-### Install and build once
-
-Skip this on a computer already set up. Install the tools for the parts you use;
-versions checked against the project on 21 November 2026.
-
-| Part | Install once |
+| Command | What it does |
 |---|---|
-| Everyone | Git, Node.js 24.3+ in the 24.x line (recommended; 22.13+ in 22.x or 26.x also work), and npm (included with Node). |
-| Web app and receiver | A current browser. All JavaScript libraries and development tools are installed by the npm commands below. |
-| Offline coordinator | Current [Ollama](https://ollama.com/download) with `ministral-3:3b` (`ollama pull ministral-3:3b`, about 3 GB). |
-| Hosted coordinator | A Mistral API key in `.env.local`; no Ollama needed. |
-| Android transmitter | [Android Studio](https://developer.android.com/studio) with its bundled JDK. In SDK Manager: SDK Platform **37**, Build-Tools **37.0.0**, Platform-Tools, Command-line Tools, NDK **27.1.12297006**, CMake **3.22.1**. For an emulator, also Android Emulator and a system image (ARM64 on Apple Silicon). Accept SDK licenses. |
-| iOS transmitter (Mac only) | Xcode with Command Line Tools and an iOS simulator runtime, plus CocoaPods (`brew install cocoapods`). A real iPhone also needs your Apple ID for signing; see [setup](docs/setup.md#5-transmitter-on-an-iphone). |
-| Speech models | Whisper base is prepared on the Mac by `npm run setup --prefix transmitter` (57 MB once) and installed automatically on the phone. The web app tries to download its Ukrainian voice (77 MB) on first start; it falls back to the system voice if unavailable. |
-| Rebuild scenario audio only | macOS `say` and `afconvert` (built in), with Daniel, Jacques and Lesya voices installed in System Settings → Accessibility → Spoken Content / Read & Speak. Existing clips are included. |
+| `npm run build` | Builds components whose source/dependencies changed; builds or reloads the phone app and loads it on the connected phone when needed |
+| `npm start` | Stops existing project servers, then starts Ollama, coordinator/web server and phone code server; opens the receiver, leaving phone app launch to you |
+| `npm stop` | Stops project processes and the connected phone app, including servers and the internal process controller; keeps mission data |
 
-Homebrew is needed only for the `brew` commands. Internet is needed for installs, model downloads, hosted mode, map tiles and rebuilding gazetteers. Gradle, Expo CLI and Whisper's native code come from the project; no separate global install is needed.
+`build` needs `npm run`; `start` and `stop` are npm’s built-in shortcuts. No routine command
+needs parameters. If more than one phone is connected, leave only the one being used connected.
+Build with no phone connected prepares the coordinator; connect the phone and repeat the
+same build command to prepare it. Build may stop services that need replacing; use Start
+afterwards.
 
-From the repo root, install both sets of npm dependencies ([web](package.json), [transmitter](transmitter/package.json)):
+On the phone, open **Transmitter**. It checks the configured server and offers **Connect**.
+If no mission is running, it says so and shows **Waiting for mission** after connecting.
+On the receiver, use **Start mission**; the phone joins the newest running mission automatically.
+**Stop mission** ends reporting and keeps the log for replay. Starting/stopping servers
+and starting/stopping missions are separate actions.
 
-```bash
-npm ci
-npm ci --prefix transmitter
-npm run setup --prefix transmitter
-```
+Hosts lists reachable coordinators discovered through the USB/Metro host and LAN advertisements. Tap Connect beside the server you want. Manual host override,
+scenarios and test settings are under Developer tools. Phone voice-to-text remains a fixed
+development stub. The mission supplies the area. Replay controls open through **Replay**.
 
-For an offline coordinator, start Ollama in window 1, then run
-`ollama pull ministral-3:3b` once in another window (about 3 GB).
-Before the first daily startup, build the coordinator from the repo root:
-
-```bash
-npm run build
-```
-
-Build and install the native Android app with the command-line steps below.
-Full setup and iPhone signing: [docs/setup.md](docs/setup.md).
-
-### Build and try changes without Android Studio
-
-Studio supplies the installed JDK and SDK, but **leave Studio closed**. Use this for the
-first Android install, or after changing native code, native dependencies or app config.
-Install npm dependencies as above first. **Installation requires the phone connected to
-the Mac with a USB data cable.** Enable **Developer options → USB debugging** on the
-phone, unlock it, and accept its debugging authorization prompt. Keep the cable connected
-for the daily startup below; this procedure uses USB for both installation and communication.
-Stop the three servers with Ctrl+C before a native build, especially on an 8 GB Mac.
-
-```bash
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$PATH"
-cd ~/Projects/edth-hackathon/transmitter
-npm run setup
-npx expo prebuild --platform android
-cd android
-./gradlew --stop
-./gradlew :app:assembleDebug --max-workers=2
-adb -d install -r app/build/outputs/apk/debug/app-debug.apk
-./gradlew --stop
-```
-
-Then use the [three-window daily startup](#daily-use-usb-android-phone-no-studio) and open
-Transmitter on the phone. The last Gradle command frees build memory before Ollama starts.
-
-- **Phone JavaScript/TypeScript changes:** restart window 3 and reopen the app; no native build.
-- **Coordinator/web changes:** stop window 2, then paste there:
-
-```bash
-cd ~/Projects/edth-hackathon
-npm run build
-PROVIDER_MODE=local npm run start -- -p 3117
-```
-
-If a USB phone is missing: in its Developer options, revoke USB debugging authorizations,
-re-enable USB debugging, reconnect and accept the authorization prompt.
-
-### Android Studio on macOS
-
-Optional, for developers who want the IDE. Quit Studio with **⌘Q** first.
-From the repo root, paste into Terminal; keep it open:
-
-```bash
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
-# First time only, if transmitter/android does not exist:
-[ -d transmitter/android ] || (cd transmitter && npx expo prebuild --platform android)
-cd transmitter/android
-./gradlew --stop
-"/Applications/Android Studio.app/Contents/MacOS/studio" "$PWD"
-```
-
-Sync Gradle. In Device Manager, press ▶ beside your emulator (or connect a phone with USB debugging). Leave optional AGP upgrades alone.
-
-In a second terminal, from the repo root:
-
-```bash
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$PATH"
-cd transmitter
-npx expo run:android       # build, install and start Metro
-# On later starts, if the native app is already installed:
-# npm run start -- --dev-client
-```
-
-The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/receiver`, create a mission and join it in the app.
-
-### Web development and checks
-
-The daily procedure above uses a build. For web development, run one of these at the
-repo root instead of window 2:
-
-```bash
-PROVIDER_MODE=local npm run dev -- -p 3117    # offline; needs Ollama
-npm run dev -- -p 3117                        # hosted; needs MISTRAL_API_KEY
-```
-
-```bash
-npm test             # resolver unit tests
-npm run eval:extract # score intent extraction on evals/extraction.cases.json (needs a key, or PROVIDER_MODE=local)
-npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes, kyiv or izium)
-```
-
-Environment options are in `.env.example`. Hosted mode needs `MISTRAL_API_KEY` in
-`.env.local`; never commit a key. Without one, use offline mode. Extraction can also
-use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`. `MISTRAL_STT_DIARIZE=0` stops asking Mistral to tell speakers apart.
+Local inference is the default; install Ollama and its model once. Advanced developers can
+still run components directly; see [setup](docs/setup.md#advanced-console-use). Logs are in
+`.run/launcher.log`. Shutdown scans project processes across all ports, including old
+controllers and orphan workers, and verifies they have exited before reporting Stopped.
+Unrelated processes are left alone.
 
 ### Offline: models on this computer
 
 `PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter (which always transcribes on the phone), or typed. Audio gets a clear error.
 
-Install current Ollama (0.40 or newer; `brew install ollama` on macOS), then use the
-daily startup above. The model download is needed only once.
+Install current Ollama (0.40 or newer; `brew install ollama` on macOS), then use `npm start` above. The model download is needed only once.
 
-`LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server loads the model and each area's prompt in the background, which takes about 10 s.
+`LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server warms the model and each area's prompt. The launcher waits for this before showing Ready.
 
 Measured on 20 Nov on the MacBook (M1 Pro, 32 GB), the 9 scenario texts through extraction and the resolver:
 
@@ -346,7 +207,7 @@ Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes s
 
 The shared map for the base station: open `http://localhost:3117/receiver` on the computer that runs the coordinator, ideally on a big screen.
 
-A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
+A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). After Connect, phones automatically join the newest running mission. The talk button waits for the server to confirm the join; newer missions are followed between reports. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
 Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
 

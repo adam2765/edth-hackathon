@@ -46,7 +46,7 @@ export function QuestionCard({ entry, onChoose, onNone }: { entry: Entry; onChoo
   );
 }
 
-export function LogList({ entries, onClear }: { entries: Entry[]; onClear: () => void }) {
+export function LogList({ entries, onClear, developer = false }: { entries: Entry[]; onClear: () => void; developer?: boolean }) {
   return (
     <View style={styles.section}>
       {entries.length > 0 ? (
@@ -57,7 +57,7 @@ export function LogList({ entries, onClear }: { entries: Entry[]; onClear: () =>
       ) : null}
 
       {entries.length === 0 ? (
-        <Text style={styles.empty}>Nothing sent yet. Hold the button and say where you are, or play a scenario. Each report and the coordinator’s answer will appear here.</Text>
+        <Text style={styles.empty}>Nothing sent yet. Hold the button and say where you are, Each report and the coordinator’s answer will appear here.</Text>
       ) : (
         <View style={styles.panel}>
           {entries.map((e, i) => {
@@ -77,7 +77,7 @@ export function LogList({ entries, onClear }: { entries: Entry[]; onClear: () =>
                     <Ionicons name={icon.name} size={18} color={icon.tint} style={styles.outcomeIcon} />
                     <Text style={[styles.outcomeText, e.status === "error" && styles.errorText]}>{e.question && e.pending ? e.question : e.outcome}</Text>
                   </View>
-                  {e.timings ? <Text style={[type.caption, tabular]}>{e.timings}</Text> : null}
+                  {developer && e.timings ? <Text style={[type.caption, tabular]}>{e.timings}</Text> : null}
                 </View>
               </View>
             );

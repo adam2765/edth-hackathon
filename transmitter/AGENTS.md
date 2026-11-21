@@ -6,6 +6,7 @@ The transmitter: it stands in for a field radio and sends spoken reports to the 
 
 Where this app differs from the Expo template advice below:
 
+- **Connection:** detect coordinators through the Metro/USB host and LAN discovery, show Connect per server, then automatically follow the newest running mission between reports. No mission picker or Join/Leave controls.
 - **One screen, no Expo Router** (decision 65). Ignore the routing section below unless the app grows a second screen.
 - **Native development build, not Expo Go** (decision 59): on-device speech-to-text and an open microphone need native modules. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
 - **Signing comes from the environment** (decision 96): each teammate signs with their own Apple ID, so `app.config.ts` takes `TRANSMITTER_BUNDLE_ID` and `APPLE_TEAM_ID` over `app.json`. Do not change the bundle ID in `app.json` for one person's build. Setup steps: `../docs/setup.md`.

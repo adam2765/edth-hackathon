@@ -10,12 +10,12 @@ import { SCENARIOS } from "./scenarios";
 import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
 import { startPcm, stopPcm } from "./src/pcm";
-import { CoordinatorError, callsignKey, fetchMissions, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
+import { discoverHosts, serverOrigin, type FoundHost } from "./src/hosts";
+import { CoordinatorError, callsignKey, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
 import { ensureModel, hasModel, hintPrompt, transcribeOnPhone } from "./src/stt";
 import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button, Segmented } from "./src/ui/controls";
-import { JoinCard } from "./src/ui/JoinCard";
 import { LogList, QuestionCard } from "./src/ui/LogList";
 import { fmtTime, type Entry, type Reach, type StepResult } from "./src/ui/model";
 import { ScenarioCard } from "./src/ui/ScenarioCard";
@@ -23,7 +23,6 @@ import { SetupSheet } from "./src/ui/SetupSheet";
 import { TalkButton } from "./src/ui/TalkButton";
 import { TOUCH, color, radius, space, tabular, type } from "./src/ui/theme";
 
-const LIVE_SITE = "https://edth-hackathon.vercel.app";
 /** The port the coordinator (the web app in the folder above) runs on with `npm run dev -- -p 3117`. */
 const COORDINATOR_PORT = 3117;
 
@@ -38,7 +37,7 @@ function coordinatorOnThisComputer(): string | null {
 }
 
 const LOCAL_COORDINATOR = coordinatorOnThisComputer();
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? LIVE_SITE;
+const DEFAULT_SERVER = process.env.EXPO_PUBLIC_SERVER_URL ?? LOCAL_COORDINATOR ?? "http://127.0.0.1:3117";
 /** Said on joining a mission: the first report that names a place replaces the start point. */
 const CHECK_IN: Record<Lang, string> = {
   en: "Check in: say where you are.",
@@ -105,13 +104,15 @@ function Transmitter() {
   const [callsign, setCallsign] = useState(() => saved.joined?.callsign ?? "ALPHA 1");
   const [area, setArea] = useState<AreaId>("vincennes");
   const [language, setLanguage] = useState<Lang>("en");
-  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
+  const [serverUrl, setServerUrl] = useState(() => process.env.EXPO_PUBLIC_SERVER_URL ?? saved.server ?? saved.joined?.server ?? DEFAULT_SERVER);
+  const [hosts, setHosts] = useState<FoundHost[]>([]);
   const [reach, setReach] = useState<Reach>("checking");
+  const [connectedHost, setConnectedHost] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
-  const [tab, setTab] = useState<"scenarios" | "sent">("scenarios");
+  const [tab, setTab] = useState<"scenarios" | "sent">("sent");
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const [busy, setBusy] = useState<Busy>("idle");
-  const [status, setStatus] = useState("Hold the button and say where you are, or play a scenario.");
+  const [status, setStatus] = useState("Hold the button and say where you are.");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [position, setPosition] = useState<Position | null>(null);
   const [scenarioId, setScenarioId] = useState(SCENARIOS[0]?.id ?? "");
@@ -119,7 +120,9 @@ function Transmitter() {
   const [realTime, setRealTime] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
   const [playClips, setPlayClips] = useState(false);
-  const [useHints, setUseHints] = useState(true);
+  const useHints = true; // Fixed default for the development speech-to-text stub.
+  const [developer, setDeveloper] = useState(false);
+  useEffect(() => { writeSaved({ ...saved, server: serverUrl }); }, [saved, serverUrl]);
   // Tests only: send each recording beside the phone's words, for the coordinator to keep (KEEP_CLIPS=1).
   const [sendClips, setSendClips] = useState(false);
   const [modelReady, setModelReady] = useState(hasModel);
@@ -136,13 +139,15 @@ function Transmitter() {
   /** The coordinator's missions; null when it has none to offer (an older deployment). */
   const [missionList, setMissionList] = useState<MissionListReply | null>(null);
   const [joined, setJoined] = useState<{ code: string; name: string; area: AreaId; callsign: string } | null>(null);
-  const [pickedMission, setPickedMission] = useState<string | null>(null);
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   /** In a mission as the call sign shown. A changed call sign has to join again. */
-  const joinedNow = joined && joined.callsign === callsignKey(callsign) ? joined : null;
+  const joinedNow = connectedHost === serverUrl && joined && joined.callsign === callsignKey(callsign) ? joined : null;
+  const needsConnect = connectedHost !== serverUrl;
   /** A coordinator that keeps missions takes reports only from a phone that joined one. */
-  const needsJoin = reach === "ok" && !!missionList?.stored && !joinedNow;
+  const newestMission = missionList?.missions.filter((m) => m.ended == null).reduce<(typeof missionList.missions)[number] | null>((newest, m) => !newest || m.opened > newest.opened || (m.opened === newest.opened && m.code > newest.code) ? m : newest, null) ?? null;
+  const needsJoin = !needsConnect && reach === "ok" && !!missionList?.stored && (!joinedNow || (busy === "idle" && joinedNow.code !== newestMission?.code));
+  const autoJoinAttempt = useRef({ key: "", at: 0 });
   /** In a mission, its area; the coordinator uses it whatever the phone sends. */
   const effectiveArea: AreaId = joinedNow?.area ?? area;
   const scenarios = joinedNow ? SCENARIOS.filter((s) => s.area === joinedNow.area) : SCENARIOS;
@@ -151,7 +156,6 @@ function Transmitter() {
   const positionRef = useRef<Position | null>(null);
   /** The mission's code, for the send path; null with no mission. */
   const sessionRef = useRef<string | null>(null);
-  const triedRejoinRef = useRef(false);
   /** The coordinator's report id for each question asked, by log entry, to send back with the answer. */
   const reportIdsRef = useRef(new Map<string, string>());
   const seqRef = useRef(0);
@@ -164,33 +168,26 @@ function Transmitter() {
   const phoneTimesRef = useRef<number[]>([]);
   const recorder = useAudioRecorder(SPEECH_RECORDING_WAV);
 
-  // Is the coordinator answering at this address, and which missions are open? Any HTTP answer
-  // counts as answering; only silence does not. Checked when the address changes and then every
-  // 5 seconds, so the light follows the network and a newly opened or ended mission shows up.
+  // Probe the USB/Metro host and remembered hosts, then their LAN discovery lists.
   useEffect(() => {
     let cancelled = false;
+    let scanning = false;
     const check = async () => {
+      if (scanning) return;
+      scanning = true;
       try {
-        const list = await fetchMissions(serverUrl);
+        const found = await discoverHosts([serverUrl, LOCAL_COORDINATOR, process.env.EXPO_PUBLIC_SERVER_URL, saved.server, "http://127.0.0.1:3117"]);
         if (cancelled) return;
-        setReach("ok");
-        setMissionList(list);
-      } catch {
-        if (!cancelled) setReach("unreachable");
-      }
+        setHosts(found);
+        const selected = found.find((host) => host.url === serverOrigin(serverUrl));
+        setReach(selected ? (selected.ready ? "ok" : "checking") : "unreachable");
+        setMissionList(selected?.missions ?? null);
+      } finally { scanning = false; }
     };
-    const first = setTimeout(() => {
-      if (cancelled) return;
-      setReach("checking");
-      check();
-    }, 500);
-    const again = setInterval(check, 5_000);
-    return () => {
-      cancelled = true;
-      clearTimeout(first);
-      clearInterval(again);
-    };
-  }, [serverUrl]);
+    void check();
+    const interval = setInterval(check, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [serverUrl, saved.server]);
 
   // Sound should come out of the loudspeaker even when the phone's ring switch is on silent,
   // as it would from a radio.
@@ -224,7 +221,7 @@ function Transmitter() {
     setJoined(null);
     setPositionBoth(null);
     setSaved((s) => {
-      const next = { device: s.device };
+      const next = { device: s.device, server: s.server };
       writeSaved(next);
       return next;
     });
@@ -232,16 +229,20 @@ function Transmitter() {
   }, []);
 
   const join = useCallback(
-    async (code: string, cs: string, rejoining = false) => {
+    async (code: string, cs: string) => {
       setJoinBusy(true);
       setJoinError(null);
       try {
         const r = await joinMission(serverUrl, code, callsignKey(cs), saved.device);
+        if (sessionRef.current !== code) {
+          reportIdsRef.current.clear();
+          setEntries((entries) => entries.map((entry) => ({ ...entry, pending: false })));
+        }
         setJoinedBoth({ code, name: r.mission.name, area: r.mission.area, callsign: r.callsign });
         setArea(r.mission.area);
         setCallsign(r.callsign);
         setPositionBoth(positionFromJoin(r));
-        const next = { device: saved.device, joined: { server: serverUrl, code, callsign: r.callsign } };
+        const next = { device: saved.device, server: serverUrl, joined: { server: serverUrl, code, callsign: r.callsign } };
         setSaved(next);
         writeSaved(next);
         if (r.rejoined) {
@@ -252,30 +253,27 @@ function Transmitter() {
         }
       } catch (e) {
         const msg = e instanceof Error ? (e.name === "AbortError" ? "The coordinator did not answer in time." : e.message) : "Joining failed.";
-        if (rejoining && e instanceof CoordinatorError && e.ended) leaveMission("Your last mission has ended. Join another one.");
-        else setJoinError(msg);
+        setJoinError(msg);
       } finally {
         setJoinBusy(false);
       }
     },
-    [serverUrl, saved.device, language, speakReplies, leaveMission],
+    [serverUrl, saved.device, language, speakReplies],
   );
 
-  // On start, rejoin the mission this phone was in; while in one, notice when it ends.
+  // Follow the newest open mission automatically, between reports only.
   useEffect(() => {
-    if (!missionList?.stored) return;
-    const open = missionList.missions.filter((m) => m.ended == null);
-    if (joined) {
-      if (!open.some((m) => m.code === joined.code)) leaveMission(`${joined.name} has ended. Join another mission.`);
+    if (needsConnect || reach !== "ok" || !missionList?.stored || busy !== "idle" || joinBusy) return;
+    if (!newestMission) {
+      if (joined) leaveMission("Waiting for the server to start a mission.");
       return;
     }
-    const last = saved.joined;
-    if (!triedRejoinRef.current && last && last.server === serverUrl) {
-      triedRejoinRef.current = true;
-      if (open.some((m) => m.code === last.code)) join(last.code, last.callsign, true);
-      else leaveMission("Your last mission has ended. Join another one.");
-    }
-  }, [missionList, joined, saved.joined, serverUrl, join, leaveMission]);
+    if (joinedNow?.code === newestMission.code && joinedNow.callsign === callsignKey(callsign)) return;
+    const key = `${serverUrl}:${newestMission.code}:${callsignKey(callsign)}`;
+    if (autoJoinAttempt.current.key === key && Date.now() - autoJoinAttempt.current.at < 10_000) return;
+    autoJoinAttempt.current = { key, at: Date.now() };
+    void join(newestMission.code, callsign);
+  }, [needsConnect, reach, missionList, busy, joinBusy, newestMission, joinedNow, joined, callsign, serverUrl, join, leaveMission]);
 
   /**
    * The one path every utterance takes, whatever produced it: send to the coordinator,
@@ -283,6 +281,7 @@ function Transmitter() {
    */
   const handleUtterance = useCallback(
     async (u: Utterance, opts: { area: AreaId; language: Lang; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
+      if (needsConnect || needsJoin || reach !== "ok") { setStatus("Waiting for connection to the newest running mission."); return null; }
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
         const { reply, roundTripMs } = await sendUtterance(u, { serverUrl, area: opts.area, language: opts.language, session: sessionRef.current, lastPosition: positionRef.current });
@@ -327,7 +326,7 @@ function Transmitter() {
         return null;
       }
     },
-    [serverUrl, leaveMission],
+    [serverUrl, leaveMission, needsConnect, needsJoin, reach],
   );
 
   /** Tells the receiver which choice was tapped. The phone has already applied it, so this only logs a failure. */
@@ -543,10 +542,16 @@ function Transmitter() {
     setStatus("Cleared.");
   };
 
-  const coordinatorName = serverUrl === LOCAL_COORDINATOR ? "This Mac" : serverUrl === LIVE_SITE ? "Live site" : serverUrl.replace(/^https?:\/\//, "");
-  const areaLabel = AREAS.find((a) => a.id === area)?.label ?? area;
+  const coordinatorName = serverUrl.replace(/^https?:\/\//, "");
+  const areaLabel = AREAS.find((a) => a.id === effectiveArea)?.label ?? effectiveArea;
   const languageLabel = LANGUAGES.find((l) => l.id === language)?.label ?? language;
   const openSetup = () => setSetupOpen(true);
+  const connectTo = (host: FoundHost) => {
+    if (!host.ready || busyRef.current !== "idle" || joinBusy) return;
+    setJoinedBoth(null); setPositionBoth(null); autoJoinAttempt.current = { key: "", at: 0 };
+    setServerUrl(host.url); setConnectedHost(host.url); setReach("ok"); setMissionList(host.missions);
+    setStatus(`Connected to ${host.name}. Connecting to the newest running mission.`);
+  };
   /** The newest question still waiting for an answer, if any. */
   const asking = entries.find((e) => e.pending && e.candidates?.length);
   const askingId = asking?.id;
@@ -555,32 +560,24 @@ function Transmitter() {
     if (askingId) scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, [askingId]);
 
-  const openMissions = missionList?.missions.filter((m) => m.ended == null) ?? [];
-  // The one picked, or the only one open.
-  const selectedMission = openMissions.find((m) => m.code === pickedMission)?.code ?? (openMissions.length === 1 ? openMissions[0].code : null);
-
   // At most one notice, for the thing that would make the next report fail.
   const notice =
-    reach === "unreachable" ? (
-      <View style={[styles.notice, styles.noticeBad]} accessibilityRole="alert">
-        <Ionicons name="alert-circle" size={20} color={color.bad} />
-        <Text style={styles.noticeText}>Can’t reach the coordinator ({coordinatorName}). Reports will not go through.</Text>
-        <Button label="Setup" kind="quiet" onPress={openSetup} />
+    needsConnect ? (
+      <View style={{ marginHorizontal: space.lg, marginTop: space.md, gap: space.sm }}>
+        <Text style={type.headline}>{hosts.length ? "Choose coordinator" : "Looking for coordinators…"}</Text>
+        {hosts.map((host) => <View key={host.id} style={[styles.notice, styles.noticeWarn, { marginHorizontal: 0 }]}>
+          <Text style={styles.noticeText}>{host.name}{host.ready ? "" : " · Starting…"}{host.missions.missions.some((m) => m.ended == null) ? "" : " · No running mission"}</Text>
+          <Button label="Connect" onPress={() => connectTo(host)} disabled={!host.ready} />
+        </View>)}
+        {!hosts.length ? <Text style={type.footnote}>Keep the phone connected by USB or use the server’s local network. Detection retries automatically.</Text> : null}
       </View>
+    ) : reach === "unreachable" ? (
+      <View style={[styles.notice, styles.noticeBad]}><Text style={styles.noticeText}>Connection lost. Reports cannot be sent.</Text><Button label="Hosts" onPress={() => setConnectedHost(null)} /></View>
     ) : needsJoin ? (
-      <JoinCard
-        missions={openMissions}
-        selected={selectedMission}
-        onSelect={setPickedMission}
-        callsign={callsign}
-        onCallsign={setCallsign}
-        onJoin={() => {
-          if (selectedMission) join(selectedMission, callsign);
-        }}
-        busy={joinBusy}
-        error={joinError}
-        receiverUrl={`${serverUrl.replace(/\/+$/, "")}/receiver`}
-      />
+      <View style={[styles.notice, styles.noticeWarn]}>
+        <Text style={styles.noticeText}>{joinError ?? (newestMission ? `Connecting to ${newestMission.name}…` : "No running mission. Waiting for the server to start one.")}</Text>
+        {!newestMission ? <Button label="Waiting for mission" disabled onPress={() => {}} /> : null}
+      </View>
     ) : modelMissing ? (
       <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
         <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
@@ -607,9 +604,9 @@ function Transmitter() {
               <Text style={type.footnote} numberOfLines={1}>
                 {areaLabel} · {languageLabel}
               </Text>
-              <View style={[styles.dot, { backgroundColor: reach === "ok" ? color.ok : reach === "unreachable" ? color.bad : color.textDim }]} />
+              <View style={[styles.dot, { backgroundColor: reach === "ok" && !needsConnect && !needsJoin && joinedNow ? color.ok : reach === "unreachable" ? color.bad : color.warn }]} />
               <Text style={[type.footnote, styles.contextLast, reach === "unreachable" && styles.badText]} numberOfLines={1}>
-                {coordinatorName}
+                {needsConnect ? "Not connected" : joinedNow && !needsJoin ? `${coordinatorName} · Reporting` : `${coordinatorName} · Waiting for mission`}
               </Text>
             </View>
           </Pressable>
@@ -622,9 +619,8 @@ function Transmitter() {
           <View style={styles.missionBar}>
             <Ionicons name="flag" size={16} color={color.ok} />
             <Text style={[type.footnote, styles.missionName]} numberOfLines={1} accessibilityLabel={`In mission ${joinedNow.name}`}>
-              {joinedNow.name}
+              {joinedNow.name} · {joinedNow.code}
             </Text>
-            <Button label="Leave" kind="quiet" muted onPress={() => leaveMission(`Left ${joinedNow.name}.`)} />
           </View>
         ) : reach === "ok" && !missionList?.stored ? (
           <Text style={[type.footnote, styles.noRecord]}>This coordinator keeps no record, so there are no missions: reports are placed, but no receiver shows them.</Text>
@@ -633,7 +629,7 @@ function Transmitter() {
         {notice}
 
         <View style={styles.talk}>
-          <TalkButton state={busy} blocked={modelMissing ? (modelError ? "Speech unavailable" : "Preparing speech") : needsJoin ? "Join first" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <TalkButton state={busy} blocked={needsConnect ? "Connect first" : reach !== "ok" ? "Coordinator offline" : needsJoin ? (newestMission ? "Connecting to mission" : "Waiting for mission") : modelMissing ? (modelError ? "Speech unavailable" : "Preparing speech") : null} onPressIn={onPressIn} onPressOut={onPressOut} />
           <View style={styles.readout}>
             <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
               {asking ? "The coordinator needs an answer." : status}
@@ -647,7 +643,7 @@ function Transmitter() {
 
       <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         {asking ? <QuestionCard entry={asking} onChoose={choose} onNone={noneOfThese} /> : null}
-        <Segmented
+        {developer ? <Segmented
           label="Scenarios or sent reports"
           options={[
             { id: "scenarios", label: "Scenarios" },
@@ -655,43 +651,43 @@ function Transmitter() {
           ]}
           value={tab}
           onChange={setTab}
-        />
-        {tab === "scenarios" ? (
+        /> : null}
+        {developer && tab === "scenarios" ? (
           <ScenarioCard
             scenarios={scenarios}
             scenarioId={effectiveScenarioId}
             onSelect={setScenarioId}
             results={stepResults}
             running={busy === "scenario"}
-            blocked={modelMissing || needsJoin || (busy !== "idle" && busy !== "scenario")}
+            blocked={modelMissing || needsConnect || needsJoin || reach !== "ok" || (busy !== "idle" && busy !== "scenario")}
             onPlay={playScenario}
             onStop={() => (cancelScenarioRef.current = true)}
             onSendStep={sendOneStep}
           />
         ) : (
-          <LogList entries={entries} onClear={reset} />
+          <LogList entries={entries} onClear={reset} developer={developer} />
         )}
       </ScrollView>
 
       <SetupSheet
         visible={setupOpen}
         onClose={() => setSetupOpen(false)}
-        locked={busy !== "idle"}
+        locked={busy !== "idle" || joinBusy}
         callsign={callsign}
         onCallsign={setCallsign}
-        areas={AREAS}
-        area={area}
-        onArea={setArea}
         languages={LANGUAGES}
         language={language}
         onLanguage={setLanguage}
         serverUrl={serverUrl}
-        onServerUrl={setServerUrl}
-        localCoordinator={LOCAL_COORDINATOR}
-        liveSite={LIVE_SITE}
+        hosts={hosts}
+        onConnectHost={connectTo}
+        onServerUrl={(url) => {
+          if (url !== serverUrl) { setConnectedHost(null); setJoinedBoth(null); setMissionList(null); setReach("checking"); }
+          setServerUrl(url);
+        }}
         reach={reach}
-        useHints={useHints}
-        onUseHints={setUseHints}
+        developer={developer}
+        onDeveloper={setDeveloper}
         sendClips={sendClips}
         onSendClips={setSendClips}
         speakReplies={speakReplies}

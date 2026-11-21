@@ -11,7 +11,7 @@ import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, describeTrack, HEADING_DEG, trackSymbolCode } from "@/lib/geo/trackKinds";
 import { colourMap, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
-import { sessionCode, type LogEntry, type MissionListReply, type SessionLogReply } from "@/lib/reports/types";
+import { sessionCode, type LogEntry, type MissionListReply, type MissionSummary, type SessionLogReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import styles from "./Receiver.module.css";
@@ -215,6 +215,7 @@ export default function Receiver() {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** With no mission in the address: still looking for one, or none is open. */
+  const [otherMissions, setOtherMissions] = useState<MissionSummary[]>([]);
   const [noMission, setNoMission] = useState(false);
   const [stored, setStored] = useState<boolean | null>(null);
   const [lastOk, setLastOk] = useState(0);
@@ -222,6 +223,7 @@ export default function Receiver() {
   const [mode, setMode] = useState<"live" | "replay">("live");
   const [replayT, setReplayT] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [replayOpen, setReplayOpen] = useState(false);
   const [speed, setSpeed] = useState(10);
   const [follow, setFollow] = useState(true);
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
@@ -281,6 +283,23 @@ export default function Receiver() {
       stop = true;
       clearInterval(id);
     };
+  }, [session]);
+
+  // Reports in another open mission should not look like a disconnected phone.
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch("/api/sessions", { cache: "no-store" });
+        if (!res.ok) return;
+        const list = await res.json() as MissionListReply;
+        if (!cancelled) setOtherMissions(list.missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && Date.now() - m.last < 120_000));
+      } catch { /* Existing connection status handles failures. */ }
+    };
+    void check();
+    const timer = setInterval(check, LIST_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [session]);
 
   const pickSession = useCallback((code: string | null) => {
@@ -902,9 +921,9 @@ export default function Receiver() {
         {mission && ended == null ? (
           confirmEnd ? (
             <span className={styles.confirm} role="group" aria-label="End this mission?">
-              <span className={styles.confirmText}>End this mission? Reports stop. It stays here for replay.</span>
+              <span className={styles.confirmText}>Stop this mission? Reports stop. It stays here for replay.</span>
               <button type="button" className={styles.dangerBtn} onClick={endMission}>
-                End mission
+                Stop mission
               </button>
               <button type="button" className={styles.linkBtn} onClick={() => setConfirmEnd(false)}>
                 Cancel
@@ -912,7 +931,7 @@ export default function Receiver() {
             </span>
           ) : (
             <button type="button" className={styles.ghostBtn} onClick={() => setConfirmEnd(true)}>
-              End mission
+              Stop mission
             </button>
           )
         ) : null}
@@ -921,16 +940,8 @@ export default function Receiver() {
             {actionError}
           </span>
         ) : null}
-        {!fixedArea && !mission && session ? (
-          <div className={styles.segmented} role="group" aria-label="Area">
-            {(Object.keys(AREAS) as AreaId[]).map((id) => (
-              <button key={id} type="button" aria-pressed={area === id} onClick={() => setManualArea(id)}>
-                {AREAS[id].label}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <div className={styles.spacer} />
+        {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
         <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
           <span className={styles.connDot} aria-hidden="true" />
           {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
@@ -951,6 +962,9 @@ export default function Receiver() {
         {/* A frame round the map says "this is a replay" from across the room. */}
         {mode === "replay" ? <div className={styles.replayFrame} aria-hidden="true" /> : null}
         <div className={styles.mapNotes}>
+          {otherMissions.map((other) => <div key={other.code} className={styles.mapNote} style={{ pointerEvents: "auto" }}>
+            Reports received in {other.name} · {other.code}. <button type="button" className={styles.linkBtn} onClick={() => pickSession(other.code)}>Show mission</button>
+          </div>)}
           {!mapReady ? (
             <div className={styles.mapNote} role="status">
               {mapSlow ? "The map has not loaded yet. It needs the network for its tiles. Units and reports still show in the lists." : "Loading the map…"}
@@ -971,6 +985,11 @@ export default function Receiver() {
         </div>
 
         <div className={styles.replayBar}>
+          <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} onClick={() => {
+            if (replayOpen) goLive();
+            setReplayOpen(!replayOpen);
+          }}>{replayOpen ? "Close replay" : "Replay"}</button>
+          {replayOpen ? <>
           <button
             type="button"
             className={styles.liveBtn}
@@ -1032,6 +1051,7 @@ export default function Receiver() {
               </button>
             ))}
           </div>
+          </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
         </div>
       </main>
 

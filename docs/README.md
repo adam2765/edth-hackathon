@@ -12,7 +12,7 @@ New to the project? Read these in order:
 2. [Architecture](architecture.md): the parts, where each step runs, what is built.
 3. [Plan](plan.md): the work ahead, part by part.
 4. [CONTRIBUTING.md](../CONTRIBUTING.md): set up, run the checks, how we work together.
-5. [Setup](setup.md): get it running on your computer and phone, step by step. A coding agent can follow it.
+5. [Setup](setup.md): install once, then Build/Start/Stop; direct console commands remain.
 
 ## What is where
 

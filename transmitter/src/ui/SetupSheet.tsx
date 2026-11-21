@@ -1,7 +1,9 @@
 // Everything you set once and then leave alone: who you are, which coordinator, and sound. Kept off the main screen so that screen is only for reporting.
+import { useState } from "react";
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import type { AreaId, Lang } from "../types";
+import type { FoundHost } from "../hosts";
+import type { Lang } from "../types";
 import { Button, Group, Row, Segmented, SwitchRow } from "./controls";
 import type { Reach } from "./model";
 import { color, space, type } from "./theme";
@@ -14,22 +16,18 @@ export interface SetupProps {
 
   callsign: string;
   onCallsign: (v: string) => void;
-  areas: { id: AreaId; label: string }[];
-  area: AreaId;
-  onArea: (a: AreaId) => void;
   languages: { id: Lang; label: string }[];
   language: Lang;
   onLanguage: (l: Lang) => void;
 
+  hosts: FoundHost[];
+  onConnectHost: (host: FoundHost) => void;
   serverUrl: string;
   onServerUrl: (v: string) => void;
-  /** The coordinator on the computer this app was loaded from, when known. */
-  localCoordinator: string | null;
-  liveSite: string;
   reach: Reach;
 
-  useHints: boolean;
-  onUseHints: (v: boolean) => void;
+  developer: boolean;
+  onDeveloper: (enabled: boolean) => void;
   sendClips: boolean;
   onSendClips: (v: boolean) => void;
 
@@ -46,6 +44,7 @@ function host(url: string): string {
 }
 
 export function SetupSheet(p: SetupProps) {
+  const [hostsOpen, setHostsOpen] = useState(false);
   const reachText =
     p.reach === "ok"
       ? "The coordinator is answering."
@@ -69,7 +68,7 @@ export function SetupSheet(p: SetupProps) {
           <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             <Group
               title="This unit"
-              footer="The area decides which place names the coordinator looks reports up in. The language is the one you speak: speech-to-text on the phone listens for it, and questions come back in it. Scenarios use each report’s own language."
+              footer="The mission sets the area. Choose the language you speak."
             >
               <Row
                 label="Call sign"
@@ -90,56 +89,31 @@ export function SetupSheet(p: SetupProps) {
                 }
               />
               <View style={styles.padded}>
-                <Segmented label="Area" options={p.areas} value={p.area} onChange={p.onArea} disabled={p.locked} />
-              </View>
-              <View style={styles.padded}>
                 <Segmented label="Language" options={p.languages} value={p.language} onChange={p.onLanguage} disabled={p.locked} />
               </View>
             </Group>
 
             <Group title="Coordinator" footer={reachText}>
-              {p.localCoordinator ? (
-                <Row
-                  label="This Mac"
-                  note={`The computer this app loads from: ${host(p.localCoordinator)}`}
-                  selected={p.serverUrl === p.localCoordinator}
-                  onPress={() => p.onServerUrl(p.localCoordinator as string)}
-                  disabled={p.locked}
-                />
-              ) : null}
-              <Row label="Live site" note={host(p.liveSite)} selected={p.serverUrl === p.liveSite} onPress={() => p.onServerUrl(p.liveSite)} disabled={p.locked} />
-              <Row
-                label="Address"
-                right={
-                  <TextInput
-                    style={[styles.input, styles.address]}
-                    value={p.serverUrl}
-                    onChangeText={p.onServerUrl}
-                    editable={!p.locked}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                    returnKeyType="done"
-                    selectionColor={color.accent}
-                    accessibilityLabel="Coordinator address"
-                  />
-                }
-              />
-            </Group>
-
-            <Group title="Speech" footer="Speech is transcribed on this phone. Only text is sent unless test clips are enabled.">
-              <SwitchRow label="Place-name hints" note="Gives the phone’s model the area’s place names" value={p.useHints} onValueChange={p.onUseHints} />
-              <SwitchRow label="Send clips for testing" note="Also sends each recording. The coordinator keeps it only when started with KEEP_CLIPS=1" value={p.sendClips} onValueChange={p.onSendClips} />
+              <Row label="Hosts" note={host(p.serverUrl)} onPress={() => setHostsOpen(!hostsOpen)} disabled={p.locked} />
+              {hostsOpen ? <View>
+                {p.hosts.map((host) => <Row key={host.id} label={host.name} note={host.ready ? host.url : "Starting…"} selected={p.serverUrl === host.url} onPress={() => { p.onConnectHost(host); setHostsOpen(false); }} disabled={p.locked || !host.ready} />)}
+                {!p.hosts.length ? <Text style={[type.footnote, styles.padded]}>Looking for coordinators…</Text> : null}
+              </View> : null}
             </Group>
 
             <Group title="Sound">
               <SwitchRow label="Speak questions" note="Reads the coordinator’s question aloud" value={p.speakReplies} onValueChange={p.onSpeakReplies} />
-              <SwitchRow label="Play scenario clips aloud" note="Before each one is sent, so the room hears the report" value={p.playClips} onValueChange={p.onPlayClips} />
             </Group>
 
-            <Group title="Scenarios">
-              <SwitchRow label="Keep the script’s timing" note="Wait between reports as the script says" value={p.realTime} onValueChange={p.onRealTime} />
+            <Group title="Development">
+              <SwitchRow label="Developer tools" note="Shows scenarios, test clips and connection override" value={p.developer} onValueChange={p.onDeveloper} disabled={p.locked} />
             </Group>
+            {p.developer ? <Group title="Developer and demo settings" footer="Phone speech-to-text is a development stub with a fixed model and place-name hints.">
+              <Row label="Host override" right={<TextInput style={[styles.input, styles.address]} value={p.serverUrl} onChangeText={p.onServerUrl} editable={!p.locked} autoCapitalize="none" autoCorrect={false} keyboardType="url" accessibilityLabel="Coordinator address" />} />
+              <SwitchRow label="Send clips for testing" note="Requires KEEP_CLIPS=1 on the host to keep recordings" value={p.sendClips} onValueChange={p.onSendClips} disabled={p.locked} />
+              <SwitchRow label="Play scenario clips aloud" value={p.playClips} onValueChange={p.onPlayClips} disabled={p.locked} />
+              <SwitchRow label="Keep the script’s timing" value={p.realTime} onValueChange={p.onRealTime} disabled={p.locked} />
+            </Group> : null}
           </ScrollView>
         </SafeAreaView>
       </SafeAreaProvider>

@@ -281,15 +281,18 @@ export function getExtractor(): IntentExtractor {
  * Loads the local model and each place's prompt before the first report, so no speaker waits for that.
  * Measured on the MacBook: 9 s to load the 3B model, 6 s for the first report in a new area.
  */
-export async function warmUpExtractor(places: string[]): Promise<void> {
+export async function warmUpExtractor(places: string[]): Promise<boolean> {
   const extractor = getExtractor();
+  let ready = true;
   for (const place of places) {
     const t0 = performance.now();
     try {
       await extractor.extract("I'm at the town hall.", { place, timeoutMs: 120_000 });
       console.log(`[extractor] ${extractor.name} ready for ${place} in ${Math.round(performance.now() - t0)} ms`);
     } catch (err) {
+      ready = false;
       console.warn(`[extractor] ${extractor.name} warm-up for ${place} failed: ${err instanceof Error ? err.message : err}`);
     }
   }
+  return ready;
 }

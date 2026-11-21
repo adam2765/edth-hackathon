@@ -23,6 +23,7 @@ const TIMEOUT_MS = 20_000;
 
 /** Sends phone-transcribed text, optionally accompanied by a clip kept for testing. */
 export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<SendResult> {
+  if (!ctx.session) throw new Error("Join a running mission before reporting.");
   const form = new FormData();
   if (u.text) form.append("text", u.text);
   else if (!u.clipUri) throw new Error("Utterance has neither text nor a test clip");
@@ -51,6 +52,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
     const res = await fetch(`${ctx.serverUrl.replace(/\/+$/, "")}/api/report`, { method: "POST", body: form, signal: controller.signal });
     const reply = (await res.json()) as ReportReply;
     if (!res.ok || reply.error) throw new CoordinatorError(reply.error ?? `Coordinator answered ${res.status}`, res.status, !!reply.ended);
+    if (!reply.report_id) throw new Error("The server did not acknowledge saving this report in the mission.");
     return { reply, roundTripMs: Date.now() - t0 };
   } finally {
     clearTimeout(timer);

@@ -37,6 +37,13 @@ flowchart TB
     SCN -- "Scenario file" --> SRC
 ```
 
+## Runtime readiness
+
+`GET /api/health` returns `{ app: "voice-to-map", id, name, port, ready: boolean }`, HTTP 200 when ready or 503 otherwise,
+with no cache. In local mode ready means all area prompts warmed successfully; hosted
+mode checks that a provider key exists, not that its remote service is reachable.
+`GET /api/hosts` returns `{ hosts: [{ id, name, urls }] }` for the current server and LAN coordinators. The phone verifies readiness and mission storage before offering Connect. Native reports require a mission and a saved-report acknowledgement. No report/reply fields change.
+
 ## Report endpoint
 
 `POST /api/report`, multipart form:
