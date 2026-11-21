@@ -166,6 +166,43 @@ describe("readVoices", () => {
   });
 });
 
+describe("readVoices with the last position", () => {
+  const MAIRIE = gaz.find((f) => f.name === "Mairie de Vincennes" && f.category === "town_hall")!;
+  const AT_MAIRIE = intent({ landmark_text: "Mairie de Vincennes", landmark_name: "Mairie de Vincennes", landmark_category: "town_hall" });
+  const said = "I'm at Bérault. - I'm at Mairie de Vincennes.";
+  const readings: Record<string, Intent> = { [said]: AT_BERAULT, "I'm at Bérault.": AT_BERAULT, "I'm at Mairie de Vincennes.": AT_MAIRIE };
+  const withLast = (ago_ms: number) => {
+    const last: LastPosition = { ...fromMairie, ts: NOW - ago_ms };
+    const extract = async (text: string) => readings[text] ?? OTHER;
+    const place = (i: Intent, text: string) => resolve({ intent: i, transcript: text, lastPosition: last, now: NOW, gazetteer: gaz });
+    return { extract, resolve: place, gazetteer: gaz, last, now: NOW };
+  };
+
+  it("drops a voice the speaker could not have reached, and asks nothing", async () => {
+    // Bérault is about 800 m from the town hall: out of reach 20 s after a report there.
+    const r = await readVoices(said, withLast(20_000));
+    expect(r.resolution.status).toBe("resolved");
+    expect(r.resolution.evidence.rule).toBe("voices_context");
+    expect(r.resolution.evidence.feature_id).toBe(MAIRIE.id);
+    expect(r.resolution.question).toBeUndefined();
+    expect(r.resolution.evidence.detail).toMatch(/voice 1 Bérault \d+ m away/);
+  });
+
+  it("asks as before when both places are reachable", async () => {
+    // Ten minutes later, both are within reach.
+    const r = await readVoices(said, withLast(600_000));
+    expect(r.resolution.status).toBe("ambiguous");
+    expect(r.resolution.evidence.rule).toBe("voices_differ");
+    expect(r.resolution.candidates.map((c) => c.id).sort()).toEqual([BERAULT.id, MAIRIE.id].sort());
+  });
+
+  it("asks as before without a last position", async () => {
+    const deps = withLast(20_000);
+    const r = await readVoices(said, { ...deps, last: undefined, now: undefined });
+    expect(r.resolution.evidence.rule).toBe("voices_differ");
+  });
+});
+
 describe("combineVoices", () => {
   const placed = (voice: number, text: string, i: Intent): VoiceReading => ({ voice, text, intent: i, resolution: resolve({ intent: i, transcript: text, lastPosition: fromMairie, now: NOW, gazetteer: gaz }) });
 

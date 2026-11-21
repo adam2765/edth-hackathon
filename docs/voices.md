@@ -18,6 +18,7 @@ Whisper on the phone writes a dash where it hears the voice change. `lib/geo/voi
 | Several, at most one looks like a report | Read once, as before; the log notes how many voices were heard |
 | Two or more look like reports | Each is read on its own, at the same time |
 | ... and they place the same thing | Placed, no question |
+| ... and they name different places, one of them out of reach of the last position | Placed from the voice left, no question (`voices_context`) [188] |
 | ... and they name different places | "I heard more than one voice. Which place is yours: A or B?" Each choice is one voice's place |
 | ... and one is about a track, or none can be offered | "Say your position again" |
 | More than four look like reports | "Say your position again", without reading each |
@@ -28,7 +29,8 @@ Measured 21 November, offline (`ministral-3:3b` on the MacBook), typed reports t
 
 Limits:
 
-- The app cannot tell whose voice is whose. It only notices when two voices name places, and then asks.
+- The app cannot tell whose voice is whose. It only notices when two voices name places, and then asks, unless all but one put the speaker out of reach.
+- Out of reach means farther from the last position than 15 m/s for the time since it, plus its uncertainty and 100 m [188]. Only a position at a known place is checked: a movement, an open question or an unplaced voice is always kept, so the speaker's own voice is never dropped by this check.
 - It finds turns only where Whisper marks them. A missed mark reads the clip as one voice, as before.
 - Mistral's speech-to-text is asked to tell speakers apart (`diarize`, with segment timestamps) [175]. Where the speaker label changes, the transcript gets ">>", which splits voice turns like Whisper's dash. If Mistral refuses the option (400 or 422), the clip is transcribed again without it, so a report is never lost to it; `MISTRAL_STT_DIARIZE=0` turns it off. Not yet checked on real two-person clips: how reliably it labels a short report, and what it adds to the time.
 
