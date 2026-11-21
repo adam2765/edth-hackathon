@@ -15,6 +15,7 @@ describe("provider mode", () => {
     vi.stubEnv("MISTRAL_EXTRACT_MODEL", "");
     vi.stubEnv("LOCAL_EXTRACT_MODEL", "");
     vi.stubEnv("OLLAMA_URL", "");
+    vi.stubEnv("WHISPER_URL", "");
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -43,8 +44,13 @@ describe("provider mode", () => {
   it("never sends audio to Mistral in local mode, even with a key", async () => {
     vi.stubEnv("PROVIDER_MODE", "local");
     vi.stubEnv("MISTRAL_API_KEY", "test-key");
-    const { getTranscriber, NoLocalTranscriberError } = await providers();
-    expect(() => getTranscriber()).toThrow(NoLocalTranscriberError);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ language: "english", text: " I'm at Bérault." })));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    expect(getTranscriber().name).toBe("whisper-server");
+    await getTranscriber().transcribe(new Blob([new Uint8Array(8)]), "audio/webm", ["Bérault"]);
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe("http://127.0.0.1:3118/inference");
   });
 
   it("sends the same schema request to Ollama on this computer", async () => {
@@ -143,5 +149,72 @@ describe("Mistral speech-to-text with speakers told apart", () => {
     await getTranscriber().transcribe(clip, "audio/webm", []);
     const form = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
     expect(form.get("diarize")).toBeNull();
+  });
+});
+
+describe("Whisper on this computer in offline mode (decision 191)", () => {
+  beforeEach(() => {
+    vi.stubEnv("PROVIDER_MODE", "local");
+    vi.stubEnv("WHISPER_URL", "");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+  const clip = new Blob([new Uint8Array(8)], { type: "audio/webm" });
+  const reply = (body: object, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status }));
+  const formOf = (fetchMock: ReturnType<typeof vi.fn>) => (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+
+  it("listens for the device's language, with no prompt", async () => {
+    const fetchMock = reply({ language: "ukrainian", text: " Я біля Центральної районної лікарні." });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    const r = await getTranscriber().transcribe(clip, "audio/webm", ["Ізюм"], { language: "uk" });
+    expect(r).toEqual({ text: "Я біля Центральної районної лікарні.", language: "uk" });
+    const form = formOf(fetchMock);
+    expect(form.get("language")).toBe("uk");
+    expect(form.get("response_format")).toBe("verbose_json");
+    expect(form.get("prompt")).toBeNull();
+    expect((form.get("file") as File).name).toBe("clip.webm");
+  });
+
+  it("detects the language when the device names none, and reports it as ISO 639-1", async () => {
+    const fetchMock = reply({ language: "french", text: "Je suis à Bérault." });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    expect((await getTranscriber().transcribe(clip, "audio/mp4", [])).language).toBe("fr");
+    expect(formOf(fetchMock).get("language")).toBe("auto");
+  });
+
+  it("returns no words for silence, so the speaker is asked to repeat", async () => {
+    vi.stubGlobal("fetch", reply({ language: "english", text: " [BLANK_AUDIO]" }));
+    const { getTranscriber, withoutSoundMarks } = await providers();
+    expect((await getTranscriber().transcribe(clip, "audio/webm", [], { language: "en" })).text).toBe("");
+    expect(withoutSoundMarks("I'm at [MUSIC] Bérault.")).toBe("I'm at Bérault.");
+  });
+
+  it("takes its address from WHISPER_URL", async () => {
+    vi.stubEnv("WHISPER_URL", "http://10.0.0.5:9000/");
+    const fetchMock = reply({ language: "english", text: "I'm at Bérault." });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    await getTranscriber().transcribe(clip, "audio/webm", []);
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("http://10.0.0.5:9000/inference");
+  });
+
+  it("says the server is down when nothing answers or the model is still loading", async () => {
+    const { getTranscriber, LocalTranscriberDownError } = await providers();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed", { cause: new Error("connect ECONNREFUSED 127.0.0.1:3118") }); }));
+    await expect(getTranscriber().transcribe(clip, "audio/webm", [])).rejects.toThrow(LocalTranscriberDownError);
+    vi.stubGlobal("fetch", reply({ status: "loading model" }, 503));
+    await expect(getTranscriber().transcribe(clip, "audio/webm", [])).rejects.toThrow(/still loading/);
+  });
+
+  it("treats a failed transcription as a failure, not as a server that is down", async () => {
+    const { getTranscriber, LocalTranscriberDownError } = await providers();
+    vi.stubGlobal("fetch", reply({ error: "failed to read audio data" }, 400));
+    const err = await getTranscriber().transcribe(clip, "audio/webm", []).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(LocalTranscriberDownError);
   });
 });

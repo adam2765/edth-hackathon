@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { NoLocalTranscriberError, getTranscriber } from "@/lib/providers/transcriber";
+import { LocalTranscriberDownError, getTranscriber } from "@/lib/providers/transcriber";
 import { getExtractor, pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
@@ -141,7 +141,8 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias);
+      // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias, { language: pinned });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -191,9 +192,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ transcript, language, intent, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
-    if (err instanceof NoLocalTranscriberError) {
-      const error = "This coordinator runs offline and cannot turn speech into text yet. Use speech-to-text on the phone, or type the report.";
-      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 501 });
+    if (err instanceof LocalTranscriberDownError) {
+      console.warn(`[stt] ${err.message}. Start it with \`npm run stt\` (docs/setup.md, part 3).`);
+      const error = "Speech-to-text on the coordinator is not running. Type the report, or use speech-to-text on the phone.";
+      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 503 });
     }
     console.error("report failed", err);
     return NextResponse.json({ error: "Processing failed. Try again or type the report.", transcript, timings_ms: timings }, { status: 502 });

@@ -322,10 +322,9 @@ use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTR
 
 ### Offline: models on this computer
 
-`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter (which always transcribes on the phone), or typed. Audio gets a clear error.
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs through whisper-server, whisper.cpp's server, with Whisper large-v3-turbo [191]: `npm run stt` fetches the model once (574 MB, checksum checked) and starts it on 127.0.0.1:3118 (`WHISPER_URL`). It is needed only for audio sent to the coordinator, such as the browser's microphone; the native transmitter transcribes on the phone and sends text. Without it, audio gets HTTP 503 and a clear message. Turbo takes about 3 to 5 s per clip on an M1 Pro, so a spoken report takes 5 to 10 s offline ([stt-comparison.md](docs/stt-comparison.md#offline-on-the-coordinator)).
 
-Install current Ollama (0.40 or newer; `brew install ollama` on macOS), then use the
-daily startup above. The model download is needed only once.
+Install current Ollama (0.40 or newer; `brew install ollama` on macOS) and, for speech-to-text, `brew install whisper-cpp ffmpeg`, then use the daily startup above, with `npm run stt` in a window of its own. The model downloads are needed only once.
 
 `LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server loads the model and each area's prompt in the background, which takes about 10 s.
 

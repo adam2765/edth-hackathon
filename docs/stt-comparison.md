@@ -1,6 +1,8 @@
 # Speech-to-text comparison
 
-Which speech-to-text gets place names and languages right? Measured on 21 Nov 2026, 14:50 to 15:20 Paris time, so the team can decide whether to replace Whisper base on the phone. This page measures only. Nothing in the app changed, and it adds no decision line: the phone's speech-to-text is Brian's call [172].
+Which speech-to-text gets place names and languages right? Measured on 21 Nov 2026, 14:50 to 15:20 Paris time, so the team can decide whether to replace Whisper base on the phone. That part measures only, and adds no decision line: the phone's speech-to-text is Brian's call [172].
+
+A second round, 15:30 to 16:30, measured Whisper large-v3-turbo for speech-to-text on the coordinator in offline mode, and led to decision 191: see [Offline on the coordinator](#offline-on-the-coordinator).
 
 ## In short
 
@@ -75,7 +77,6 @@ Every transcript, with each run's result, is in [`scenarios/results/stt-comparis
 
 | Option | Why not | What its model card says |
 |---|---|---|
-| Whisper large-v3-turbo | The 574 MB download (q5_0) was not approved today | 809M parameters, 99 languages including Ukrainian, MIT |
 | Voxtral open weights: Mini 3B (2507), Mini 4B Realtime (2602) | Neither lists Ukrainian; 3.2 to 3.6 GB quantized; not approved | Apache 2.0; 8 and 13 languages |
 | Kyutai STT 1B | English and French only; about 2.4 GB; not approved | CC-BY 4.0 |
 | Real voices and whispers | No clips kept | |
@@ -91,6 +92,7 @@ Read on 21 Nov from each model's own card or docs:
 | Model | Maker | Languages we need | Licence | Card |
 |---|---|---|---|---|
 | Whisper base, small | OpenAI (US), open weights | en, fr, uk (99 in all) | Apache 2.0 on the card | [base](https://huggingface.co/openai/whisper-base), [small](https://huggingface.co/openai/whisper-small) |
+| Whisper large-v3-turbo | OpenAI (US), open weights | en, fr, uk (99 in all); 809M parameters | MIT | [card](https://huggingface.co/openai/whisper-large-v3-turbo), [whisper.cpp files](https://huggingface.co/ggerganov/whisper.cpp) |
 | Parakeet TDT 0.6B v3 | NVIDIA (US), open weights | en, fr, uk (25 European languages) | CC-BY 4.0 | [card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [whisper.cpp files](https://huggingface.co/ggml-org/parakeet-GGUF) |
 | voxtral-mini-transcribe-3 | Mistral (France), hosted | en, fr, uk (53 in all) | Paid API, $0.0035 a minute | [model](https://docs.mistral.ai/models/voxtral-mini-transcribe-3-0.md), [languages](https://docs.mistral.ai/studio/audio/specs-and-limits/languages) |
 
@@ -105,6 +107,31 @@ The whisper.rn 0.7.4 README says the package can also run Parakeet (`initParakee
 3. **Cheap changes to try on Whisper base, whatever is chosen.** Give it hint names only in the speaker's script: no Cyrillic names when English or French is pinned, and Latin spellings for Kyiv and Izium when English is pinned. Use fewer "Avenue" names. Measure before and after with the script below.
 4. **Before deciding, record real reports.** Record 20 to 30 per language with `KEEP_CLIPS=1` [155]: normal voice, whisper, a street name, some noise. Then run the script below on them. Today's real reports show Whisper base doing worse than on these clean clips.
 
+## Offline on the coordinator
+
+In the field, reports come over a radio, not from a phone, so the coordinator does the speech-to-text, and it can run a larger model than a phone (Alex, 21 Nov). Offline mode had none [83]. Whisper large-v3-turbo (q5_0, 574 MB) was measured beside Parakeet, the best local option above, and now runs there [191].
+
+Same 29 clips and the same scoring as above, three hosted scoring runs, 15:30 to 16:00. Base was run again with the report words of decision 189 in its hints. Character error rate is computed the same way for every row of this table; it comes out about a point under the table above.
+
+| Option | Places right, 3 runs | Characters wrong | Wrong script or language | Time per clip on the Mac: median, slowest |
+|---|---|---|---|---|
+| Whisper large-v3-turbo, no prompt (chosen) | 25, 26, 25; with VAD 26 | 4% | none with the language pinned | 2.8 s, 3.2 s (whisper-cli); 4.4 s through whisper-server, see below |
+| Whisper large-v3-turbo, hint names as the prompt | 25, 25, 25 | 8% | 1 English clip in Cyrillic | 2.9 s, 5.0 s |
+| Parakeet TDT 0.6B v3 | 25, 23, 26 | 5% | 2 of 11 Ukrainian clips in Russian | 0.4 s, 1.0 s |
+| Whisper base, hints with report words [189] | 19, 20, 18 | 7% | none | 0.3 s, 0.8 s |
+| Voxtral, bias terms (hosted) | 28, 29, 29 | 2% | none | 0.4 s, 7.9 s |
+| The scenarios' own words | 28, 29, 29 | | | |
+
+- **Turbo and Parakeet miss the same steps.** "Bérault" said by the English voice comes back as "Bayrold" from both, and a Ukrainian reading of "Izium" ("Isium", "ISIM") is not placed. Only Voxtral, with the name as a bias term, gets these. The one other miss in each run varies with extraction.
+- **Hint names gain turbo nothing, and cost it twice.** With the Izium names as its prompt, turbo wrote "I'm at Izium station" as «Імадзюм Стасіон», and put the hint word «об'єкт» into «Я біля Центральної районної лікарні», which came back as «І об'єкт 3, районна лікарня». So the coordinator sends turbo no prompt.
+- **Base with the report words of decision 189** fixed "Enemy patrol" (no longer "Avenue Patroule"), and placed 18 to 20, against 17 to 20 before.
+- **Turbo over Parakeet,** although Parakeet is seven times faster. Turbo is as accurate and steadier (25 or 26 each run, against 23 to 26). It takes the device's language, so it writes Ukrainian in Ukrainian; Parakeet takes none and wrote two Ukrainian clips in Russian. And it runs as a server from Homebrew (`brew install whisper-cpp`): Homebrew's Parakeet crashes on load, and there is no Parakeet server.
+- **Without the device's language, turbo writes Ukrainian as Russian too:** «Я на центральной площади», tagged `ru`, for «Я на Центральній площі». It was still placed. The web page and the transmitter always send the language [106].
+- **Silence came back as "Thank you."**, Whisper's best-known invention. `npm run stt` starts whisper-server with Silero VAD, which finds the speech first, so silence now comes back as no words and the speaker is asked to repeat. With VAD on, 3 of the 29 transcripts changed by an ending or a full stop, two of them now exactly as said, and one scoring run placed 26 of 29.
+- **Time.** whisper-cli took 2.8 s per clip (median), leaving out loading. Through whisper-server, with VAD and the format converted by ffmpeg, it took 4.4 to 4.8 s, while Ollama was serving another session on the same GPU. Through `POST /api/report`, offline, one spoken report took 7.7 to 10.2 s in all, of which extraction was 3 to 5.5 s instead of its usual 2 s. The two parts measured alone add up to about 5 s. Either way it misses the 4 s target ([plan.md](plan.md#local-mode)); the native transmitter, which sends text, is not slowed.
+- Every transcript of this round, with each run's result, is in the same [results file](../scenarios/results/stt-comparison-2026-11-21.jsonl), marked "round 2".
+- **Not measured:** real voices, noise, two voices in one clip (Whisper does not tell speakers apart, so the clip is read as one voice), `audio_ctx` to shorten the encoder's 30 s window, and a quiet Mac.
+
 ## How to run it again
 
 `scripts/stt-compare.ts` does all of it. Its header lists the commands.
@@ -114,7 +141,9 @@ brew install whisper-cpp     # whisper-cli; build parakeet-cli from the whisper.
 npx tsx scripts/stt-compare.ts whisper <ggml-base-q5_1.bin> base-hints.jsonl
 npx tsx scripts/stt-compare.ts whisper <ggml-base-q5_1.bin> base.jsonl --no-hints
 npx tsx scripts/stt-compare.ts parakeet <parakeet-cli> <ggml-parakeet-tdt-0.6b-v3-q8_0.bin> parakeet.jsonl
-npx tsx scripts/stt-compare.ts voxtral voxtral.jsonl          # needs MISTRAL_API_KEY
+npx tsx scripts/stt-compare.ts whisper <ggml-large-v3-turbo-q5_0.bin> turbo.jsonl --no-hints
+npx tsx scripts/stt-compare.ts coordinator voxtral.jsonl                          # hosted: needs MISTRAL_API_KEY
+PROVIDER_MODE=local npx tsx scripts/stt-compare.ts coordinator whisper-server.jsonl   # offline: needs npm run stt
 REPORT_STORE_DIR=/tmp/stt-missions npx tsx scripts/stt-compare.ts score scored.jsonl \
   script=script base=base-hints.jsonl parakeet=parakeet.jsonl voxtral=voxtral.jsonl
 ```
