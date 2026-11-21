@@ -156,6 +156,48 @@ type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
 const TRACK_SYMBOL_SIZE = 24;
 
 /**
+ * The way a track is moving, as a bold arrow from the middle of its symbol. milsymbol's own
+ * indicator is a thin black line that hardly shows past the frame, so this one is drawn on its own,
+ * under the symbol: only the part outside the frame shows. In screen pixels, for a symbol of size s.
+ */
+function headingArrow(s: number) {
+  return { len: Math.round(2.4 * s), shaft: Math.max(4, Math.round(0.22 * s)), headW: Math.round(0.95 * s), headL: Math.round(0.8 * s), halo: Math.max(2, Math.round(0.1 * s)) };
+}
+
+/** The arrow's image: pointing up, dark with a white edge, its tail at the bottom middle. */
+function headingArrowImage(s: number): ImageData | null {
+  const a = headingArrow(s);
+  const r = 2;
+  const w = a.headW + 2 * a.halo;
+  const h = a.len + a.halo;
+  const canvas = document.createElement("canvas");
+  canvas.width = w * r;
+  canvas.height = h * r;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(r, r);
+  const x = w / 2;
+  const tip = a.halo;
+  const neck = tip + a.headL;
+  ctx.beginPath();
+  ctx.moveTo(x, tip);
+  ctx.lineTo(x + a.headW / 2, neck);
+  ctx.lineTo(x + a.shaft / 2, neck);
+  ctx.lineTo(x + a.shaft / 2, h);
+  ctx.lineTo(x - a.shaft / 2, h);
+  ctx.lineTo(x - a.shaft / 2, neck);
+  ctx.lineTo(x - a.headW / 2, neck);
+  ctx.closePath();
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 2 * a.halo;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+  ctx.fillStyle = "#16212c";
+  ctx.fill();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+/**
  * A track in two lines: what it is and where, then who saw it or placed it. An open question comes
  * first, as for a unit. A track is a sighting, so the second line always names who reported it:
  * a unit, or the command post when a person placed it there.
@@ -499,6 +541,22 @@ export default function CommandPost() {
         // line from where it is now. The symbol itself is a marker that can be dragged.
         map.addLayer({ id: "draft-fill", type: "fill", source: "draft", filter: ["==", "$type", "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": 0.1 } });
         map.addLayer({ id: "draft-line", type: "line", source: "draft", filter: ["!=", "$type", "Point"], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [2, 2] } });
+        // The way a track is moving, under its symbol. It turns with the map, so north stays north.
+        map.addLayer({
+          id: "track-heading",
+          type: "symbol",
+          source: "track",
+          filter: ["has", "heading"],
+          layout: {
+            "icon-image": ["get", "arrow"],
+            "icon-anchor": "bottom",
+            "icon-rotate": ["get", "heading"],
+            "icon-rotation-alignment": "map",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: { "icon-opacity": op },
+        });
         // A track's standard symbol, with its number, what it is, and when and by whom it was seen.
         map.addLayer({
           id: "track-sym",
@@ -514,8 +572,9 @@ export default function CommandPost() {
             "text-size": 14,
             "text-line-height": 1.25,
             // Above the symbol: a unit's label hangs below its dot, so the two do not overprint
-            // when a unit reports something at the landmark it stands at.
-            "text-offset": [0, -1.9],
+            // when a unit reports something at the landmark it stands at. Higher when the track's
+            // arrow points up, so the arrow does not run through it.
+            "text-offset": ["array", "number", 2, ["get", "textOff"]],
             "text-anchor": "bottom",
             "text-allow-overlap": true,
             "text-ignore-placement": true,
@@ -636,7 +695,17 @@ export default function CommandPost() {
     const leader: GeoJSON.Feature[] = [];
     // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
     // keeps its spot and a new one moves.
-    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string }[] = [];
+    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
+    const trackText = Math.round(14 * k);
+    const size = Math.round(TRACK_SYMBOL_SIZE * k);
+    const ha = headingArrow(size);
+    const arrowIcon = `track-heading:${size}`;
+    if (symbols && !map.hasImage(arrowIcon)) {
+      const img = headingArrowImage(size);
+      if (img) map.addImage(arrowIcon, img, { pixelRatio: 2 });
+    }
+    // The label's bottom, in pixels above the point, when no arrow is in its way.
+    const liftPlain = 1.9 * trackText;
     for (const t of [...view.tracks].sort((a, b) => a.n - b.n)) {
       const p = t.position;
       // A track marked gone stays in the list, not on the map.
@@ -650,16 +719,14 @@ export default function CommandPost() {
       if (t.from && !old && distanceM(t.from, p) > 5) {
         sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [p.lon, p.lat]] } });
       }
-      // The symbol image: one per code, heading and size. The arrow for "moving east" makes the
-      // image lopsided, so it is shifted to keep the frame's own anchor on the point.
+      // The symbol image: one per code and size. Some frames are not centred on their own anchor,
+      // so the image is shifted to keep the anchor on the point.
       let icon = "";
       let off: [number, number] = [0, 0];
       if (symbols) {
-        const heading = t.heading ? HEADING_DEG[t.heading] : null;
-        const size = Math.round(TRACK_SYMBOL_SIZE * k);
-        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${heading ?? ""}:${size}`;
+        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
         if (!map.hasImage(icon)) {
-          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff", ...(heading != null ? { direction: heading } : {}) });
+          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
           const canvas = s.asCanvas(2);
           const ctx = canvas.getContext("2d");
           if (ctx && canvas.width && canvas.height) {
@@ -672,10 +739,25 @@ export default function CommandPost() {
         const i = trackIcons.current.get(icon);
         if (i) off = [i[0], i[1]];
       }
+      // The way it is moving, as said: an arrow from the middle of the symbol. On screen it points
+      // at the heading less the map's turn. When it points up, the label goes above its tip.
+      const heading = symbols && t.heading ? HEADING_DEG[t.heading] : null;
+      let lift = liftPlain;
+      let arrow: Rect | null = null;
+      if (heading != null) {
+        const rad = ((heading - map.getBearing()) * Math.PI) / 180;
+        const [sin, cos] = [Math.sin(rad), Math.cos(rad)];
+        const [tx, ty] = [ha.len * sin, -ha.len * cos];
+        const hw = ha.headW / 2 + ha.halo;
+        arrow = { x0: Math.min(0, tx) - hw, y0: Math.min(0, ty) - hw, x1: Math.max(0, tx) + hw, y1: Math.max(0, ty) + hw };
+        if (cos > 0) lift = Math.max(liftPlain, ha.len * cos + hw * Math.abs(sin) + 0.3 * trackText);
+      }
       const what = describeTrack(t);
       const name = `T${t.n} · ${what}`;
       const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
-      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props: { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked } });
+      const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
+      if (heading != null) Object.assign(props, { heading, arrow: arrowIcon });
+      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props, lift, arrow });
     }
 
     // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
@@ -697,14 +779,15 @@ export default function CommandPost() {
       const top = y + 1.1 * unitText;
       fixed.push(grow({ x0: x - b.w / 2, y0: top, x1: x + b.w / 2, y1: top + b.h }));
     }
-    const trackText = Math.round(14 * k);
     const frame = TRACK_SYMBOL_SIZE * k * 1.5;
     const marks: Mark[] = drawn.map((d) => {
       const { x, y } = map.project([d.p.lon, d.p.lat]);
       const i = trackIcons.current.get(d.icon);
       const b = textBox(d.label, trackText);
-      const bottom = -1.9 * trackText;
-      return { id: d.id, x, y, boxes: [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })] };
+      const bottom = -d.lift;
+      const boxes = [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })];
+      if (d.arrow) boxes.push(grow(d.arrow));
+      return { id: d.id, x, y, boxes };
     });
     const inSight = marks.filter((m) => m.x >= 0 && m.y >= 0 && m.x <= w && m.y <= h);
     const shifts = declutter(inSight, fixed, Math.round(40 * k));

@@ -9,6 +9,7 @@ import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM,
 import { canonTokens, categoryIsExplicit, categoryOfToken, genericCategoryOf, isCategoryWord, metroIsExplicit, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
 import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
 import { blocksSaid, crossingsAhead, MAX_BLOCKS, runsWay, type Ahead, type BlocksSaid } from "./blocks";
+import { clockSaid } from "./clock";
 
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
@@ -344,9 +345,14 @@ export function resolve(input: ResolveInput): Resolution {
     };
   };
 
+  // A clock direction is finer than the eight compass points it was read as [198]: 2 o'clock is
+  // 60°, not north-east's 45°. A move reckoned on that compass point goes on the clock's bearing.
+  const clock = clockSaid(transcript);
+  const exact = (deg: number) => (clock && DIRECTION_DEG[clock.direction] === deg ? clock.deg : deg);
+
   // A place that cannot be found does not stop a move that states its own distance and direction.
   const unresolved = (rule: string, detail: string): Resolution =>
-    last && d != null && intent.direction ? reckon(last, DIRECTION_DEG[intent.direction], d, `${rule} (${detail}), so placed from the stated move`) : plain(rule, detail);
+    last && d != null && intent.direction ? reckon(last, exact(DIRECTION_DEG[intent.direction]), d, `${rule} (${detail}), so placed from the stated move`) : plain(rule, detail);
 
   let name = intent.landmark_name?.trim() || null;
   // Dictionary form of an inflected name ("мостом Патона" → "міст Патона"); same as the name in English and French.
@@ -390,7 +396,8 @@ export function resolve(input: ResolveInput): Resolution {
   if (blocks && blockDir) return countBlocks({ input, blocks, dir: blockDir, name, lemma, category, lang });
   if (!name && !category) {
     // "300 metres north of my last position" says the same as "moved 300 metres north".
-    const bearing = intent.direction ? DIRECTION_DEG[intent.direction] : intent.relation ? COMPASS[intent.relation] : undefined;
+    const compass = intent.direction ? DIRECTION_DEG[intent.direction] : intent.relation ? COMPASS[intent.relation] : undefined;
+    const bearing = compass === undefined ? undefined : exact(compass);
     if (bearing === undefined && d == null) {
       return intent.kind === "other"
         ? plain("no_position_in_report", "the report did not state a position or movement")

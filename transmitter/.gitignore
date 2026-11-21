@@ -40,5 +40,5 @@ yarn-error.*
 /ios
 /android
 
-# Downloaded during setup; delivered as an app asset
+# Whisper base for the hints script (npm run setup); not bundled into the app
 /assets/models/

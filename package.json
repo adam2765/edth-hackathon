@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "stt": "node scripts/stt-server.mjs",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
     "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts",
     "eval:extract": "tsx scripts/eval-extraction.ts",

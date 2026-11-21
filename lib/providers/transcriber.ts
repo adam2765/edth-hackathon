@@ -1,11 +1,14 @@
 /**
- * Speech-to-text seam. Mistral, with MISTRAL_API_KEY.
- * Mistral is asked to tell speakers apart (diarization): where the speaker changes, the transcript
- * gets a ">>" mark, the same mark lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
+ * Speech-to-text seam.
+ *   hosted  Mistral, with MISTRAL_API_KEY. Mistral is asked to tell speakers apart (diarization):
+ *           where the speaker changes, the transcript gets a ">>" mark, the same mark
+ *           lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
+ *   local   Whisper large-v3-turbo in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
+ *           (decision 195). Audio never leaves the computer. It does not tell speakers apart.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
- * A local model can be added later behind the same interface; until then PROVIDER_MODE=local takes text only.
  */
-import { providerMode } from "./mode";
+import { providerMode, whisperUrl } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface TranscribeResult {
   text: string;
@@ -13,9 +16,14 @@ export interface TranscribeResult {
   language: string | null;
 }
 
+export interface TranscribeOptions {
+  /** The language the device is set to (en, fr, uk). Without it, the model detects the language. Mistral ignores it. */
+  language?: string | null;
+}
+
 export interface Transcriber {
   name: string;
-  transcribe(audio: Blob, mime: string, biasTerms: string[]): Promise<TranscribeResult>;
+  transcribe(audio: Blob, mime: string, biasTerms: string[], opts?: TranscribeOptions): Promise<TranscribeResult>;
 }
 
 /** A stretch of speech as Mistral returns it with segment timestamps. */
@@ -93,12 +101,12 @@ class MistralTranscriber implements Transcriber {
     }
     // Repeated field, one entry per term (checked against Mistral docs and live API, 20 Nov 2026).
     for (const t of biasTerms.slice(0, 100)) form.append("context_bias", t);
-    const res = await fetch("https://api.mistral.ai/v1/audio/transcriptions", {
+    const res = await fetchRetrying("https://api.mistral.ai/v1/audio/transcriptions", () => ({
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}` },
       body: form,
       signal: AbortSignal.timeout(15_000),
-    });
+    }));
     if (!res.ok) {
       const msg = `Mistral STT ${res.status}: ${(await res.text()).slice(0, 200)}`;
       throw diarize && (res.status === 400 || res.status === 422) ? new DiarizeRefused(msg) : new Error(msg);
@@ -109,22 +117,81 @@ class MistralTranscriber implements Transcriber {
   }
 }
 
-let cached: Transcriber | null = null;
-
-/** Thrown in local mode when audio arrives: there is no speech-to-text on this computer yet. */
-export class NoLocalTranscriberError extends Error {
-  constructor() {
-    super("PROVIDER_MODE=local has no speech-to-text on this computer yet");
-    this.name = "NoLocalTranscriberError";
+/** Thrown in local mode when whisper-server does not answer: not started, or still loading its model. */
+export class LocalTranscriberDownError extends Error {
+  constructor(url: string, why: string) {
+    super(`speech-to-text on this computer (whisper-server at ${url}) is not answering: ${why}`);
+    this.name = "LocalTranscriberDownError";
   }
 }
+
+/** whisper.cpp names the language in full; the rest of the app uses ISO 639-1. */
+const WHISPER_LANGUAGES: Record<string, string> = {
+  english: "en", french: "fr", ukrainian: "uk", russian: "ru", german: "de", polish: "pl", spanish: "es", italian: "it",
+};
+
+/**
+ * Whisper's marks for sounds that are not words, such as "[BLANK_AUDIO]" for silence. Removed, so a
+ * clip with no speech comes back empty and the speaker is asked to repeat.
+ */
+export function withoutSoundMarks(text: string): string {
+  return text.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
+ * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
+ * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
+ * scenario clips and twice put a prompt word in the transcript (docs/stt-comparison.md).
+ */
+class WhisperServerTranscriber implements Transcriber {
+  name = "whisper-server";
+  constructor(private url = whisperUrl()) {}
+
+  async transcribe(audio: Blob, mime: string, _biasTerms: string[], opts: TranscribeOptions = {}): Promise<TranscribeResult> {
+    const form = new FormData();
+    form.append("file", new File([audio], `clip.${extFor(mime)}`, { type: mime.split(";")[0] }));
+    // Only verbose_json names the language, but it also runs a second pass to score every language,
+    // about 0.9 s on the M1 Pro. So it is asked for only when the device names no language.
+    form.append("response_format", opts.language ? "json" : "verbose_json");
+    form.append("language", opts.language || "auto");
+    let res: Response;
+    try {
+      res = await fetch(`${this.url}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(20_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") throw new Error("whisper-server took over 20 s");
+      throw new LocalTranscriberDownError(this.url, err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err));
+    }
+    // 503: the server is up but still loading its model.
+    if (res.status === 503) throw new LocalTranscriberDownError(this.url, "still loading its model");
+    if (!res.ok) throw new Error(`whisper-server ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const j = (await res.json()) as { text?: string; language?: string; error?: string };
+    if (j.error) throw new Error(`whisper-server: ${j.error.slice(0, 200)}`);
+    const language = opts.language || WHISPER_LANGUAGES[(j.language ?? "").toLowerCase()] || null;
+    return { text: withoutSoundMarks(j.text ?? ""), language };
+  }
+}
+
+let cached: Transcriber | null = null;
 
 export function getTranscriber(): Transcriber {
   if (cached) return cached;
   // Local mode never sends audio to Mistral, even with a key set.
-  if (providerMode() === "local") throw new NoLocalTranscriberError();
-  if (process.env.MISTRAL_API_KEY) cached = new MistralTranscriber(process.env.MISTRAL_API_KEY);
+  if (providerMode() === "local") cached = new WhisperServerTranscriber();
+  else if (process.env.MISTRAL_API_KEY) cached = new MistralTranscriber(process.env.MISTRAL_API_KEY);
   else if (process.env.GRADIUM_API_KEY) throw new Error("GRADIUM_API_KEY is set but the Gradium transcriber is not built in stage 1");
-  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY, or run offline with PROVIDER_MODE=local and send text (docs/setup.md, part 3)");
+  else throw new Error("No speech-to-text key: set MISTRAL_API_KEY, or run offline with PROVIDER_MODE=local (docs/setup.md, part 3)");
   return cached;
+}
+
+/** Says at start-up whether whisper-server answers, so a missing one shows before the first spoken report. */
+export async function checkLocalTranscriber(): Promise<void> {
+  const url = whisperUrl();
+  try {
+    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
+    if (res.ok) console.log(`[stt] whisper-server ready at ${url}`);
+    else console.warn(`[stt] whisper-server at ${url} is still loading its model`);
+  } catch {
+    console.warn(`[stt] No whisper-server at ${url}: spoken reports will fail until it runs. Start it with \`npm run stt\` (docs/setup.md, part 3); typed reports and the phone's own speech-to-text work without it.`);
+  }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { NoLocalTranscriberError, getTranscriber } from "@/lib/providers/transcriber";
+import { LocalTranscriberDownError, getTranscriber } from "@/lib/providers/transcriber";
 import { getExtractor, pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
@@ -27,9 +27,10 @@ const AREA_DATA = Object.fromEntries(
 ) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
 
 const NO_WORDS: Record<string, string> = {
-  uk: "Не розчув. Повторіть, будь ласка.",
-  fr: "Je n'ai pas compris. Répétez, s'il vous plaît.",
-  en: "I didn't catch that. Try again.",
+  // Bangs, rain or a phone held away gave empty transcripts in the noise tests: say what helps [192].
+  uk: "Не розчув. Говоріть ближче до мікрофона і повторіть.",
+  fr: "Je n'ai rien entendu. Parlez plus près du micro et répétez.",
+  en: "I didn't catch that. Speak closer to the microphone and try again.",
 };
 
 // Per-instance, best effort. Enough to stop a runaway loop in stage 1.
@@ -142,7 +143,8 @@ export async function POST(req: Request) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
       // A speaker whose language is not the area's gets phrases in their own language first [190].
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned));
+      // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned), { language: pinned });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -192,9 +194,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ transcript, language, intent, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
-    if (err instanceof NoLocalTranscriberError) {
-      const error = "This coordinator runs offline and cannot turn speech into text yet. Use speech-to-text on the phone, or type the report.";
-      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 501 });
+    if (err instanceof LocalTranscriberDownError) {
+      console.warn(`[stt] ${err.message}. Start it with \`npm run stt\` (docs/setup.md, part 3).`);
+      const error = "Speech-to-text on the coordinator is not running. Type the report, or use speech-to-text on the phone.";
+      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 503 });
     }
     console.error("report failed", err);
     return NextResponse.json({ error: "Processing failed. Try again or type the report.", transcript, timings_ms: timings }, { status: 502 });

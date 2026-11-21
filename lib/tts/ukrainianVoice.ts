@@ -26,6 +26,15 @@ export type LoadProgress =
   | { phase: "download"; from: ModelSource; loaded: number; total: number }
   | { phase: "verify" }
   | { phase: "start" };
+/** What the map page shows while the voice loads, in Ukrainian: only a speaker who chose Ukrainian sees it [193]. */
+export function loadingLabel(p: LoadProgress): string {
+  const MB = 1024 * 1024;
+  if (p.phase === "download" && p.from !== "cache") return `Завантажую голос: ${Math.floor(p.loaded / MB)} з ${Math.round(p.total / MB)} МБ`;
+  if (p.phase === "verify") return "Перевіряю голос…";
+  if (p.phase === "start") return "Запускаю голос…";
+  return "Завантажую голос…";
+}
+
 export type SpeakOptions = {
   speaker?: Speaker;
   /** Keep U+0301 stress marks in the text. Off by default: their effect is unconfirmed. */

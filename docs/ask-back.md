@@ -2,7 +2,7 @@
 
 Today a question waits for a tap: the phone speaks it and shows a card of choices, and a tap goes to `POST /api/answer` [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
 
-Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [191].
+Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199].
 
 ## What a reply can be
 

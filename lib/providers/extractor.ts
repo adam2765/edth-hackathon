@@ -5,8 +5,10 @@
  * Otherwise Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
  */
 import type { Category, Direction, Intent, Relation } from "../geo/types";
+import { clockChecked } from "../geo/clock";
 import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface ExtractOptions {
   /** Language reported by speech-to-text, if any. */
@@ -123,7 +125,7 @@ Rules:
 - track.kind: from a type word the speaker said: "people" (person, soldiers, infantry, patrol, soldats, піхота, солдати), "vehicle" (car, truck, véhicule, camion, машина, вантажівка), "armour" (tank, APC, char, blindé, танк, БМП, БТР), "drone" (drone, UAV, quadcopter, дрон, БПЛА), "drone_team" (drone team, équipe drone, розрахунок БПЛА), "mortar" (mortier, міномет), "artillery" (gun, howitzer, canon, гармата), "jammer" (jammer, electronic warfare, brouilleur, РЕБ), else "other".
 - track.count: how many, when said ("two vehicles" → 2), else null.
 - track.text: the thing as said, without the place ("two enemy vehicles"), else null.
-- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker.
+- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker: "a patrol to the north" is direction "north", heading null, and still a track.
 - language: "fr" if the report is mostly French, "uk" if it is mostly Ukrainian or Russian, otherwise "en".
 - confidence: 0 to 1, how sure you are of this reading.
 
@@ -177,7 +179,10 @@ export function checkLanguage(said: Intent["language"], transcript: string, hint
   return said;
 }
 
-/** Coerce whatever came back into a valid Intent. With the transcript, the language is checked too. */
+/**
+ * Coerce whatever came back into a valid Intent. With the transcript, the language is checked too,
+ * and a clock direction said ("at 3 o'clock") sets the compass way [198].
+ */
 export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -188,7 +193,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
   const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1000 ? v : null);
   const dist = typeof o.distance_m === "number" && Number.isFinite(o.distance_m) && o.distance_m > 0 && o.distance_m <= MAX_DISTANCE_M ? Math.round(o.distance_m) : null;
   const said = pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en";
-  return {
+  const intent: Intent = {
     kind: pick(o.kind, ["position", "movement", "other"] as const) ?? "other",
     landmark_text: str(o.landmark_text),
     landmark_name: str(o.landmark_name),
@@ -207,6 +212,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
     track_text: str(tr?.text),
     track_heading: pick(tr?.heading, DIRECTIONS),
   };
+  return transcript === undefined ? intent : clockChecked(intent, transcript);
 }
 
 class ChatJsonExtractor implements IntentExtractor {
@@ -226,7 +232,7 @@ class ChatJsonExtractor implements IntentExtractor {
     const response_format = this.useJsonSchema
       ? { type: "json_schema", json_schema: { name: "position_report_intent", schema: INTENT_SCHEMA, strict: true } }
       : { type: "json_object" };
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await fetchRetrying(`${this.baseUrl}/chat/completions`, () => ({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
@@ -240,7 +246,7 @@ class ChatJsonExtractor implements IntentExtractor {
         response_format,
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
-    });
+    }));
     if (!res.ok) throw new Error(`${this.provider} extract ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = j.choices?.[0]?.message?.content ?? "{}";

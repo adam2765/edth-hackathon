@@ -1,17 +1,17 @@
 {
   "extractor": "mistral:mistral-small-latest",
-  "prompt_id": "4c9ef72e73",
-  "at": "2026-11-21T11:29:50.352Z",
+  "prompt_id": "300d5e0a2d",
+  "at": "2026-11-21T15:09:29.978Z",
   "repeat": 3,
   "resolve": true,
   "summary": {
     "cases": {
-      "passed": 237,
-      "total": 255
+      "passed": 319,
+      "total": 357
     },
     "heldOut": {
-      "passed": 228,
-      "total": 246
+      "passed": 310,
+      "total": 348
     },
     "inPrompt": {
       "passed": 9,
@@ -19,132 +19,148 @@
     },
     "fields": {
       "kind": {
-        "passed": 219,
-        "total": 222
+        "passed": 288,
+        "total": 300
       },
       "landmark_name": {
-        "passed": 136,
-        "total": 147
+        "passed": 204,
+        "total": 216
       },
       "landmark_name_lemma": {
         "passed": 51,
-        "total": 51
+        "total": 54
       },
       "landmark_category": {
-        "passed": 186,
-        "total": 186
+        "passed": 246,
+        "total": 252
       },
       "relation": {
-        "passed": 203,
-        "total": 207
+        "passed": 264,
+        "total": 276
       },
       "language": {
-        "passed": 126,
-        "total": 126
+        "passed": 152,
+        "total": 153
       },
       "subject": {
-        "passed": 255,
-        "total": 255
+        "passed": 348,
+        "total": 357
       },
       "direction": {
-        "passed": 36,
-        "total": 36
+        "passed": 113,
+        "total": 117
       },
       "distance_m": {
-        "passed": 30,
-        "total": 30
+        "passed": 112,
+        "total": 114
       },
       "landmark_text": {
         "passed": 12,
         "total": 12
       },
       "track_kind": {
-        "passed": 18,
-        "total": 18
+        "passed": 66,
+        "total": 66
       },
       "track_ref": {
-        "passed": 33,
-        "total": 33
+        "passed": 48,
+        "total": 48
       },
       "track_count": {
-        "passed": 3,
-        "total": 3
+        "passed": 9,
+        "total": 9
       },
       "track_heading": {
-        "passed": 3,
-        "total": 3
+        "passed": 29,
+        "total": 30
       }
     },
     "tags": {
       "scenario": {
-        "passed": 54,
-        "total": 54
+        "passed": 57,
+        "total": 57
       },
       "fr": {
-        "passed": 35,
-        "total": 39
+        "passed": 53,
+        "total": 60
       },
       "uk": {
-        "passed": 74,
-        "total": 75
+        "passed": 81,
+        "total": 90
       },
       "distance": {
-        "passed": 21,
-        "total": 21
+        "passed": 24,
+        "total": 24
       },
       "intersection": {
         "passed": 3,
         "total": 3
       },
       "paraphrase": {
-        "passed": 36,
+        "passed": 33,
         "total": 39
       },
       "trap": {
-        "passed": 18,
-        "total": 18
+        "passed": 34,
+        "total": 36
       },
       "filler": {
-        "passed": 9,
+        "passed": 6,
         "total": 12
       },
       "mixed": {
-        "passed": 12,
+        "passed": 10,
         "total": 12
       },
       "stt_error": {
-        "passed": 6,
-        "total": 6
+        "passed": 10,
+        "total": 12
       },
       "other": {
         "passed": 12,
         "total": 15
       },
       "track": {
-        "passed": 50,
-        "total": 51
+        "passed": 120,
+        "total": 129
       },
       "adversarial": {
-        "passed": 49,
-        "total": 60
+        "passed": 91,
+        "total": 105
       },
       "two-places": {
-        "passed": 20,
+        "passed": 19,
         "total": 30
       },
       "side-word": {
         "passed": 29,
         "total": 30
+      },
+      "compass": {
+        "passed": 22,
+        "total": 24
+      },
+      "blocks": {
+        "passed": 31,
+        "total": 36
+      },
+      "contact": {
+        "passed": 18,
+        "total": 24
+      },
+      "compass-only": {
+        "passed": 21,
+        "total": 21
       }
     },
     "outcomes": {
-      "passed": 255,
-      "total": 255
+      "passed": 345,
+      "total": 351
     },
-    "wrongPins": 0,
-    "flaky": 3,
-    "medianMs": 744,
-    "p90Ms": 1031
+    "wrongPins": 2,
+    "flaky": 11,
+    "medianMs": 781,
+    "p90Ms": 1020
   },
   "cases": {
     "s-v1": {
@@ -317,37 +333,37 @@
     },
     "p-blocks": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
     "p-left": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
     "p-two-places": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
     "f-um": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
     "f-procedure": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
     "f-callsign": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -412,14 +428,14 @@
       "wrong_pins": 0
     },
     "uk-pharmacy": {
-      "pass": true,
-      "passes": 2,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     },
     "uk-bridge": {
       "pass": true,
-      "passes": 3,
+      "passes": 2,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -454,6 +470,12 @@
       "wrong_pins": 0
     },
     "e-berault": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "e-vincent-station": {
       "pass": true,
       "passes": 3,
       "rounds": 3,
@@ -587,15 +609,15 @@
     },
     "a-two-places-9": {
       "pass": true,
-      "passes": 2,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
     "a-two-places-10": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 1,
       "rounds": 3,
-      "wrong_pins": 0
+      "wrong_pins": 2
     },
     "t-side-friendly-metro": {
       "pass": true,
@@ -652,6 +674,204 @@
       "wrong_pins": 0
     },
     "t-side-self-control": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-1": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-2": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-3": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-4": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-5": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-6": {
+      "pass": false,
+      "passes": 1,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-7": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "a-compass-8": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-contact-east": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-moved-east": {
+      "pass": false,
+      "passes": 1,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-east-of-street": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-counts-differ": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-from-crossing-street": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-fr-contact": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-fr-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-uk-contact": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-uk-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-few": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-distance-said": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "b-address": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-behind-castle": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-fr-mairie": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-lost": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-uk-gate": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "c-base": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-t11": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-patrol": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-truck": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-fr": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-uk": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-heading": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-self-control": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-compass-self-control-fr": {
       "pass": true,
       "passes": 3,
       "rounds": 3,
