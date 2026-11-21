@@ -64,3 +64,19 @@ Six clips are enough to start: a normal voice alone; a whisper alone; a whisper 
 On the synthetic signals in `tests/clips.test.ts`, a close "whisper" measured −18.5 dB and 0 % voiced, and a distant voice −42.6 dB and 100 % voiced. Real recordings will be closer than that; that is what the clips are for.
 
 Clips are recordings of people's voices. They stay on the computer, git ignores them, and they should be deleted when the test is done: `rm -r .data/clips`.
+
+## Noise [185]
+
+21 November, hosted mode, through the coordinator: the scenario clips (synthetic voices; 8 reports in English, French and Ukrainian, Vincennes, Kyiv and Izium) mixed with real field noise from ESC-50 (CC BY-NC, not kept in the repo) at a signal-to-noise ratio of 5 and 0 dB, 128 clips in all.
+
+| Noise | Placed as expected |
+|---|---|
+| Wind, engine, siren, footsteps, crackling fire | 64 of 64 |
+| Helicopter | 15 of 16 |
+| Rain | 10 of 16 |
+| Fireworks (bangs) | 8 of 16 |
+
+Steady noise barely hurts, even as loud as the voice: the place names sent as hints carry badly heard words ("Явиля Центральна районна лікарня" still placed). Rain and bangs mask syllables, and some clips came back empty. 13 of the 14 misses asked or placed nothing. One pinned a wrong place: "I'm at Izium station" under rain at 0 dB came back as "А на Ізюмській станції" and pinned the weather station 3.3 km away; since [185] that asks between the station and the weather station. An earlier run with artificial noise (63 clips: pink noise, radio band, clipping, a very quiet voice) placed every clip down to 5 dB.
+
+Not covered: real voices, wind on the microphone itself, and noise that starts or stops mid-sentence.
+
