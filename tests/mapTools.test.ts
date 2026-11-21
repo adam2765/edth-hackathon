@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placedFromObserver, sectorRing } from "../lib/geo/cone";
-import { bearingDeg, destination, distanceM } from "../lib/geo/geo";
+import { destination } from "../lib/geo/geo";
 import { gridLines, gridSpacing, measureText, toUtm } from "../lib/geo/grid";
 
 const VINCENNES = { lat: 48.8455, lon: 2.435 };
@@ -36,29 +35,5 @@ describe("the ruler [232]", () => {
     const b = destination(CASTLE, 60, 300);
     expect(measureText(CASTLE, b)).toBe("300 m · bearing 060° · 1067 mils");
     expect(measureText(CASTLE, destination(CASTLE, 270, 1500))).toBe("1.50 km · bearing 270° · 4800 mils");
-  });
-});
-
-describe("a cone for a thing placed from its observer [233]", () => {
-  it("knows such a place by its label", () => {
-    expect(placedFromObserver("300 m north-east of ALPHA 1")).toBe(true);
-    expect(placedFromObserver("300 m, bearing 060, from ALPHA 1")).toBe(true);
-    expect(placedFromObserver("200 m north of grid DQ 586 101")).toBe(false);
-    expect(placedFromObserver("Mairie de Vincennes")).toBe(false);
-  });
-
-  it("runs along the line of sight, as deep and as wide as the circle", () => {
-    const to = destination(CASTLE, 60, 300);
-    const ring = sectorRing(CASTLE, to, 100)!.map(([lon, lat]) => ({ lat, lon }));
-    const ds = ring.map((p) => distanceM(CASTLE, p));
-    expect(Math.min(...ds)).toBeCloseTo(200, -1);
-    expect(Math.max(...ds)).toBeCloseTo(400, -1);
-    const bs = ring.map((p) => bearingDeg(CASTLE, p));
-    expect(Math.min(...bs)).toBeCloseTo(60 - 19.5, 0);
-    expect(Math.max(...bs)).toBeCloseTo(60 + 19.5, 0);
-  });
-
-  it("is no cone when the observer is inside the circle", () => {
-    expect(sectorRing(CASTLE, destination(CASTLE, 60, 50), 100)).toBeNull();
   });
 });

@@ -3,7 +3,7 @@
 /**
  * Grid tools on a map [232]: the MGRS grid under the pointer, the grid's lines, a ruler that gives
  * distance and bearing between two points, and a box to go to a grid. On the map page a click also
- * copies the grid under it. Used by the map page and the command post, each with its own map.
+ * copies the grid under it. Used by the map page; ready for the command post's map.
  */
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { GeoJSONSource, Map as MLMap, MapMouseEvent } from "maplibre-gl";
