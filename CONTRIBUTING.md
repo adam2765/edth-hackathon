@@ -35,6 +35,8 @@ Every change goes through a short branch and a pull request. Nobody commits to `
 
 **Decision numbers.** Two branches can both add decision 172. Whoever merges second renumbers theirs after merging `main` into the branch, and fixes their own references to it. `tests/decisions.test.ts` fails when the numbers repeat or skip, so CI catches a miss.
 
+**Replaced and changed decisions.** When a new decision replaces or changes an earlier one, say so at both ends. The new line names the old one: "replaces decision 21" or "changes decision 49". The old line starts with **Replaced by 46.** when none of it holds any more, or **Changed by 106.** when part of it still does and both must be read. That marker is the only edit an old line gets. Settling a point the old line left open is a change; building what it said was not built yet is not. When you renumber a line, fix the markers that name it too. The same test fails when either end is missing.
+
 ## CI
 
 GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on every push to `main` and on every pull request. It has three jobs, side by side:
@@ -47,7 +49,7 @@ It needs no key: nothing in it calls Mistral or Overpass. See the runs on the re
 
 ## Working agreements (proposed)
 
-- **Record every choice in [DECISIONS.md](DECISIONS.md):** one numbered line, appended at the end. If two people add one at the same time, keep both lines and renumber yours.
+- **Record every choice in [DECISIONS.md](DECISIONS.md):** one numbered line, appended at the end. If two people add one at the same time, keep both lines and renumber yours. When yours replaces or changes an earlier line, mark both ([Git workflow](#git-workflow)).
 - **Update the docs in the same commit as the change.** [docs/README.md](docs/README.md) says which file covers what.
 - **Secrets live in env vars only.** The repo is public, and so are commit author emails.
 - **Contracts change on purpose.** Changing `lib/geo/types.ts` or the fields of `POST /api/report` changes what the transmitter and the command post rely on: say so in the decision line, and tell whoever works on the other side ([contracts](docs/contracts.md)).

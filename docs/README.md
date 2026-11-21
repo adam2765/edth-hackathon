@@ -40,7 +40,7 @@ Elsewhere in the repo:
 | File | What it holds |
 |---|---|
 | [README.md](../README.md) | How the pipeline works, the resolver rules, demo scripts, how to run |
-| [DECISIONS.md](../DECISIONS.md) | Every choice made, one numbered line each, append-only |
+| [DECISIONS.md](../DECISIONS.md) | Every choice made, one numbered line each, append-only; an old line only gains a **Replaced by** or **Changed by** marker |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Setup, checks, working agreements |
 | [AGENTS.md](../AGENTS.md) | Instructions for coding agents; Claude Code and Codex read the same file |
 | [transmitter/README.md](../transmitter/README.md) | The native app: build, run, speech-to-text options |

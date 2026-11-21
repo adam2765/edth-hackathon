@@ -8,7 +8,7 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 - `docs/README.md`: the index of the design docs, one file per topic: overview, architecture, contracts, plan, gazetteer, open questions, known gaps, glossary. Update the matching file in the same change as the code.
 - `README.md`: how the pipeline works, the resolver rules, demo scripts, how to run.
-- `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it.
+- `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it. A line that starts with **Replaced by N.** or **Changed by N.** has a later line N that wins.
 - `CONTRIBUTING.md`: setup, checks and working agreements for the four of us.
 - `docs/setup.md`: setting up a computer step by step, with a check after each step: the coordinator, offline mode with Ollama, the transmitter on a phone. Follow it when asked to set up a machine or get the project running.
 
@@ -66,7 +66,7 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - Tracks are for reconnaissance only (decision 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between a unit and a track: no range check, no pairing, no "target" wording.
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).
 - Work on a branch, never on `main`: one session, one worktree in `.claude/worktrees/`, one branch, one pull request (decision 173). Catch up by merging `origin/main`; never rebase a pushed branch or force-push. The steps are in `CONTRIBUTING.md` (Git workflow); `git-sync` and `pr` are the skills.
-- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. `tests/decisions.test.ts` checks the numbers.
+- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. When yours replaces or changes an earlier line, name that line in yours ("changes decision 49") and start it with **Changed by <yours>.**, or **Replaced by <yours>.** when none of it holds any more; that marker is the only edit an old line gets. `tests/decisions.test.ts` checks the numbers and both ends of each change.
 - The hooks in `.agents/hooks/` refuse reading `.env` files, writing keys into files, deleting outside the repo and worktrees outside `.claude/worktrees/`. Do not work around a refusal; ask the person to run the command.
 - Secrets live in env vars only. The repo is public.
 - `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the command post. Change them on purpose, and say so in the decision line.
