@@ -134,3 +134,5 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 ## Provider interfaces
 
 `Transcriber.transcribe(audio, mime, biasTerms, { language }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`: whisper-server and Ollama on the computer [83, 195]. `language` is the language the device pinned; Whisper listens for it, Mistral ignores it. Whisper takes no bias terms.
+
+`ReplyReader.read(reply, question) → { kind, choice }` reads a reply to an open question ([ask-back.md](ask-back.md)). Same providers and switch. Only the reply eval uses it so far [199].

@@ -104,3 +104,29 @@ The 3B model gives the same answer in every round, so its misses are not noise. 
 - **The expected answers were written by agents and checked only against the rules.** The Ukrainian and Russian cases need a native speaker.
 - **A misheard name pinned through the resolver** (fixed [185]): "I'm at Vincent station." is read right (name "Vincent", a metro station), and the resolver used to pin Collège Germaine Tillion, the one match for the name. Now a type said outright against a lone match of another type asks among the places of that type; the case is `e-vincent-station`. The model still does not repair "Vincent" to "Vincennes", which bears on the question above.
 - **Layer 3 has one data point.** Hosted speech-to-text wrote "Vincennes" for all 14 American-voiced synthetic clips (macOS voices), including ones spelled to sound American ("Vin Senz station"). No real voice yet. `KEEP_CLIPS=1` keeps each clip and its transcript in `.data/clips/`, which is how to collect real ones. Otherwise the eval is typed text only.
+
+## Reply eval
+
+Checks the reply reader (`lib/providers/replies.ts`): what a unit's reply to an open question does, such as pick a choice, say none, say where instead, or ask to hear it again. Measured, not used by the app yet. The design and the latest scores are in [docs/ask-back.md](../docs/ask-back.md).
+
+```bash
+npm run eval:replies                              # hosted Mistral
+PROVIDER_MODE=local npm run eval:replies          # the local model through Ollama
+npm run eval:replies -- --repeat 3                # the full check: flaky cases
+npm run eval:replies -- --tag tail,trap --lang uk # cases with any of these tags, in these languages
+npm run eval:replies -- --only e-two,f-deux       # named cases
+npm run eval:replies -- --save-baseline           # write evals/baselines/replies-<model>.json
+```
+
+`replies.cases.json` has `questions`, each taken from the resolver (who it is about, the words, the numbered choices with their ids), and `cases`, each a reply to one of them:
+
+```
+{ "id": "e-two-blocks", "question": "chateau-en", "tags": ["trap"], "reply": "Two blocks east.",
+  "expect": { "kind": ["new_report", "rephrase"] }, "note": "a count, not choice 2" }
+```
+
+- **`expect.kind`**: `pick`, `none`, `rephrase`, `repeat`, `stand_by`, `dont_know`, `disregard`, `new_report` or `unclear`. A list means any of these. `choice` (from 1) is scored only when the reader says pick.
+- **Tags:** every case is `fast` (code alone could settle it), `tail` (needs a reading) or `trap` (built to catch one mistake). Also `stt_error` and `ru`.
+- **Costly misses** are marked in the output: `PICK!` a choice the speaker did not mean, `SUBJ!` a track's place read as the speaker's or the other way round, `DROP!` a disregard nobody said. A run compared with a baseline exits 1 on a regression or a new costly miss.
+
+The reply prompt is separate from the extraction prompt, so changing it does not move the extraction baselines. Runs are saved as `results/replies-<model>-<time>.jsonl`. `tests/replyCases.test.ts` checks the cases file in `npm test`, with no model. On a 429 from Mistral the runner waits and tries again, up to five times.
