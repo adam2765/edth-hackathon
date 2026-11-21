@@ -121,7 +121,7 @@ A track is something on the map that is not a reporting unit: a unit sees it, or
 
 ## Utterance (transmitter side)
 
-One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scenario, open_mic), phone-transcribed text (or an optional test clip with no words), start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
+One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scenario, open_mic), the audio file or the text, start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
 
 ## Scenario file
 

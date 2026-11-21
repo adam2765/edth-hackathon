@@ -50,7 +50,7 @@ Check: every test passes. The tests need no key and no network. No `.env.local` 
 
 ## 3. Offline mode
 
-No key needed. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter (which always transcribes on the phone), or typed. The model needs about 4 GB of free memory.
+No key needed. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter's phone modes, or typed. The model needs about 4 GB of free memory.
 
 Install Ollama 0.40 or newer. Version 0.8 cannot run Ministral 3.
 
@@ -100,7 +100,7 @@ Expect JSON with `"status":"resolved"` and `"feature_id":"node/9415191169"`, and
 
 ## 4. Hosted mode
 
-Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted mode adds speech-to-text on the server, so the browser's microphone works; the native transmitter always transcribes on the phone. It needs the internet.
+Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted mode adds speech-to-text on the server, so the browser's microphone and the transmitter's Server mode work. It needs the internet.
 
 (person) Create `.env.local` and paste the key after `MISTRAL_API_KEY=`.
 
@@ -133,7 +133,7 @@ brew install cocoapods     # if `pod --version` fails; a warning about UTF-8 is 
 
 If `xcode-select -p` shows `/Library/Developer/CommandLineTools`, (person) run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
 
-Optional check without a phone: `cd transmitter && npm install && npm run setup && LANG=en_US.UTF-8 npx expo run:ios` builds for the simulator and needs no signing.
+Optional check without a phone: `cd transmitter && npm install && LANG=en_US.UTF-8 npx expo run:ios` builds for the simulator and needs no signing.
 
 ### Signing
 
@@ -163,7 +163,6 @@ Check: `xcrun devicectl list devices` lists the phone, and its state is not `una
 ```bash
 cd transmitter
 npm install
-npm run setup
 export APPLE_TEAM_ID=<team ID>
 export TRANSMITTER_BUNDLE_ID=dev.voicetomap.transmitter.<first name>
 LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
@@ -180,7 +179,7 @@ LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
 The app loads its code from Metro on the Mac. Keep Metro running in its own terminal:
 
 ```bash
-cd transmitter && npm run start -- --dev-client
+cd transmitter && npx expo start --dev-client
 ```
 
 Open the app with the Mac's network name. That works over the cable alone, and it survives address changes:
@@ -199,13 +198,13 @@ Check: the app opens, and the dot beside the call sign turns green. The app send
 
 Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
 
-(person) Play the Vincennes scenario. The app always uses Whisper base on the phone, in either coordinator mode. `npm run setup` prepares the model on the Mac; it is delivered as an app asset and installed automatically at launch. There is no transcription-mode or model-download control.
+(person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
 
 ## 6. Transmitter on Android
 
 Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
 
-For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so all native reports work with the offline coordinator without a Mistral key. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
+For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
 
 ## 7. Daily start
 
@@ -214,7 +213,7 @@ Each in its own terminal, from the repo root:
 ```bash
 OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 ollama serve     # offline mode
 PROVIDER_MODE=local npm run dev -- -p 3117              # offline mode; with a key, `npm run dev -- -p 3117` is hosted mode
-cd transmitter && npm run start -- --dev-client            # phone testing only
+cd transmitter && npx expo start --dev-client            # phone testing only
 ```
 
 ## When something fails
@@ -232,5 +231,5 @@ cd transmitter && npm run start -- --dev-client            # phone testing only
 | `ollama pull ministral-3:3b` asks for a newer version | Ollama older than 0.40 | `brew upgrade ollama` |
 | Ollama settings have no effect | The desktop app is serving port 11434 | Quit the app, then `ollama serve` |
 | The first report after a start is slow or times out | The model is still loading | Wait for the two `ready for` lines |
-| A report with audio gets HTTP 501 | Offline mode has no speech-to-text on the computer yet | Use the native transmitter, or type the report |
+| A report with audio gets HTTP 501 | Offline mode has no speech-to-text on the computer yet | Use a phone mode, or type the report |
 | Port 3117 is busy | A coordinator is already running | Use that one, or stop it |
