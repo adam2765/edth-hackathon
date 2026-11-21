@@ -133,12 +133,14 @@ describe("Mistral speech-to-text with speakers told apart", () => {
     expect(second.get("diarize")).toBeNull();
   });
 
-  it("does not retry an outage", async () => {
-    const fetchMock = vi.fn(async () => new Response("down", { status: 503 }));
+  it("does not drop diarization for an outage: it is tried again, then reported", async () => {
+    const fetchMock = vi.fn(async () => new Response("down", { status: 503, headers: { "retry-after": "0" } }));
     vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const { getTranscriber } = await providers();
     await expect(getTranscriber().transcribe(clip, "audio/webm", [])).rejects.toThrow(/503/);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls as unknown as [string, RequestInit][]) expect((call[1].body as FormData).get("diarize")).toBe("true");
   });
 
   it("can be turned off", async () => {
@@ -152,7 +154,62 @@ describe("Mistral speech-to-text with speakers told apart", () => {
   });
 });
 
-describe("Whisper on this computer in offline mode (decision 182)", () => {
+describe("a busy Mistral is tried again [191]", () => {
+  beforeEach(() => {
+    vi.stubEnv("PROVIDER_MODE", "");
+    vi.stubEnv("MISTRAL_API_KEY", "test-key");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  const busy = () => new Response("rate limited", { status: 429, headers: { "retry-after": "0" } });
+
+  it("transcribes after a rate limit", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(new Response(JSON.stringify({ text: "I'm at Bérault.", language: "en" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    const r = await getTranscriber().transcribe(new Blob([new Uint8Array(8)], { type: "audio/webm" }), "audio/webm", []);
+    expect(r.text).toBe("I'm at Bérault.");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("extracts after a rate limit, and gives up after two more tries", async () => {
+    const reply = { kind: "position", landmark_text: "Bérault", landmark_name: "Bérault", landmark_category: "metro_station", relation: "at", distance_m: null, direction: null, language: "en", confidence: 0.9 };
+    const ok = () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }));
+    const once = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(ok());
+    vi.stubGlobal("fetch", once);
+    const { getExtractor } = await providers();
+    expect((await getExtractor().extract("I'm at Bérault.")).landmark_name).toBe("Bérault");
+    expect(once).toHaveBeenCalledTimes(2);
+
+    const always = vi.fn(async () => busy());
+    vi.stubGlobal("fetch", always);
+    const again = await providers();
+    await expect(again.getExtractor().extract("I'm at Bérault.")).rejects.toThrow(/429/);
+    expect(always).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry a refused request", async () => {
+    const fetchMock = vi.fn(async () => new Response("bad", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getExtractor } = await providers();
+    await expect(getExtractor().extract("I'm at Bérault.")).rejects.toThrow(/400/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits as Retry-After asks, at most 2 s", async () => {
+    const { retryWaitMs } = await import("../lib/providers/retry");
+    expect(retryWaitMs(new Response("", { status: 429, headers: { "retry-after": "1" } }), 1)).toBe(1000);
+    expect(retryWaitMs(new Response("", { status: 429, headers: { "retry-after": "30" } }), 1)).toBe(2000);
+    expect(retryWaitMs(new Response("", { status: 429 }), 1)).toBe(500);
+    expect(retryWaitMs(new Response("", { status: 429 }), 2)).toBe(1000);
+  });
+});
+
+describe("Whisper on this computer in offline mode (decision 195)", () => {
   beforeEach(() => {
     vi.stubEnv("PROVIDER_MODE", "local");
     vi.stubEnv("WHISPER_URL", "");

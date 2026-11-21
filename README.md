@@ -3,7 +3,7 @@
 EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map updates.
 When a report could mean more than one place, the app asks back instead of guessing.
 
-Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no reports, so its receiver stays empty). Three areas, switched at the top of the page or with `?area=kyiv`: Vincennes (English, French), central Kyiv (Ukrainian, English) and Izium (Ukrainian, English), a town near the front in Kharkiv Oblast (`?area=izium`). Deployed from `main` on 21 November.
+Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no reports, so its command post stays empty). Three areas, switched at the top of the page or with `?area=kyiv`: Vincennes (English, French), central Kyiv (Ukrainian, English) and Izium (Ukrainian, English), a town near the front in Kharkiv Oblast (`?area=izium`). Deployed from `main` on 21 November.
 
 ## How it works
 
@@ -16,7 +16,7 @@ phone mic ─► /api/report ─► speech-to-text (local Whisper, or hosted Mis
 
 - The language model only extracts intent: kind, landmark name (as said, plus its dictionary form for Ukrainian), category, relation, a stated distance in metres, a compass direction of travel, language.
 - `lib/geo/resolver.ts` turns intent + last position into a pin with a confidence radius, an arrow, or a question with up to three choices. Every coordinate comes from `data/gazetteer.<area>.json`, or from the last position moved by a distance and compass direction the speaker stated. The phone's GPS is never used.
-- A report can also be about a **track**: something the speaker sees or knows of ("enemy vehicle in front of the town hall", "drone 300 metres north of me"). The coordinator numbers it and says the number back ("Track 3, hostile vehicle, Mairie de Vincennes."), and the receiver draws it with its NATO symbol. Tracks are for reconnaissance only: who saw what, where, when, and how sure the place is. See [Tracks](#tracks).
+- A report can also be about a **track**: something the speaker sees or knows of ("enemy vehicle in front of the town hall", "drone 300 metres north of me"). The coordinator numbers it and says the number back ("Track 3, hostile vehicle, Mairie de Vincennes."), and the command post draws it with its NATO symbol. Tracks are for reconnaissance only: who saw what, where, when, and how sure the place is. See [Tracks](#tracks).
 - The client holds all state (no database in stage 1). Questions are spoken with the browser's `speechSynthesis`. Ukrainian questions use an on-device voice instead when it is loaded (`lib/tts/`, test page at `/tts-lab`).
 
 ### Resolver rules
@@ -27,6 +27,7 @@ phone mic ─► /api/report ─► speech-to-text (local Whisper, or hosted Mis
 | Named place, one good match | `resolved` |
 | A name said whole, and a longer name that contains it ("Софійського собору": the cathedral, and its bell tower "Дзвіниця Софійського собору") | the whole name wins, even with a Ukrainian case ending that makes it score lower |
 | Named place, several good matches (e.g. "Château de Vincennes" = castle and metro station) | `ambiguous`, unless a category word outside the name ("…metro station") narrows it |
+| "Metro" said, and the whole name is a train station ("Vincennes metro": the RER station is "Vincennes", the metro is "Château de Vincennes") | `ambiguous` between the two, even when one is near; "Vincennes station" and "Vincennes RER" still mean the RER [181] |
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |
@@ -34,12 +35,16 @@ phone mic ─► /api/report ─► speech-to-text (local Whisper, or hosted Mis
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 | No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
+| A clock direction instead ("200 metres at 3 o'clock", "à 3 heures", "на 3 години") | read in code, not by the model: 12 o'clock is north, as on the map, and each hour is 30°. Reckoned on that bearing; two different clock directions in one report ask which way [198] |
 | The same with no last position | `unresolved`: "I don't know where you started", asks for a place |
 | No place, and only a distance or only a direction ("heading north") | `unresolved`: asks for a distance and a compass direction, or a landmark |
 | "Passing the next intersection", on a known street | the nearest crossing ahead on that street, if the unit's last two fixes ran along it; otherwise `ambiguous` between the nearest crossing each way |
 | The same, street not known | the nearest crossings around the last position, in different directions; a compass direction said in the report picks the one ahead |
 | "At the corner of rue X" | the crossings of rue X, those with the unit's own street first, then as for a named place |
 | A crossing with no last position | `unresolved`: asks for the streets that cross there |
+| "Two blocks east", "deux rues à l'est", "два квартали на схід" | counted in code along the street the unit is on that runs east, never turned into metres by the model [51]. "Two blocks" is the second crossing counting every street that meets it, or the second counting only streets that cross it right through. Both the same crossing: placed there, with a ≈; two crossings: `ambiguous` between them [184] |
+| "Two blocks east of rue X" | the same, along rue X if it runs east, or from where a street that runs east crosses rue X: the unit's own street if it is one, else the nearest when it is much nearer than the next, else `ambiguous` |
+| Blocks that cannot be counted: "a few blocks", more than six, no street running that way, fewer crossings than blocks, or counted from a place that is not a street | `unresolved`: asks how far ("How far east of Rue de Fontenay? Or name a place near it.") [184] |
 
 Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations (eight points) offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
 
@@ -64,14 +69,15 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 |---|---|
 | "Enemy vehicle in front of the town hall" | a track at that place, found as for a position report, measured from the observer |
 | "I see a drone about 300 metres north of me" | a track by dead reckoning from the observer, shown as an estimate; the circle is the observer's own plus 0.4 × the distance |
-| "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far, or for a place near it |
+| "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far ("How far east is it?"), or for a place near it |
+| "Unknown contact, two blocks east" | a track whatever the model reads: "contact" opening the report, or next to whose it is, unknown, new or a count, is something seen [180]. "Two blocks" is counted along the observer's street [184]; when it cannot be, the app asks how far east. "Lost contact with BRAVO 2" stays about the speaker |
 | No word for whose it is ("a vehicle near the church") | unknown. Hostile only when a hostile word was said; "suspicious" or "possible enemy" is a suspect; "our" and "friendly" are friendly; "civilian" is neutral |
 | "Track 3 moved to the station" | a new sighting of Track 3, with a trail from the last one |
 | "Track 3 is hostile" | only what it is changes |
 | "Track 9 …" when the mission has no Track 9 | `unresolved`: "There is no Track 9 in this mission." |
 | The model reads a track but no word names a thing ("I can see the church"), or reads the speaker's position when a hostile word was said, or when the words name a thing and whose it is ("our drone team is at the station") | `unresolved`: "Is that where you are, or something you see?" |
 
-A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the receiver a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone", range rings, and edits by the operator. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
+A report about a track never moves the speaker. The number is given when the report is saved, one count per mission, and carries no affiliation, so Track 3 keeps its number when it turns from unknown to hostile. On the command post a track has its APP-6 symbol (drawn by `milsymbol`), its number, what it is in words, who saw it and when, its circle, a dashed trail of earlier sightings and a dotted line of sight from the observer. A symbol that would hide a unit or another track is drawn a little way off, with a thin line back to its point; the point itself does not move [167]. After 10 minutes with no report it is shown as old. The command post can also place, change, move and take off a track by hand [177]. Not built yet: a question when a new sighting is close to an old track, "Track 3 is gone" said by a unit, and range rings. Screenshots and diagrams: [docs/tracks.md](docs/tracks.md).
 
 Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two named streets share a point in OpenStreetMap; a bridge shares none, so it is not a crossing. In a mission the coordinator remembers the street each unit is on (from a report that named a street, kept through crossings on it) and the way it last moved, and passes both with the last position. A crossing within 20 m is the one the unit is at, never the next one. The pin is the crossing, with a 30 m circle.
 
@@ -120,7 +126,7 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 
 ### Vincennes, with tracks
 
-`scenarios/vincennes-tracks.json`. Two units report what they see; every sighting is made up. It is set in Vincennes, not Izium, where the demo names no unit or position [140]. Start a new mission so the numbers count from 1. Checked on 21 November: 11 of 11 typed through hosted Mistral and through the local 3B model, and 11 of 11 as synthetic-voice clips through the coordinator. Not yet spoken by a person or sent from a phone.
+`scenarios/vincennes-tracks.json`. Two units report what they see; every sighting is made up. It is set in Vincennes, not Izium, where the demo names no unit or position [140]. Start a new mission so the numbers count from 1. Checked on 21 November: 11 of 11 typed through hosted Mistral and through the local 3B model, and 11 of 11 as synthetic-voice clips through the coordinator. On the local model, step 11 needs the compass-only tune [196]: checked again after it, 11 of 11 typed through the coordinator in offline mode. Not yet spoken by a person or sent from a phone.
 
 | # | Who | Say | Expected |
 |---|---|---|---|
@@ -129,12 +135,12 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 | 3 | ALPHA 1 | "Two enemy vehicles on Avenue de Paris, moving east." | "Track 1, hostile vehicle, count 2, Avenue de Paris." ALPHA 1 does not move |
 | 4 | BRAVO 2 | "I see a drone about 300 metres north of me." | "Track 2, unknown drone, 300 metres north of you." An estimate, ≈ |
 | 5 | BRAVO 2 | "Suspicious vehicle near the church." | "Track 3, suspect vehicle, Église Notre-Dame." Dashed hostile frame |
-| 6 | ALPHA 1 | "Enemy patrol near the cemetery." | Asks "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?"; tap **Cimetière Nord de Saint-Mandé** |
+| 6 | ALPHA 1 | "Enemy patrol near the cemetery." | Asks "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?"; answer **Cimetière Nord de Saint-Mandé** on the command post |
 | 7 | ALPHA 1 | "Track 1 moved to Avenue de Nogent." | "Track 1, now Avenue de Nogent." A dashed trail back to Avenue de Paris |
 | 8 | BRAVO 2 | "Track 2 is hostile." | "Track 2, hostile." The symbol turns red; the place stays |
 | 9 | BRAVO 2 | «Voiture civile devant la mairie.» | «Piste 5, véhicule civil, Mairie de Vincennes.» Neutral |
 | 10 | ALPHA 1 | "Friendly drone team at Vincennes station." | "Track 6, friendly drone team, Vincennes." A track, not ALPHA 1's position |
-| 11 | BRAVO 2 | "Enemy vehicle to the east." | No track: "How far is it, and which way? Or name a place near it." |
+| 11 | BRAVO 2 | "Enemy vehicle to the east." | No track: "How far east is it? Or name a place near it." |
 
 At the end the map has six tracks and both units are still where they checked in. Step 7 names a street, not the castle: "moved to the castle" makes the local model ask castle or station.
 
@@ -152,7 +158,7 @@ npm stop
 | Command | What it does |
 |---|---|
 | `npm run build` | Builds components whose source/dependencies changed; builds or reloads the phone app and loads it on the connected phone when needed |
-| `npm start` | Stops existing project servers, then starts Whisper speech-to-text, Ollama, coordinator/web server and phone code server; opens the receiver, leaving phone app launch to you |
+| `npm start` | Stops existing project servers, then starts Whisper speech-to-text, Ollama, coordinator/web server and phone code server; opens the command post, leaving phone app launch to you |
 | `npm start light` | Starts with Whisper base and unloads Ollama after 30 seconds idle; the next report reloads it |
 | `npm stop` | Stops project processes and the connected phone app, including servers and the internal process controller; keeps mission data |
 
@@ -164,7 +170,7 @@ afterwards.
 
 On the phone, open **Transmitter**. It checks the configured server and offers **Connect**.
 If no mission is running, it says so and shows **Waiting for mission** after connecting.
-On the receiver, use **Start mission**; the phone joins the newest running mission automatically.
+On the command post, use **Start mission**; the phone follows the newest running mission automatically.
 **Stop mission** ends reporting and keeps the log for replay. Starting/stopping servers
 and starting/stopping missions are separate actions.
 
@@ -197,21 +203,25 @@ Both local models miss "I'm at the Golden Gate." (8B leaves the name out, 3B tra
 
 ## Transmitter app and scenarios
 
-`transmitter/` is a small native app (Expo) that stands in for a field radio. It sends spoken reports to the same `/api/report` and shows and speaks the answer. A report comes from the microphone (hold to talk) or from a prepared clip, and both go down the same path, so the whole pipeline can be driven silently in a simulator. See [transmitter/README.md](transmitter/README.md) for how to build and run it.
+`transmitter/` is a small native app (Expo) that stands in for a field radio. It sends spoken reports to the same `/api/report`. Like a radio, it does not join, name itself or answer: the speaker says the call sign, the coordinator reads it from the words, and the operator answers questions on the command post [208]. A report comes from the microphone (hold to talk) or from a prepared clip, and both go down the same path, so the whole pipeline can be driven silently in a simulator. See [transmitter/README.md](transmitter/README.md) for how to build and run it.
 
-`scenarios/*.json` are scripted reports with the answer each one should get. `npm run scenarios` (on a Mac) makes the clips with synthetic English, French and Ukrainian voices. In the app, "Play scenario" sends every step and marks it ✓ or ✗; tapping one step sends it alone and leaves any question for you to answer.
+`scenarios/*.json` are scripted reports with the answer each one should get. `npm run scenarios` (on a Mac) makes the clips with synthetic English, French and Ukrainian voices. In the app, "Play scenario" sends every step and marks it ✓ or ✗; tapping one step sends it alone. Each step names its own call sign. A question stays open for the operator to answer on the command post.
 
-Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. The full scenario suite has not been checked on Android. On 21 Nov a Galaxy S10 sent two live town-hall reports through the offline Mac coordinator; both appeared at Mairie de Vincennes on the receiver.
+Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes script scored 4 of 4 and the Kyiv script 5 of 5. The full scenario suite has not been checked on Android. On 21 Nov a Galaxy S10 sent two live town-hall reports through the offline Mac coordinator; both appeared at Mairie de Vincennes on the command post.
 
-## Receiver
+## Command post
 
-The shared map for the base station: open `http://localhost:3117/receiver` on the computer that runs the coordinator, ideally on a big screen.
+The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [176].
 
-A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). After Connect, phones automatically join the newest running mission. The talk button waits for the server to confirm the join; newer missions are followed between reports. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
+A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Give it a roster too: the call signs on the radio net, split by commas [201]. After Connect, the transmitter follows the newest running mission automatically and switches between reports, with no mission picker. It does not join or name itself: a report goes to the roster unit whose call sign it starts with ("Alpha 1, at the town hall"), and one the coordinator is not sure of waits in the Unassigned tray for the operator [202, 203, 208]. A unit's first report is read from the start point, shown with ≈. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
-Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
+Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until it is answered. The bar at the bottom holds the day's missions in the area: a blue stretch for each, gray where none was running, and a tick at every start and end [206]. Drag anywhere along it, or play at 1×, 10× or 30×; the replay never rests in the gray, and moving into another mission opens it. Page Up and Page Down jump from tick to tick. Live goes back to now. A unit silent for 3 minutes fades.
 
-The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its receiver stays empty [101].
+**Tracks by hand** [177]. **Place track** (or P) opens a palette: whose (it starts on Unknown), what, how many and how sure. Click the map or find a place by name, drag the symbol if needed, add a source if you have one, and press Place. The track gets the next number. Click any track for its card: Change, Move, Gone (off the map, kept in the list and the log) and Put back. Every change is a `plot` line in the log, marked CP in the feed. The command post never places a unit.
+
+**Answering for a unit** [178]. Under an open question the command post has the same choices and "None of these". After a confirm it answers for the unit, as on a radio net; the feed says "CP answered". The transmitter no longer answers, so this is where a question closes [208]. The first answer stands, whoever gave it.
+
+The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers, tracks placed by hand and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, the browser page can report to it without one, and its command post stays empty [101].
 
 ## Layout
 
@@ -219,12 +229,12 @@ The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening
 transmitter/                               native transmitter app (own package.json and tooling)
 scenarios/, scripts/build-scenarios.mjs    scripted reports and the clip generator
 app/page.tsx, components/VoiceMapApp.tsx   one mobile-first page: map, talk button, ask-back card, log
-app/receiver/, components/Receiver.tsx     the receiver: shared map, units, feed, replay; MissionPanel.tsx opens missions
+app/cp/, components/CommandPost.tsx        the command post: shared map, units, tracks, feed, replay; TrackTools.tsx, MissionPanel.tsx
 app/api/report/route.ts                    POST multipart: audio | text, lastPosition, clientTs, session
-app/api/answer/route.ts                    POST the choice tapped for a question
-app/api/sessions/                          list and open missions; [code]: the log, join, end, delete
-app/api/places/route.ts                    GET places by name, to pick a start point
-lib/reports/                               missions and their logs: entry types, store, record, position rule, foldLog
+app/api/answer/route.ts                    POST the choice for a question, tapped or chosen at the command post
+app/api/sessions/                          list and open missions; [code]: the log, join, end, delete, tracks by hand
+app/api/places/route.ts                    GET places by name, for a start point or a track; or the name of a point
+lib/reports/                               missions and their logs: entry types, store, record, position rule, plot, foldLog
 lib/geo/tracks.ts, lib/geo/trackKinds.ts   tracks: who a report is about, whose a track is, where it is; kinds and symbol codes
 lib/providers/transcriber.ts               Transcriber interface + Mistral or local whisper-server
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema

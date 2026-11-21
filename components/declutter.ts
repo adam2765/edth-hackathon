@@ -1,6 +1,6 @@
-// Where to draw each track's symbol on the receiver's map, so none hides a unit or another track.
+// Where to draw each track's symbol on the command post's map, so none hides a unit or another track.
 // A track's place never changes here: only where its symbol and label are drawn, in screen
-// pixels, with a thin line back to the real point. The receiver runs this again after every zoom,
+// pixels, with a thin line back to the real point. The command post runs this again after every zoom,
 // because two places 100 m apart overlap at one zoom and not at the next.
 
 /** A box on screen in pixels: left, top, right, bottom. */

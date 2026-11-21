@@ -72,6 +72,19 @@ input {
 .langs {
   top: calc(60px + env(safe-area-inset-top));
 }
+/* The Ukrainian voice loading, under the language switch [193]. */
+.voice-load {
+  position: absolute;
+  top: calc(110px + env(safe-area-inset-top));
+  left: 10px;
+  max-width: calc(100% - 20px);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
 .areas button,
 .langs button {
   border: none;

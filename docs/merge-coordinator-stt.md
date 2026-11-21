@@ -30,13 +30,17 @@ returned `ready: true`. The updated phone app loaded and its old model directory
 empty. A real microphone report is still unmeasured. An unexpected
 Whisper signal exit now reports failure instead of exit code zero.
 
-Temporary RAM workaround [185]: use the already available Whisper base model on the
+Temporary RAM workaround [218]: use the already available Whisper base model on the
 coordinator (about 61 MB of model files including VAD), retain Ollama’s resident model,
 and restore remembered local mode. Hosted inference was declined. A live model reload
 succeeded and health stayed ready. Whisper’s reported model/working buffers fell from
 about 891 MB to 267 MB; these figures are not total process memory. The existing base
 file was checksum-verified and copied on the Mac, with no download or phone model install.
 
-Model selection [186]: `npm start` restores the regular turbo default and keeps Ollama
+Model selection [219]: `npm start` restores the regular turbo default and keeps Ollama
 resident. `npm start light` uses base and unloads Ollama after 30 seconds idle. Build
 prepares both models. Each start chooses its own mode; no remembered light default.
+
+Main catch-up before PR [222] preserves the radio sender/held-report pipeline and command-post
+features. Native phones keep Connect, automatic newest missions and coordinator-only speech;
+the older phone join/answer UI is not restored.

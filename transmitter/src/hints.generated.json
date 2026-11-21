@@ -29,17 +29,14 @@
     "Avenue du Général Archinard",
     "Avenue du Général de Gaulle",
     "Avenue du Président Wilson",
-    "Avenue du Tremblay",
-    "Avenue Ernest Renan",
-    "Avenue Foch",
-    "Avenue Joffre",
-    "Avenue Parmentier",
-    "Avenue Victor Hugo",
-    "Boulevard Davout",
-    "Boulevard de la Guyane",
-    "Boulevard de la Libération",
-    "Boulevard Jeanne d'Arc",
-    "Boulevard Périphérique Extérieur"
+    "hostile drone",
+    "enemy vehicle",
+    "friendly",
+    "suspect",
+    "civilian",
+    "Track 2",
+    "drone ennemi",
+    "piste 2"
   ],
   "kyiv": [
     "Автостанція \"Київ\"",
@@ -65,7 +62,12 @@
     "Старовокзальна",
     "Театральна",
     "Університет",
-    "Хрещатик"
+    "Хрещатик",
+    "hostile drone",
+    "Track 2",
+    "ворожий дрон",
+    "свої",
+    "об'єкт 2"
   ],
   "izium": [
     "Ізюм",
@@ -87,10 +89,10 @@
     "Європейська вулиця",
     "Заводська вулиця",
     "Інженерний провулок",
-    "Київська вулиця",
-    "Лондонська вулиця",
-    "Нагайський провулок",
-    "площа Джона Леннона",
-    "Покровська вулиця"
+    "hostile drone",
+    "Track 2",
+    "ворожий дрон",
+    "свої",
+    "об'єкт 2"
   ]
 }

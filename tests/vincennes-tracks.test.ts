@@ -106,7 +106,7 @@ describe("the Vincennes script with tracks", () => {
     expect(replies.get("t9")?.track?.say).toBe("Piste 5, véhicule civil, Mairie de Vincennes.");
     expect(replies.get("t10")?.track?.say).toBe("Track 6, friendly drone team, Vincennes.");
     // A direction with no distance gives no point: no track is opened, and the app asks.
-    expect(replies.get("t11")).toMatchObject({ status: "unresolved", question: "How far is it, and which way? Or name a place near it." });
+    expect(replies.get("t11")).toMatchObject({ status: "unresolved", question: "How far east is it? Or name a place near it." });
   });
 
   it("leaves six tracks on the map, each as its reports left it", () => {

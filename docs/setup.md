@@ -61,7 +61,7 @@ npm stop
 - **Build** checks file contents and dependencies. It rebuilds changed components and loads
   the phone app if changed or missing. No connected phone means only the coordinator is built.
 - **Start** stops existing project servers and starts all required servers, including local Whisper speech-to-text and the
-  phone’s code server. When ready, it prints the receiver URL and opens it; it does not
+  phone’s code server. When ready, it prints the command-post URL and opens it; it does not
   launch the phone app or build code.
 - **Stop** stops project components, the connected phone app, and the internal controller.
   Mission logs and phone settings are kept. Closing a browser does not stop the servers.
@@ -71,8 +71,8 @@ trust/debugging. After editing code, repeat Build, then Start. If a build stops 
 Start brings the servers back. A build with unchanged source reuses its output.
 
 On the phone, open Transmitter and tap **Connect** when the coordinator is detected.
-If no mission is running, **Waiting for mission** indicates it. On the receiver press
-**Start mission**; the phone joins the newest running mission automatically. **Stop mission** stops reports and keeps
+If no mission is running, **Waiting for mission** indicates it. On the command post press
+**Start mission**; the phone follows the newest running mission automatically, with no join step. **Stop mission** stops reports and keeps
 the mission log for replay. Restarting the servers preserves open missions.
 
 Hosts lists discovered reachable servers. The phone automatically follows the newest running mission, switching only between reports. Developer tools has a manual
@@ -129,7 +129,7 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 - **Missing coordinator build:** run Build, then Start.
 - **Missing Ollama model:** install `ministral-3:3b` once, then Start.
 - **Phone not detected:** unlock, reconnect and accept trust/debugging; use one connected phone.
-- **Coordinator without a mission:** use Start mission on the receiver.
+- **Coordinator without a mission:** use Start mission on the command post.
 - **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
 - **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
 
@@ -160,3 +160,9 @@ Cleanup finishes even when the operation that requested it was cancelled.
 
 The native phone launcher now says `npm start`, with `npm start light` in its help text.
 This wording is compiled into the app; run Build once to install the updated binary.
+
+The transmitter is a radio: begin live reports with the sender’s call sign. The coordinator
+reads it from the words against the mission roster; held reports and questions are handled
+on the command post. Green Reporting means a connected coordinator and an active mission.
+Advanced fleet updates remain available with `npm run phones --prefix transmitter`; keep
+the normal Build/Start/Stop procedure for daily use.

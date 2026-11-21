@@ -9,6 +9,7 @@
     "start": "node scripts/host.mjs start",
     "lint": "eslint",
     "test": "vitest run",
+    "stt": "node scripts/stt-server.mjs",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
     "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts",
     "eval:extract": "tsx scripts/eval-extraction.ts",
@@ -21,7 +22,9 @@
     "start:coordinator": "next start -p 3117",
     "start:ollama": "ollama serve",
     "start:phone": "npm run start --prefix transmitter -- --dev-client --port 8082",
-    "start:stt": "node scripts/stt-server.mjs"
+    "start:stt": "node scripts/stt-server.mjs",
+    "eval:replies": "tsx scripts/eval-replies.ts",
+    "eval:callsigns": "tsx scripts/eval-callsigns.ts"
   },
   "dependencies": {
     "bonjour-service": "^1.4.4",

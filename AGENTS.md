@@ -8,7 +8,7 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 - `docs/README.md`: the index of the design docs, one file per topic: overview, architecture, contracts, plan, gazetteer, open questions, known gaps, glossary. Update the matching file in the same change as the code.
 - `README.md`: how the pipeline works, the resolver rules, demo scripts, how to run.
-- `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it.
+- `DECISIONS.md`: every choice made, one numbered line each. Check it before changing behaviour; a rule that looks odd usually has a decision behind it. A line that starts with **Replaced by N.** or **Changed by N.** has a later line N that wins.
 - `CONTRIBUTING.md`: setup, checks and working agreements for the four of us.
 - `docs/setup.md`: setting up a computer step by step, with a check after each step: the coordinator, offline mode with Ollama, the transmitter on a phone. Follow it when asked to set up a machine or get the project running.
 
@@ -16,20 +16,23 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 ```
 app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs, session, callsign, seq)
-app/api/answer, app/api/sessions   the tapped choice in; missions: list, open, join, end, delete, and each one's log
-app/api/places              place search by name, for a mission's start point
-lib/reports/                missions and their logs: entry types (a contract with the receiver and the transmitter), store, record, foldLog
-components/Receiver.tsx     the receiver at /receiver: shared map, units, feed, replay; MissionPanel.tsx opens and ends missions
-lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
+app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, its tracks placed by hand, and its held radio reports with their recordings
+app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
+lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand), held radio reports
+components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; MissionPanel.tsx opens and ends missions
+lib/providers/              Transcriber, IntentExtractor and ReplyReader interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
 lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report is about, whose a track is, where it is
+lib/geo/blocks.ts           "two blocks east": the count read from the words, the crossings counted along the street lines
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
+lib/geo/callsigns.ts        the sender's call sign, read from a radio report's words and matched against a roster
+lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Unassigned tray
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
-evals/                      extraction eval: cases, baselines, saved runs, the prompt journal
+evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign eval's cases
 .agents/skills/             skills for every agent: prompt-attack, prompt-tune, git-sync, pr (.claude/skills links here)
 .agents/hooks/              guard hooks for every agent: secrets, keys, deletes, worktrees (.claude/settings.json, .codex/hooks.json)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
@@ -54,6 +57,8 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
+npm run eval:replies        # score the reader of replies to a question (docs/ask-back.md); key or PROVIDER_MODE=local
+npm run eval:callsigns      # score the call-sign reader (docs/callsigns.md); no model, also in npm test
 ```
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
@@ -68,10 +73,10 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - Tracks are for reconnaissance only (decision 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between a unit and a track: no range check, no pairing, no "target" wording.
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).
 - Work on a branch, never on `main`: one session, one worktree in `.claude/worktrees/`, one branch, one pull request (decision 173). Catch up by merging `origin/main`; never rebase a pushed branch or force-push. The steps are in `CONTRIBUTING.md` (Git workflow); `git-sync` and `pr` are the skills.
-- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. `tests/decisions.test.ts` checks the numbers.
+- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. When yours replaces or changes an earlier line, name that line in yours ("changes decision 49") and start it with **Changed by <yours>.**, or **Replaced by <yours>.** when none of it holds any more; that marker is the only edit an old line gets. `tests/decisions.test.ts` checks the numbers and both ends of each change.
 - The hooks in `.agents/hooks/` refuse reading `.env` files, writing keys into files, deleting outside the repo and worktrees outside `.claude/worktrees/`. Do not work around a refusal; ask the person to run the command.
 - Secrets live in env vars only. The repo is public.
-- `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the receiver. Change them on purpose, and say so in the decision line.
+- `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the command post. Change them on purpose, and say so in the decision line.
 - Do not deploy to production, push, or move the `prior-work-fri-1800` tag unless the person you are working for asks.
 - The extraction prompt (`systemPrompt()` in `lib/providers/extractor.ts`) changes only with an eval run before and after on both models, and no regression against `evals/baselines/` unless the person accepts it. The `prompt-tune` skill is the procedure; `prompt-attack` grows the cases.
 - Skills live in `.agents/skills/`, one folder each, so every agent reads the same ones.

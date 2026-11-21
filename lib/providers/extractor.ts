@@ -5,8 +5,10 @@
  * Otherwise Mistral if MISTRAL_API_KEY is set, else Featherless (OpenAI-compatible) with FEATHERLESS_API_KEY.
  */
 import type { Category, Direction, Intent, Relation } from "../geo/types";
+import { clockChecked } from "../geo/clock";
 import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface ExtractOptions {
   /** Language reported by speech-to-text, if any. */
@@ -117,13 +119,13 @@ Rules:
 - direction: the compass direction the speaker moved or is moving in: "north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west" ("moved 300 metres north", "heading south-east", "vers le nord", "на північ", "на південний захід"). null when none was said, when it is not a compass direction ("left", "forward", "back"), and when the compass word says where the speaker is from a landmark: "north of the church" is relation "north_of" with direction null.
 - A movement measured from where the speaker was before ("from here", "from my last position", "de ma position", "звідси") names no landmark: landmark_text, landmark_name and landmark_category are null.
 - Two places in one report, one the speaker is at, leaving or passing and one they are going to: report only the place they are going to, as kind "movement" with relation "towards". This holds whichever place comes first and in every language ("from the school to the park", "je suis à la poste, je vais à la gare", "я біля школи, йду до парку", "я возле школы, иду к рынку"). The place they are at, leaving or passing is never the landmark. WRONG: "Going past the bakery towards the post office" → landmark "the bakery". RIGHT: landmark "the post office", relation "towards". "Was at X, now at Y" names where they are now: Y, as a position. A crossing with no place to go to ("passing the next junction, going north") is not two places: it follows the crossing rule above, kind "position" and relation "at".
-- track: null when the report is about where the speaker is. An object when it is about something else the speaker sees or knows of: people, a vehicle, a tank, a drone, a drone team, a mortar, a gun, a jammer ("enemy vehicle in front of the town hall", "I see a drone 300 metres north of me", "Track 3 moved to the station", "véhicule ennemi devant la mairie", "ворожий танк біля церкви"). A landmark the speaker sees ("I can see the church") is not a track: null.
+- track: null when the report is about where the speaker is. An object when it is about something else the speaker sees or knows of: people, a vehicle, a tank, a drone, a drone team, a mortar, a gun, a jammer ("enemy vehicle in front of the town hall", "I see a drone 300 metres north of me", "Track 3 moved to the station", "véhicule ennemi devant la mairie", "ворожий танк біля церкви"). With "I", "we", "us" or "me" (je, nous, я, ми) the report is about the speaker, so track is null, even with a side word or a unit word ("We're friendlies, at the bakery" → track null); this decides only track, and every other field follows the rules above. Only without them does a side word ("friendly", "friendlies", "hostile", "enemy", "ami", "allié", "ennemi", "свої", "ворог") name another unit, so the report is a track. WRONG: "Friendly at the bakery" → track null. RIGHT: "Friendly at the bakery" → a track at "the bakery". A landmark the speaker sees ("I can see the church") is not a track: null.
 - For a track, kind is "position", and landmark_text, landmark_name, landmark_category, relation and distance_m say where the thing is, by the rules above ("in front of the town hall" is relation "in_front_of"). A named street or place is copied as for a position report ("unknown truck on rue de Fontenay" is landmark_name "rue de Fontenay", relation "at"). "Moved to X", "now at X" and "is at X" are relation "at"; "towards" only while the thing is still on its way there. When it is measured from the speaker ("300 metres north of me", "à 200 mètres à l'est de ma position", "за триста метрів на північ від мене"): no landmark, relation null, distance_m, and direction is that compass direction.
 - track.ref: the number when the speaker names a track ("Track 3", "piste trois", "об'єкт три" → 3), else null.
 - track.kind: from a type word the speaker said: "people" (person, soldiers, infantry, patrol, soldats, піхота, солдати), "vehicle" (car, truck, véhicule, camion, машина, вантажівка), "armour" (tank, APC, char, blindé, танк, БМП, БТР), "drone" (drone, UAV, quadcopter, дрон, БПЛА), "drone_team" (drone team, équipe drone, розрахунок БПЛА), "mortar" (mortier, міномет), "artillery" (gun, howitzer, canon, гармата), "jammer" (jammer, electronic warfare, brouilleur, РЕБ), else "other".
 - track.count: how many, when said ("two vehicles" → 2), else null.
 - track.text: the thing as said, without the place ("two enemy vehicles"), else null.
-- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker.
+- track.heading: the compass direction the thing itself is moving in, when said ("moving east" → "east"), else null. It is not where the thing is from the speaker: "a patrol to the north" is direction "north", heading null, and still a track.
 - language: "fr" if the report is mostly French, "uk" if it is mostly Ukrainian or Russian, otherwise "en".
 - confidence: 0 to 1, how sure you are of this reading.
 
@@ -150,6 +152,7 @@ Examples:
 "Deux véhicules suspects près de l'église, ils roulent vers l'est" → {"kind":"position","landmark_text":"l'église","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"church","relation":"near","distance_m":null,"direction":null,"language":"fr","confidence":0.9,"track":{"ref":null,"kind":"vehicle","count":2,"text":"deux véhicules suspects","heading":"east"}}
 "Ворожий танк біля церкви" → {"kind":"position","landmark_text":"церкви","landmark_name":null,"landmark_name_lemma":null,"landmark_category":"church","relation":"near","distance_m":null,"direction":null,"language":"uk","confidence":0.9,"track":{"ref":null,"kind":"armour","count":null,"text":"ворожий танк","heading":null}}
 "Unknown truck on rue de Fontenay" → {"kind":"position","landmark_text":"rue de Fontenay","landmark_name":"rue de Fontenay","landmark_name_lemma":"rue de Fontenay","landmark_category":"street","relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":null,"kind":"vehicle","count":null,"text":"unknown truck","heading":null}}
+"Friendly at Elmfield metro" → {"kind":"position","landmark_text":"Elmfield metro","landmark_name":"Elmfield","landmark_name_lemma":"Elmfield","landmark_category":"metro_station","relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":null,"kind":"other","count":null,"text":"friendly","heading":null}}
 "Track 3 moved to Bérault" → {"kind":"position","landmark_text":"Bérault","landmark_name":"Bérault","landmark_name_lemma":"Bérault","landmark_category":null,"relation":"at","distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":3,"kind":"other","count":null,"text":null,"heading":null}}
 "Track 2 is hostile" → {"kind":"other","landmark_text":null,"landmark_name":null,"landmark_name_lemma":null,"landmark_category":null,"relation":null,"distance_m":null,"direction":null,"language":"en","confidence":0.9,"track":{"ref":2,"kind":"other","count":null,"text":null,"heading":null}}`;
 }
@@ -176,7 +179,10 @@ export function checkLanguage(said: Intent["language"], transcript: string, hint
   return said;
 }
 
-/** Coerce whatever came back into a valid Intent. With the transcript, the language is checked too. */
+/**
+ * Coerce whatever came back into a valid Intent. With the transcript, the language is checked too,
+ * and a clock direction said ("at 3 o'clock") sets the compass way [198].
+ */
 export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -187,7 +193,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
   const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1000 ? v : null);
   const dist = typeof o.distance_m === "number" && Number.isFinite(o.distance_m) && o.distance_m > 0 && o.distance_m <= MAX_DISTANCE_M ? Math.round(o.distance_m) : null;
   const said = pick(o.language, ["en", "fr", "uk"] as const) ?? hint ?? "en";
-  return {
+  const intent: Intent = {
     kind: pick(o.kind, ["position", "movement", "other"] as const) ?? "other",
     landmark_text: str(o.landmark_text),
     landmark_name: str(o.landmark_name),
@@ -206,6 +212,7 @@ export function sanitizeIntent(raw: unknown, languageHint?: string | null, trans
     track_text: str(tr?.text),
     track_heading: pick(tr?.heading, DIRECTIONS),
   };
+  return transcript === undefined ? intent : clockChecked(intent, transcript);
 }
 
 class ChatJsonExtractor implements IntentExtractor {
@@ -225,7 +232,7 @@ class ChatJsonExtractor implements IntentExtractor {
     const response_format = this.useJsonSchema
       ? { type: "json_schema", json_schema: { name: "position_report_intent", schema: INTENT_SCHEMA, strict: true } }
       : { type: "json_object" };
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await fetchRetrying(`${this.baseUrl}/chat/completions`, () => ({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
@@ -239,7 +246,7 @@ class ChatJsonExtractor implements IntentExtractor {
         response_format,
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
-    });
+    }));
     if (!res.ok) throw new Error(`${this.provider} extract ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = j.choices?.[0]?.message?.content ?? "{}";

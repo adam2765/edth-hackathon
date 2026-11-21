@@ -12,7 +12,7 @@ To settle at the Saturday 08:00 kickoff ([kickoff.md](kickoff.md)) where we can.
 4. **Deploy access.** Connect the Vercel project to GitHub so pushes deploy, or keep CLI deploys from Alex's account.
 5. **Mistral key.** One shared team key, or each person their own.
 6. **Licence.** The repo is public with no licence file. The hackathon's FAQ says all IP stays with the team, and that a partner company may set other terms for its own challenge; Lysk's are unknown (question 15 below).
-7. **The receiver's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Several wait on question 1 below.
+7. **The command post's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Decision 1, who answers an open question, is settled: the command post can [178]. Several of the rest wait on question 1 below.
 
 ## For Lysk
 
@@ -22,12 +22,12 @@ Mentors: Henry Heinemann and Florent Ogès (edth@lysk.ai). Alex looks for them f
 
 > We are on Voice-to-Map. It works today: you speak, and a marker with your call sign moves on a shared map in one to three seconds, with a replay of the whole mission. When a report could mean two places it asks which one instead of guessing. It runs in English, French and Ukrainian, and the model never makes a coordinate. Three answers from you decide what we build today.
 
-Have the receiver open on the laptop: a mission with three call signs and one question waiting. Show it before you describe it.
+Have the command post open on the laptop: a mission with three call signs and one question waiting. Show it before you describe it.
 
 ### If there are two minutes
 
 1. **How does a report reach the map today?** A voice radio net heard at the command post, a phone, something else? What does the speaker hold, and can it show or play anything back to them?
-   - *Today:* each speaker has a phone that joins a mission under a call sign. The phone shows and speaks our question [107, 114]. The phone app is a stand-in for a radio [58].
+   - *Today:* the phone app is a stand-in for a radio [58]. Since 21 Nov it behaves as one: it picks a mission's net, does not join or name itself, and does not show or speak our question; the operator answers on the command post [208].
    - *It decides:* almost everything on the speaker's side. On a shared radio net nobody joins, the call sign has to come from the words, the question goes to the operator to ask over the radio, and noise and overlapping voices become the main risk ([plan](plan.md#not-covered)).
 
 2. **How will you judge it, on Saturday evening and on Sunday?** Your sentences and places, or ours? In which area? Live, or a video? Would a demo set in a Ukrainian town near the front mean more to you than one in Paris?
@@ -35,7 +35,7 @@ Have the receiver open on the laptop: a mission with three call signs and one qu
    - *It decides:* the demo area, and whether we rehearse sentences we have never seen.
 
 3. **When a report is unclear today, what happens?** Which is worse: a marker in the wrong place, or no marker until someone clarifies? Could the system ask back itself, and whom: the speaker or the operator?
-   - *Today:* it asks back aloud, with up to three choices, and never guesses. The unit shows "awaiting answer" on the shared map until a choice is tapped.
+   - *Today:* it asks back, with up to three choices, and never guesses. The question goes to the operator on the command post, who answers for the unit [178, 208]; the web page still asks aloud. The unit shows "awaiting answer" on the shared map until it is answered.
    - *It decides:* whether our main difference from the other teams is one you want. If a best guess shown as uncertain is better, we add that.
 
 ### If there are ten minutes
@@ -44,20 +44,20 @@ The people:
 
 4. **Who looks at the map, and what is on that screen today?** A paper map, a battle-management system? Do the speakers ever see it? Would a feed into the existing system matter more than our own map?
    - *Today:* one operator at a base station watches our map on a laptop or projector. Speakers do not see it.
-   - *It decides:* how much goes into the receiver, and whether an export (GeoJSON, Cursor-on-Target) is worth a few hours.
+   - *It decides:* how much goes into the command post, and whether an export (GeoJSON, Cursor-on-Target) is worth a few hours.
 
 5. **How many units report on one net, and how often?** How old can a position be before it is useless?
    - *Today:* checked with three call signs. A unit fades after 3 minutes of silence.
    - *It decides:* how dense the map and the feed must stay readable, and the fade time.
 
 6. **Do speakers say their call sign in each report?** Is there a standard phrasing, with pro-words such as "over"?
-   - *Today:* the call sign comes from the device, not from the words.
+   - *Today:* the phone names no one, as a radio would [208]. A report with no call sign is a radio report: the sender is read from the words against the mission's roster, and the operator settles any the reader is not sure of [202, 203] ([callsigns.md](callsigns.md)). The reader expects the sender first or after "this is".
    - *It decides:* whether we read the call sign from the transcript. On a shared radio net there is no other way.
 
 The words:
 
 7. **How do people name places?** Landmarks, streets, grid references, distance and bearing? Nicknames that are on no map, such as "checkpoint 3"?
-   - *Today:* named places, kinds of place ("the church"), relations ("behind", "south of"), "towards", crossings, and a distance with one of eight compass directions. No grid references, no spoken coordinates, no nicknames.
+   - *Today:* named places, kinds of place ("the church"), relations ("behind", "south of"), "towards", crossings, and a distance with one of eight compass directions or a clock direction [198]. No grid references, no spoken coordinates, no nicknames.
    - *It decides:* which of those three gaps to close first.
 
 8. **For "I moved towards 35th street", where should the marker end up?**
@@ -102,4 +102,4 @@ History, and the rest:
 
 - Write each answer down in their words, then add one line per answer to [DECISIONS.md](../DECISIONS.md) and remove the question here.
 - Tell the team the answer to question 1 at once: it moves people between roles ([work-split.md](work-split.md#when-to-switch-people)).
-- Note what they reacted to when they saw the receiver. That goes into the pitch.
+- Note what they reacted to when they saw the command post. That goes into the pitch.

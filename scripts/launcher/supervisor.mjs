@@ -177,12 +177,12 @@ async function start() {
     if (!children.has(kind)) throw new Error(`${kind} stopped during startup.`);
   }
   state.status = 'Ready';
-  await phase(`Servers ready.\nReceiver: http://localhost:${config.port}/receiver\nOpen Transmitter on the phone and tap Connect.`);
+  await phase(`Servers ready.\nCommand post: http://localhost:${config.port}/cp\nOpen Transmitter on the phone and tap Connect.`);
   reconnectTimer = setInterval(async () => {
     if (state.busy || state.status !== 'Ready') return;
     try { const phone = selectDevice(await listDevices(env), config); if (phone) { await forward(config, phone, env); connection = phone; } } catch (error) { console.warn(error.message); }
   }, 5000);
-  if (config.open) await openBrowser(`http://localhost:${config.port}/receiver`).catch(() => {});
+  if (config.open) await openBrowser(`http://localhost:${config.port}/cp`).catch(() => {});
 }
 async function action(name) {
   state.busy = true; state.error = null;

@@ -1,28 +1,39 @@
 "use client";
 
 /**
- * The receiver: the shared map a person at the base station watches. It opens and ends missions;
- * otherwise it only shows. It polls the mission's log every second and rebuilds the picture with
- * foldLog(), so the live view and a replay are the same code: a replay is the log read up to a moment.
+ * The command post: the shared map a person at the base watches and keeps. It opens and ends
+ * missions, places and changes tracks by hand, and answers a unit's question when the unit cannot
+ * tap. It polls the mission's log every second and rebuilds the picture with foldLog(), so the live
+ * view and a replay are the same code: a replay is the log read up to a moment. What the command
+ * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { ExpressionSpecification, GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
+import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
-import { AFFILIATION_COLOUR, AFFILIATION_LABEL, describeTrack, HEADING_DEG, trackSymbolCode } from "@/lib/geo/trackKinds";
-import { colourMap, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
-import { sessionCode, type LogEntry, type MissionListReply, type MissionSummary, type SessionLogReply } from "@/lib/reports/types";
+import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
+import type { Affiliation, TrackKind } from "@/lib/geo/types";
+import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
+import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
+import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
+import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
-import styles from "./Receiver.module.css";
+import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
+import styles from "./CommandPost.module.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const POLL_MS = 1000;
-/** With no mission on screen, how often the list of missions is read. */
+/** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
 const SPEEDS = [1, 10, 30];
+/** How close to a mission's start or end, in pixels on the bar, the replay is pulled onto it. */
+const DETENT_PX = 8;
+/** The replay bar's thumb, in CSS pixels: its middle runs from half this in from each end. */
+const THUMB_PX = 16;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const EMPTY_LOG: LogEntry[] = [];
 // The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
 // label, which is wider than its marker.
 const MAP_PADDING = { top: 80, bottom: 130, left: 90, right: 90 };
@@ -118,7 +129,7 @@ function fmtSpan(ms: number): string {
 
 /**
  * A wide screen is taken for a projector or a wall screen, read from across the room: the panels
- * and the map's labels are drawn larger. The same steps as `--z` in Receiver.module.css.
+ * and the map's labels are drawn larger. The same steps as `--z` in CommandPost.module.css.
  */
 function screenScale(): number {
   const w = window.innerWidth;
@@ -126,7 +137,7 @@ function screenScale(): number {
 }
 
 // The page's address says which mission is shown, so a projector's tab can be reloaded or shared.
-const LOCATION_EVENT = "receiver:location";
+const LOCATION_EVENT = "cp:location";
 function subscribeLocation(cb: () => void) {
   window.addEventListener("popstate", cb);
   window.addEventListener(LOCATION_EVENT, cb);
@@ -147,40 +158,93 @@ function showSession(code: string | null, replace = false) {
 
 type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
 
-type MilSymbol = typeof import("milsymbol").default;
-
 /** The size of a track's symbol on the map, before the big-screen steps. The frame is about 1.5 times this. */
 const TRACK_SYMBOL_SIZE = 24;
 
 /**
- * A track's standard symbol (APP-6) as SVG, for the lists. The frame says whose it is and the
- * icon what it is; a neutral track keeps the standard's green, not its purple for civilians, so
- * one colour means one thing on this page.
+ * The way a track is moving, as a bold arrow from the middle of its symbol. milsymbol's own
+ * indicator is a thin black line that hardly shows past the frame, so this one is drawn on its own,
+ * under the symbol: only the part outside the frame shows. In screen pixels, for a symbol of size s.
  */
-const trackSvgs = new Map<string, string>();
-function trackSvg(lib: MilSymbol, t: TrackState, size: number): string {
-  // The list is drawn again every second, so each symbol is made once.
-  const key = `${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
-  let svg = trackSvgs.get(key);
-  if (svg === undefined) {
-    svg = new lib.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false }).asSVG();
-    trackSvgs.set(key, svg);
-  }
-  return svg;
+function headingArrow(s: number) {
+  return { len: Math.round(2.4 * s), shaft: Math.max(4, Math.round(0.22 * s)), headW: Math.round(0.95 * s), headL: Math.round(0.8 * s), halo: Math.max(2, Math.round(0.1 * s)) };
+}
+
+/** The arrow's image: pointing up, dark with a white edge, its tail at the bottom middle. */
+function headingArrowImage(s: number): ImageData | null {
+  const a = headingArrow(s);
+  const r = 2;
+  const w = a.headW + 2 * a.halo;
+  const h = a.len + a.halo;
+  const canvas = document.createElement("canvas");
+  canvas.width = w * r;
+  canvas.height = h * r;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(r, r);
+  const x = w / 2;
+  const tip = a.halo;
+  const neck = tip + a.headL;
+  ctx.beginPath();
+  ctx.moveTo(x, tip);
+  ctx.lineTo(x + a.headW / 2, neck);
+  ctx.lineTo(x + a.shaft / 2, neck);
+  ctx.lineTo(x + a.shaft / 2, h);
+  ctx.lineTo(x - a.shaft / 2, h);
+  ctx.lineTo(x - a.shaft / 2, neck);
+  ctx.lineTo(x - a.headW / 2, neck);
+  ctx.closePath();
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 2 * a.halo;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+  ctx.fillStyle = "#16212c";
+  ctx.fill();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
 /**
- * A track in two lines: what it is and where, then who saw it. An open question comes first, as
- * for a unit. A track is a sighting, so the second line always names the unit that reported it.
+ * A track in two lines: what it is and where, then who saw it or placed it. An open question comes
+ * first, as for a unit. A track is a sighting, so the second line always names who reported it:
+ * a unit, or the command post when a person placed it there.
  */
 function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; tone: UnitTone } {
   // "hostile vehicle ×2" without its first word: the pill beside the name already says whose it is.
   const what = describeTrack(t).replace(/^\S+\s*/, "") || "kind not said";
+  const extra = `${t.changed && !t.plotted ? ` · changed by ${t.changed.by}` : ""}${t.note ? ` · ${t.note}` : ""}`;
   if (t.pendingReport) return { main: `${what} · where it is waits for an answer`, sub: `asked ${t.seenBy}`, tone: "ask" };
   const p = t.position;
-  if (!p) return { main: `${what} · not placed`, sub: `reported by ${t.seenBy}`, tone: "none" };
+  if (t.gone != null) return { main: `${what} · off the map`, sub: `marked gone by ${COMMAND_POST}`, tone: "silent" };
+  if (!p) return { main: `${what} · not placed`, sub: `reported by ${t.seenBy}${extra}`, tone: "none" };
   const moving = t.heading ? ` · moving ${t.heading.replace("_", "-")}, as said` : "";
-  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `seen by ${t.seenBy}${moving}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
+  const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
+  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `${who}${moving}${extra}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
+}
+
+/**
+ * What the command post is doing on the map: placing a new track, moving one, or changing what one
+ * is. `at` is where the track would go, once the map was clicked or a place picked; `label` is the
+ * name the coordinator will give it, filled in when the answer comes.
+ */
+type Draft = { lat: number; lon: number; place?: string; label: string | null; minRadius?: number };
+type Tool =
+  | { kind: "place"; what: TrackWhat; radius: number; at: Draft | null }
+  | { kind: "move"; n: number; radius: number; at: Draft | null }
+  | { kind: "edit"; n: number; what: TrackWhat };
+
+/** An answer the command post is about to give for a unit: asked once more before it is saved. */
+type Answering = { reportId: string; choice: string | null; name: string; callsign: string };
+
+/** What the operator is about to do with a held radio report: asked once more first [203]. */
+type Settling = { held: string; action: "assign" | "add" | "dismiss"; callsign: string | null };
+
+/** Why a radio report waits, as one word on its pill. */
+const HELD_TAG: Record<HeldReason, string> = { which: "Which unit?", unknown: "Not on roster", none: "No call sign", far: "Too far" };
+
+function settleText(s: Settling, h: HeldEntry): string {
+  if (s.action === "dismiss") return "Dismiss this report? Nothing moves.";
+  if (s.action === "add") return `Add ${s.callsign} to the roster and give it this report?`;
+  return `Give this report to ${s.callsign}? Its words are read again from where ${s.callsign} was at ${fmtTime(h.ts)}.`;
 }
 
 /**
@@ -189,6 +253,8 @@ function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; 
  */
 function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): { tag: string; text: string; tone: UnitTone } {
   if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
+  // On the roster, and no report from it yet [201].
+  if (u.lastHeard === 0) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const p = u.position;
   const where = p ? `${p.label} · ±${p.radius_m} m` : "";
   if (silent) {
@@ -199,7 +265,7 @@ function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): 
   return p.estimated ? { tag: "≈ Estimate", text: where, tone: "estimate" } : { tag: "Placed", text: where, tone: "placed" };
 }
 
-export default function Receiver() {
+export default function CommandPost() {
   // ?session= picks the mission; with none, the newest open one is shown. ?area= pins the map to one area.
   const search = useSyncExternalStore(subscribeLocation, () => window.location.search, () => "");
   const { session, fixedArea } = useMemo(() => {
@@ -208,18 +274,22 @@ export default function Receiver() {
     return { session: sessionCode(q.get("session")), fixedArea: isAreaId(a) ? a : null };
   }, [search]);
 
-  // The log of the session shown; entries of another session are dropped when it changes.
-  const [log, setLog] = useState<{ session: string | null; entries: LogEntry[] }>({ session: null, entries: [] });
-  const entries = useMemo(() => (log.session === session ? log.entries : []), [log, session]);
+  // The logs read so far, by session. Moving the replay into another mission of the day shows its
+  // log at once; the one on screen is polled for what is new.
+  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
+  const logsRef = useRef(logs);
+  const entries = useMemo(() => (session ? (logs[session] ?? EMPTY_LOG) : EMPTY_LOG), [logs, session]);
+  /** The missions on this coordinator, for the replay bar. */
+  const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** With no mission in the address: still looking for one, or none is open. */
-  const [otherMissions, setOtherMissions] = useState<MissionSummary[]>([]);
   const [noMission, setNoMission] = useState(false);
   const [stored, setStored] = useState<boolean | null>(null);
   const [lastOk, setLastOk] = useState(0);
   const [now, setNow] = useState(0);
+  const otherMissions = missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
   const [mode, setMode] = useState<"live" | "replay">("live");
   const [replayT, setReplayT] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -233,6 +303,20 @@ export default function Receiver() {
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
   const [mapSize, setMapSize] = useState("");
+  /** Placing, moving or changing a track; null when the command post is only watching. */
+  const [tool, setTool] = useState<Tool | null>(null);
+  /** The track picked on the map or in the list, shown in its card. */
+  const [picked, setPicked] = useState<number | null>(null);
+  /** Where the information came from, typed under a draft. */
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [toolError, setToolError] = useState<string | null>(null);
+  /** A short line over the map after a change was saved ("Track 7 placed"). */
+  const [notice, setNotice] = useState<string | null>(null);
+  const [answering, setAnswering] = useState<Answering | null>(null);
+  const [settling, setSettling] = useState<Settling | null>(null);
+  /** A call sign the operator types for a held report, when the words gave none [203]. */
+  const [newSign, setNewSign] = useState<{ held: string; text: string }>({ held: "", text: "" });
 
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -248,7 +332,14 @@ export default function Receiver() {
   const [zoomKey, setZoomKey] = useState(0);
   const candMarkers = useRef<Marker[]>([]);
   const countRef = useRef(0);
-  const replayRef = useRef({ t: 0, end: 0 });
+  /** What the replay's timer and the bar's handlers read between renders. */
+  const replayRef = useRef<{ t: number; end: number; stretches: Stretch[]; session: string | null }>({ t: 0, end: 0, stretches: [], session: null });
+  /** Reads the log at once, after the command post changed it, rather than at the next poll. */
+  const pollNow = useRef<() => void>(() => {});
+  /** What a click on the map does; set below, read by the handler the map was given once. */
+  const mapClick = useRef<(e: MapMouseEvent) => void>(() => {});
+  /** The track symbol being placed or moved: a marker that can be dragged. */
+  const draftMarker = useRef<Marker | null>(null);
 
   // ---------- which mission ----------
   // No mission in the address: show the newest open one, or open the missions menu.
@@ -266,6 +357,7 @@ export default function Receiver() {
         if (stop) return;
         setStored(data.stored);
         setLastOk(Date.now());
+        setMissions(data.missions);
         const open = data.missions.find((m) => m.ended == null);
         if (open) showSession(open.code, true);
         else {
@@ -285,22 +377,29 @@ export default function Receiver() {
     };
   }, [session]);
 
-  // Reports in another open mission should not look like a disconnected phone.
+  // With a mission on screen, the list is still read: the replay bar shows the day's other missions.
+  // It does not start over when the replay moves into another mission.
+  const hasSession = session != null;
   useEffect(() => {
-    if (!session) return;
-    let cancelled = false;
-    const check = async () => {
+    if (!hasSession) return;
+    let stop = false;
+    const look = async () => {
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
-        if (!res.ok) return;
-        const list = await res.json() as MissionListReply;
-        if (!cancelled) setOtherMissions(list.missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && Date.now() - m.last < 120_000));
-      } catch { /* Existing connection status handles failures. */ }
+        if (!res.ok || stop) return;
+        const data = (await res.json()) as MissionListReply;
+        if (!stop) setMissions(data.missions);
+      } catch {
+        // The bar keeps the list it has.
+      }
     };
-    void check();
-    const timer = setInterval(check, LIST_POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [session]);
+    look();
+    const id = setInterval(look, LIST_POLL_MS);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [hasSession]);
 
   const pickSession = useCallback((code: string | null) => {
     setPlaying(false);
@@ -310,15 +409,20 @@ export default function Receiver() {
     setActionError(null);
     setNoMission(code == null);
     showSession(code);
-  }, []);
+  }, [setPlaying]);
 
   // ---------- the log ----------
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
   useEffect(() => {
     if (!session) return;
     let stop = false;
     let busy = false;
     let loaded = false;
-    countRef.current = 0;
+    // A log read before (another mission of the day, visited in a replay) goes on from where it was.
+    countRef.current = logsRef.current[session]?.length ?? 0;
     const poll = async () => {
       if (busy || stop) return;
       busy = true;
@@ -332,11 +436,11 @@ export default function Receiver() {
         if (data.total < countRef.current) {
           // The log was cleared: start over.
           countRef.current = 0;
-          setLog({ session, entries: [] });
+          setLogs((all) => ({ ...all, [session]: [] }));
         } else if (data.entries.length || !loaded) {
           const from = countRef.current;
           countRef.current += data.entries.length;
-          setLog((l) => ({ session, entries: l.session === session && from > 0 ? [...l.entries, ...data.entries] : data.entries }));
+          setLogs((all) => ({ ...all, [session]: from > 0 ? [...(all[session] ?? []), ...data.entries] : data.entries }));
           setManualArea(null);
         }
         loaded = true;
@@ -347,10 +451,12 @@ export default function Receiver() {
       }
     };
     poll();
+    pollNow.current = () => void poll();
     const id = setInterval(poll, POLL_MS);
     return () => {
       stop = true;
       clearInterval(id);
+      pollNow.current = () => {};
     };
   }, [session]);
 
@@ -375,53 +481,105 @@ export default function Receiver() {
   // units do not all read as silent for the hours since.
   const effNow = mode === "live" ? (ended ?? now) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
-  const rangeStart = full.first != null ? full.first - 2000 : 0;
-  const rangeEnd = full.last != null ? full.last + 2000 : 0;
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
 
+  // ---------- the replay bar ----------
+  // The missions opened in this area on the shown one's day, each a stretch from its start to its
+  // end, gray between. Until the log of a mission moved to is read, its line in the list stands in.
+  // A session from before missions has only its own entries.
+  const stretches = useMemo<Stretch[]>(() => {
+    if (!session) return [];
+    const shown: ShownMission | undefined = mission
+      ? { code: session, name: mission.name, area: mission.area, opened: mission.opened, ended: mission.ended, last: full.last ?? mission.opened }
+      : missions.find((m) => m.code === session);
+    if (shown) return dayStretches(missions, shown, now);
+    return full.first != null && full.last != null ? [{ code: session, name: session, start: full.first, end: full.last, open: false }] : [];
+  }, [session, mission, full.first, full.last, missions, now]);
+  const { lo: rangeStart, hi: rangeEnd } = useMemo(() => barRange(stretches), [stretches]);
+  const shownStretch = stretches.find((s) => s.code === session) ?? null;
+  const dayCodes = stretches.map((s) => s.code).join(" ");
+
   useEffect(() => {
-    replayRef.current = { t: replayT, end: rangeEnd };
-  }, [replayT, rangeEnd]);
+    replayRef.current = { t: replayT, end: rangeEnd, stretches, session };
+  }, [replayT, rangeEnd, stretches, session]);
+
+  // The day's other missions are read once, so the replay moves into one without a wait.
+  const fetching = useRef(new Set<string>());
+  useEffect(() => {
+    for (const code of dayCodes ? dayCodes.split(" ") : []) {
+      if (code === session || logsRef.current[code] || fetching.current.has(code)) continue;
+      fetching.current.add(code);
+      fetch(`/api/sessions/${encodeURIComponent(code)}`, { cache: "no-store" })
+        .then((res) => (res.ok ? (res.json() as Promise<SessionLogReply>) : null))
+        .then((data) => {
+          // The poll of the mission on screen may have read it first; that copy is kept.
+          if (data) setLogs((all) => (all[code] ? all : { ...all, [code]: data.entries }));
+        })
+        .catch(() => {})
+        .finally(() => fetching.current.delete(code));
+    }
+  }, [dayCodes, session]);
 
   // ---------- replay ----------
   const goLive = useCallback(() => {
     setPlaying(false);
     setMode("live");
     setFollow(true);
-  }, []);
+  }, [setPlaying]);
 
-  const scrub = useCallback((t: number) => {
-    setMode("replay");
-    setReplayT(t);
-  }, []);
+  /** The replay has moved into another mission of the day: show it. What was picked belongs to the old one. */
+  const enterMission = useCallback((code: string) => {
+    replayRef.current.session = code;
+    setPicked(null);
+    setTool(null);
+    setAnswering(null);
+    setConfirmEnd(false);
+    showSession(code, true);
+  }, [setPicked, setAnswering]);
+
+  const scrub = useCallback(
+    (t: number) => {
+      setMode("replay");
+      setReplayT(t);
+      const { stretches: day, session: shown } = replayRef.current;
+      const s = stretchAt(day, t, shown);
+      if (s && s.code !== shown) enterMission(s.code);
+    },
+    [enterMission],
+  );
 
   const togglePlay = useCallback(() => {
     if (playing) {
       setPlaying(false);
       return;
     }
-    // From live, or from the end, a replay starts at the beginning of the session.
-    if (mode === "live" || replayRef.current.t >= replayRef.current.end) setReplayT(rangeStart);
+    // From live, or from the end, a replay starts at the beginning of the mission on screen.
+    if (mode === "live" || replayRef.current.t >= replayRef.current.end) setReplayT(shownStretch?.start ?? rangeStart);
     setMode("replay");
     setFollow(true);
     setPlaying(true);
-  }, [playing, mode, rangeStart]);
+  }, [playing, mode, shownStretch, rangeStart, setPlaying]);
 
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
-      const { t, end } = replayRef.current;
-      const next = t + STEP_MS * speed;
-      if (next >= end) {
-        // The replay has caught up with the present: back to live.
+      const { t, end, stretches: day, session: shown } = replayRef.current;
+      if (t + STEP_MS * speed >= end) {
+        // The replay has caught up with the present, or the day's last end: back to live.
         setPlaying(false);
         setMode("live");
-      } else setReplayT(next);
+        return;
+      }
+      // The gray between two missions is skipped: the replay goes on at the next one's start.
+      const next = stepAlong(day, t, 1, STEP_MS * speed);
+      setReplayT(next);
+      const s = stretchAt(day, next, shown);
+      if (s && s.code !== shown) enterMission(s.code);
     }, STEP_MS);
     return () => clearInterval(id);
-  }, [playing, speed]);
+  }, [playing, speed, enterMission]);
 
   // ---------- map ----------
   useEffect(() => {
@@ -451,8 +609,10 @@ export default function Receiver() {
       // Two places 100 m apart overlap at one zoom and not at the next.
       const bump = () => setZoomKey((z) => z + 1);
       for (const ev of ["zoomend", "rotateend", "pitchend"] as const) map.on(ev, bump);
+      // One handler for the life of the map; what a click does depends on what the command post is doing.
+      map.on("click", (e) => mapClick.current(e));
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-leader", "track"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -487,6 +647,28 @@ export default function Receiver() {
         // symbol back to the point, and a small dot in the track's colour on the point itself.
         map.addLayer({ id: "track-leader-line", type: "line", source: "track-leader", filter: ["==", "$type", "LineString"], layout: { "line-cap": "round" }, paint: { "line-color": "#16212c", "line-width": 1.5, "line-opacity": ["*", 0.7, op] } });
         map.addLayer({ id: "track-anchor", type: "circle", source: "track-leader", filter: ["==", "$type", "Point"], paint: { "circle-radius": 4, "circle-color": ["get", "color"], "circle-opacity": op, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-stroke-opacity": op } });
+        // The track picked on the map or in the list: a blue ring round its symbol.
+        map.addLayer({ id: "track-picked", type: "circle", source: "track", filter: ["==", "picked", true], paint: { "circle-radius": 24, "circle-color": "rgba(44,156,255,0.12)", "circle-stroke-color": "#2c9cff", "circle-stroke-width": 3 } });
+        // Where a track being placed or moved would go: a dashed circle and, for a move, a dashed
+        // line from where it is now. The symbol itself is a marker that can be dragged.
+        map.addLayer({ id: "draft-fill", type: "fill", source: "draft", filter: ["==", "$type", "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": 0.1 } });
+        map.addLayer({ id: "draft-line", type: "line", source: "draft", filter: ["!=", "$type", "Point"], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [2, 2] } });
+        // The way a track is moving, under its symbol. It turns with the map, so north stays north.
+        map.addLayer({
+          id: "track-heading",
+          type: "symbol",
+          source: "track",
+          filter: ["has", "heading"],
+          layout: {
+            "icon-image": ["get", "arrow"],
+            "icon-anchor": "bottom",
+            "icon-rotate": ["get", "heading"],
+            "icon-rotation-alignment": "map",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: { "icon-opacity": op },
+        });
         // A track's standard symbol, with its number, what it is, and when and by whom it was seen.
         map.addLayer({
           id: "track-sym",
@@ -502,8 +684,9 @@ export default function Receiver() {
             "text-size": 14,
             "text-line-height": 1.25,
             // Above the symbol: a unit's label hangs below its dot, so the two do not overprint
-            // when a unit reports something at the landmark it stands at.
-            "text-offset": [0, -1.9],
+            // when a unit reports something at the landmark it stands at. Higher when the track's
+            // arrow points up, so the arrow does not run through it.
+            "text-offset": ["array", "number", 2, ["get", "textOff"]],
             "text-anchor": "bottom",
             "text-allow-overlap": true,
             "text-ignore-placement": true,
@@ -528,6 +711,13 @@ export default function Receiver() {
             "text-ignore-placement": true,
           },
           paint: { "text-color": "#16212c", "text-halo-color": "#ffffff", "text-halo-width": 2.5, "text-opacity": ["get", "labelOp"] },
+        });
+        // A track's symbol can be clicked to pick it.
+        map.on("mouseenter", "track-sym", () => {
+          if (!map.getCanvas().style.cursor) map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "track-sym", () => {
+          if (map.getCanvas().style.cursor === "pointer") map.getCanvas().style.cursor = "";
         });
         setMapReady(true);
       });
@@ -617,10 +807,21 @@ export default function Receiver() {
     const leader: GeoJSON.Feature[] = [];
     // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
     // keeps its spot and a new one moves.
-    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string }[] = [];
+    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
+    const trackText = Math.round(14 * k);
+    const size = Math.round(TRACK_SYMBOL_SIZE * k);
+    const ha = headingArrow(size);
+    const arrowIcon = `track-heading:${size}`;
+    if (symbols && !map.hasImage(arrowIcon)) {
+      const img = headingArrowImage(size);
+      if (img) map.addImage(arrowIcon, img, { pixelRatio: 2 });
+    }
+    // The label's bottom, in pixels above the point, when no arrow is in its way.
+    const liftPlain = 1.9 * trackText;
     for (const t of [...view.tracks].sort((a, b) => a.n - b.n)) {
       const p = t.position;
-      if (!p || t.positionTs == null) continue;
+      // A track marked gone stays in the list, not on the map.
+      if (!p || t.positionTs == null || t.gone != null) continue;
       const old = isOld(t);
       const op = old ? 0.45 : 1;
       const color = AFFILIATION_COLOUR[t.affiliation];
@@ -630,16 +831,14 @@ export default function Receiver() {
       if (t.from && !old && distanceM(t.from, p) > 5) {
         sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [p.lon, p.lat]] } });
       }
-      // The symbol image: one per code, heading and size. The arrow for "moving east" makes the
-      // image lopsided, so it is shifted to keep the frame's own anchor on the point.
+      // The symbol image: one per code and size. Some frames are not centred on their own anchor,
+      // so the image is shifted to keep the anchor on the point.
       let icon = "";
       let off: [number, number] = [0, 0];
       if (symbols) {
-        const heading = t.heading ? HEADING_DEG[t.heading] : null;
-        const size = Math.round(TRACK_SYMBOL_SIZE * k);
-        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${heading ?? ""}:${size}`;
+        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
         if (!map.hasImage(icon)) {
-          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff", ...(heading != null ? { direction: heading } : {}) });
+          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
           const canvas = s.asCanvas(2);
           const ctx = canvas.getContext("2d");
           if (ctx && canvas.width && canvas.height) {
@@ -652,10 +851,25 @@ export default function Receiver() {
         const i = trackIcons.current.get(icon);
         if (i) off = [i[0], i[1]];
       }
+      // The way it is moving, as said: an arrow from the middle of the symbol. On screen it points
+      // at the heading less the map's turn. When it points up, the label goes above its tip.
+      const heading = symbols && t.heading ? HEADING_DEG[t.heading] : null;
+      let lift = liftPlain;
+      let arrow: Rect | null = null;
+      if (heading != null) {
+        const rad = ((heading - map.getBearing()) * Math.PI) / 180;
+        const [sin, cos] = [Math.sin(rad), Math.cos(rad)];
+        const [tx, ty] = [ha.len * sin, -ha.len * cos];
+        const hw = ha.headW / 2 + ha.halo;
+        arrow = { x0: Math.min(0, tx) - hw, y0: Math.min(0, ty) - hw, x1: Math.max(0, tx) + hw, y1: Math.max(0, ty) + hw };
+        if (cos > 0) lift = Math.max(liftPlain, ha.len * cos + hw * Math.abs(sin) + 0.3 * trackText);
+      }
       const what = describeTrack(t);
       const name = `T${t.n} · ${what}`;
       const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
-      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props: { icon, off, op, labelOp: old ? 0.75 : 1, name, when } });
+      const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
+      if (heading != null) Object.assign(props, { heading, arrow: arrowIcon });
+      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props, lift, arrow });
     }
 
     // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
@@ -677,14 +891,15 @@ export default function Receiver() {
       const top = y + 1.1 * unitText;
       fixed.push(grow({ x0: x - b.w / 2, y0: top, x1: x + b.w / 2, y1: top + b.h }));
     }
-    const trackText = Math.round(14 * k);
     const frame = TRACK_SYMBOL_SIZE * k * 1.5;
     const marks: Mark[] = drawn.map((d) => {
       const { x, y } = map.project([d.p.lon, d.p.lat]);
       const i = trackIcons.current.get(d.icon);
       const b = textBox(d.label, trackText);
-      const bottom = -1.9 * trackText;
-      return { id: d.id, x, y, boxes: [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })] };
+      const bottom = -d.lift;
+      const boxes = [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })];
+      if (d.arrow) boxes.push(grow(d.arrow));
+      return { id: d.id, x, y, boxes };
     });
     const inSight = marks.filter((m) => m.x >= 0 && m.y >= 0 && m.x <= w && m.y <= h);
     const shifts = declutter(inSight, fixed, Math.round(40 * k));
@@ -708,7 +923,7 @@ export default function Receiver() {
     set("track-sight", sight);
     set("track-leader", leader);
     map.setLayoutProperty("track-sym", "text-size", trackText);
-  }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey]);
+  }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked]);
 
   // On a projector or a wall screen, the map's labels and markers grow with the panels.
   useEffect(() => {
@@ -784,7 +999,7 @@ export default function Receiver() {
       u.pending?.candidates.forEach((c) => pts.push(c));
     }
     for (const t of view.tracks) {
-      if (t.area === area && t.position) pts.push(t.position);
+      if (t.area === area && t.position && t.gone == null) pts.push(t.position);
     }
     return pts;
   }, [view, area]);
@@ -843,14 +1058,309 @@ export default function Receiver() {
 
   const flyToTrack = useCallback(
     (t: TrackState) => {
+      setPicked(t.n);
       const map = mapRef.current;
-      if (!map || !t.position) return;
+      if (!map || !t.position || t.gone != null) return;
       setFollow(false);
       if (t.area !== area) setManualArea(t.area);
       map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
     },
+    [area, setPicked],
+  );
+
+  // ---------- the command post's own changes ----------
+  /** Changes are made only to the present of an open mission that this coordinator keeps. */
+  const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true;
+  /** In a replay or an ended mission the tools close by themselves. */
+  const activeTool = canEdit ? tool : null;
+  const activeAnswer = canEdit ? answering : null;
+  const activeSettle = canEdit ? settling : null;
+  const pickedTrack = picked != null ? (view.tracks.find((t) => t.n === picked) ?? null) : null;
+  /** The number a new track will most likely get; the coordinator gives the real one. */
+  const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
+  const tracksUrl = session ? `/api/sessions/${encodeURIComponent(session)}/tracks` : "";
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const startPlace = useCallback(() => {
+    setPicked(null);
+    setToolError(null);
+    setNote("");
+    // The camera stays where the person is looking while they place.
+    setFollow(false);
+    setTool((t) => (t?.kind === "place" ? null : { kind: "place", what: { ...DEFAULT_WHAT }, radius: PLOT_RADIUS_DEFAULT, at: null }));
+  }, [setPicked]);
+
+  const startEdit = useCallback((t: TrackState) => {
+    setToolError(null);
+    setNote("");
+    setTool({ kind: "edit", n: t.n, what: { affiliation: t.affiliation, kind: t.kind, count: t.count ?? 1 } });
+  }, []);
+
+  const startMove = useCallback((t: TrackState) => {
+    setToolError(null);
+    setNote("");
+    setFollow(false);
+    setTool({ kind: "move", n: t.n, radius: PLOT_RADIUS_DEFAULT, at: null });
+  }, []);
+
+  /** Puts the track being placed or moved at a point, and asks the coordinator how it will name it. */
+  const putDraft = useCallback(
+    (lat: number, lon: number) => {
+      setToolError(null);
+      setTool((t) => (t && t.kind !== "edit" ? { ...t, at: { lat, lon, label: null } } : t));
+      void (async () => {
+        try {
+          const res = await fetch(`/api/places?area=${area}&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`);
+          const data = (await res.json()) as PlacesReply & { error?: string };
+          if (!res.ok) {
+            setToolError(data.error ?? "That point cannot be named.");
+            return;
+          }
+          setTool((t) => (t && t.kind !== "edit" && t.at?.lat === lat && t.at.lon === lon ? { ...t, at: { ...t.at, label: data.label ?? null } } : t));
+        } catch {
+          // The card says the point is being named; saving still works.
+        }
+      })();
+    },
     [area],
   );
+
+  /** Puts it at a place picked by name: the coordinator places it on the place itself. */
+  const putPlace = useCallback((p: StartPoint) => {
+    setToolError(null);
+    setTool((t) => (t && t.kind !== "edit" ? { ...t, at: { lat: p.lat, lon: p.lon, place: p.id, label: p.name } } : t));
+    const map = mapRef.current;
+    map?.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 16), duration: 500 });
+  }, []);
+
+  // A click on the map: where the track goes while placing or moving; otherwise it picks a track.
+  useEffect(() => {
+    mapClick.current = (e) => {
+      const map = mapRef.current;
+      if (!map) return;
+      if (activeTool && activeTool.kind !== "edit") {
+        putDraft(e.lngLat.lat, e.lngLat.lng);
+        return;
+      }
+      if (activeTool) return;
+      const n = map.queryRenderedFeatures(e.point, { layers: ["track-sym"] })[0]?.properties?.n;
+      setPicked(typeof n === "number" ? n : null);
+    };
+  });
+
+  // A crosshair while the next click places something.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.getCanvas().style.cursor = activeTool && activeTool.kind !== "edit" ? "crosshair" : "";
+  }, [activeTool, mapReady]);
+
+  /** What the track being placed or moved looks like, where it would go, and how sure. */
+  const draft = activeTool && activeTool.kind !== "edit" ? activeTool.at : null;
+  const movingTrack = activeTool?.kind === "move" ? (full.tracks.find((t) => t.n === activeTool.n) ?? null) : null;
+  const draftLooks: { affiliation: Affiliation; kind: TrackKind } | null = activeTool?.kind === "place" ? activeTool.what : movingTrack;
+  const draftRadius = activeTool && activeTool.kind !== "edit" ? activeTool.radius : 0;
+  const draftColour = draftLooks ? AFFILIATION_COLOUR[draftLooks.affiliation] : "#475569";
+  const movingFrom = movingTrack?.position ?? null;
+
+  // The draft's circle, and for a move a dashed line from where the track is now.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const features: GeoJSON.Feature[] = [];
+    if (draft) {
+      features.push({ type: "Feature", properties: { color: draftColour }, geometry: { type: "Polygon", coordinates: [circleRing(draft, draftRadius)] } });
+      if (movingFrom) features.push({ type: "Feature", properties: { color: draftColour }, geometry: { type: "LineString", coordinates: [[movingFrom.lon, movingFrom.lat], [draft.lon, draft.lat]] } });
+    }
+    (map.getSource("draft") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+  }, [draft, draftRadius, draftColour, movingFrom, mapReady]);
+
+  // The draft's symbol: a marker that can be dragged to where the track is.
+  const draftCode = draft && draftLooks ? trackSymbolCode(draftLooks.affiliation, draftLooks.kind) : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    const ml = mlRef.current;
+    if (!map || !ml || !mapReady || !draft || !draftCode || !symbols) return;
+    const s = new symbols.Symbol(draftCode, { size: Math.round(TRACK_SYMBOL_SIZE * screenScale()), civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
+    const el = document.createElement("div");
+    el.className = styles.draftMarker;
+    el.innerHTML = s.asSVG();
+    el.title = "Drag to where it is";
+    const { width, height } = s.getSize();
+    const a = s.getAnchor();
+    const m = new ml.Marker({ element: el, draggable: true, offset: [width / 2 - a.x, height / 2 - a.y] }).setLngLat([draft.lon, draft.lat]).addTo(map);
+    // The circle follows while dragging; the name is asked for once it is dropped.
+    m.on("drag", () => {
+      const q = m.getLngLat();
+      (map.getSource("draft") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: { color: draftColour }, geometry: { type: "Polygon", coordinates: [circleRing({ lat: q.lat, lon: q.lng }, draftRadius)] } }] });
+    });
+    m.on("dragend", () => {
+      const q = m.getLngLat();
+      putDraft(q.lat, q.lng);
+    });
+    draftMarker.current = m;
+    return () => {
+      m.remove();
+      draftMarker.current = null;
+    };
+  }, [draft, draftCode, draftRadius, draftColour, symbols, mapReady, putDraft]);
+
+  /** Sends a change to the coordinator. The log is read again at once, so the map shows it. */
+  const sendPlot = useCallback(async (url: string, method: "POST" | "PATCH", body: unknown): Promise<PlotReply | null> => {
+    setBusy(true);
+    setToolError(null);
+    try {
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = (await res.json().catch(() => ({}))) as PlotReply & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+      pollNow.current();
+      return data;
+    } catch (e) {
+      setToolError(e instanceof Error ? e.message : "Saving failed.");
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const confirmDraft = useCallback(async () => {
+    if (!activeTool || activeTool.kind === "edit" || !activeTool.at || busy) return;
+    const at = activeTool.at;
+    const where = at.place ? { place: at.place } : { lat: at.lat, lon: at.lon };
+    if (activeTool.kind === "place") {
+      const w = activeTool.what;
+      const r = await sendPlot(tracksUrl, "POST", { affiliation: w.affiliation, kind: w.kind, count: w.count > 1 ? w.count : null, ...where, radius_m: activeTool.radius, note: note || null });
+      if (r) {
+        setNotice(`Track ${r.entry.n} placed: ${describeWhat(w)}, ${r.entry.position?.label ?? ""}`);
+        setNote("");
+        // Ready for the next one, with the same choices.
+        setTool({ ...activeTool, at: null });
+      }
+    } else {
+      const r = await sendPlot(`${tracksUrl}/${activeTool.n}`, "PATCH", { action: "move", ...where, radius_m: activeTool.radius, note: note || null });
+      if (r) {
+        setNotice(`Track ${activeTool.n} moved: ${r.entry.position?.label ?? ""}`);
+        setNote("");
+        setTool(null);
+        setPicked(activeTool.n);
+      }
+    }
+  }, [activeTool, busy, note, sendPlot, tracksUrl, setPicked]);
+
+  const saveEdit = useCallback(async () => {
+    if (activeTool?.kind !== "edit" || busy) return;
+    const w = activeTool.what;
+    const r = await sendPlot(`${tracksUrl}/${activeTool.n}`, "PATCH", { action: "edit", affiliation: w.affiliation, kind: w.kind, count: w.count > 1 ? w.count : null, note: note || null });
+    if (r) {
+      setNotice(`Track ${activeTool.n} is now: ${describeWhat(w)}`);
+      setNote("");
+      setTool(null);
+    }
+  }, [activeTool, busy, note, sendPlot, tracksUrl]);
+
+  const markGone = useCallback(
+    async (n: number, gone: boolean) => {
+      const r = await sendPlot(`${tracksUrl}/${n}`, "PATCH", { action: gone ? "gone" : "restore" });
+      if (r) setNotice(gone ? `Track ${n} marked gone` : `Track ${n} back on the map`);
+    },
+    [sendPlot, tracksUrl],
+  );
+
+  /** The command post answers a unit's question, as when the unit has only a radio. */
+  const sendAnswer = useCallback(
+    async (a: Answering) => {
+      if (!session) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch("/api/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, report: a.reportId, choice: a.choice, by: COMMAND_POST }) });
+        const data = (await res.json().catch(() => ({}))) as { error?: string; by?: string | null };
+        if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+        setNotice(data.by !== COMMAND_POST ? `${a.callsign} had answered already` : a.choice ? `Chose ${a.name} for ${a.callsign}` : `None of the choices, for ${a.callsign}`);
+        pollNow.current();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Saving the answer failed.");
+      } finally {
+        setBusy(false);
+        setAnswering(null);
+      }
+    },
+    [session],
+  );
+
+  /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. */
+  const sendHeld = useCallback(
+    async (st: Settling) => {
+      if (!session) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(session)}/held/${encodeURIComponent(st.held)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: st.action, callsign: st.callsign }),
+        });
+        const data = (await res.json().catch(() => ({}))) as Partial<HeldReply> & { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+        setNotice(
+          data.already
+            ? "Someone had settled this report already"
+            : st.action === "dismiss"
+              ? "Dismissed the report"
+              : st.action === "add"
+                ? `Added ${st.callsign} and gave it the report`
+                : `Gave the report to ${st.callsign}`,
+        );
+        setNewSign({ held: "", text: "" });
+        pollNow.current();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Settling the report failed.");
+      } finally {
+        setBusy(false);
+        setSettling(null);
+      }
+    },
+    [session, setNewSign],
+  );
+
+  // Keys, while no field has the cursor: P to place, H S U C F and 1 to 9 in the palette, Esc to step back.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) {
+        if (e.key === "Escape") el.blur();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Escape") {
+        if (activeAnswer) setAnswering(null);
+        else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
+        else if (activeTool) setTool(null);
+        else setPicked(null);
+        return;
+      }
+      if (!canEdit) return;
+      if (!activeTool && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        startPlace();
+        return;
+      }
+      if (!activeTool || activeTool.kind === "move") return;
+      const aff = AFFILIATIONS.find((a) => AFFILIATION_KEY[a] === e.key.toUpperCase());
+      const kind = /^[1-9]$/.test(e.key) ? TRACK_KINDS[Number(e.key) - 1] : undefined;
+      if (aff) setTool({ ...activeTool, what: { ...activeTool.what, affiliation: aff } });
+      else if (kind) setTool({ ...activeTool, what: { ...activeTool.what, kind } });
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeTool, activeAnswer, canEdit, startPlace]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -874,14 +1384,19 @@ export default function Receiver() {
   const latest = view.feed[0];
   /** An ended mission shown as it ended, not replayed. */
   const atEnd = mode === "live" && ended != null;
-  const sliderValue = mode === "live" ? rangeEnd : Math.min(Math.max(replayT, rangeStart), rangeEnd);
+  // Live, the bar stands at the shown mission's end: now while it is open.
+  const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, rangeStart), rangeEnd);
+  const barSpan = rangeEnd - rangeStart;
+  /** Where a time sits along the bar, in per cent. */
+  const barPct = (t: number) => (barSpan > 0 ? ((t - rangeStart) / barSpan) * 100 : 0);
+  const sliderMission = stretchAt(stretches, sliderValue, session);
 
   return (
     <div className={styles.root}>
       <header className={styles.header}>
         <h1 className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
-          Voice-to-Map <span className={styles.brandSub}>Receiver</span>
+          Voice-to-Map <span className={styles.brandSub}>Command post</span>
         </h1>
         {mission ? (
           <div className={styles.missionHead}>
@@ -935,6 +1450,17 @@ export default function Receiver() {
             </button>
           )
         ) : null}
+        {canEdit ? (
+          <button
+            type="button"
+            className={activeTool?.kind === "place" ? styles.primaryBtn : styles.ghostBtn}
+            aria-pressed={activeTool?.kind === "place"}
+            onClick={startPlace}
+            title="Place a track by hand: friend, foe or unknown (P)"
+          >
+            Place track
+          </button>
+        ) : null}
         {actionError ? (
           <span className={styles.error} role="alert">
             {actionError}
@@ -954,11 +1480,124 @@ export default function Receiver() {
 
       <main className={styles.mapCol}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
-        {!follow ? (
-          <button type="button" className={styles.followBtn} onClick={() => setFollow(true)}>
-            Follow units
-          </button>
-        ) : null}
+        {/* Top left of the map: "Follow units", then the palette or the picked track's card. */}
+        <div className={styles.dock}>
+          {!follow ? (
+            <button type="button" className={styles.followBtn} onClick={() => setFollow(true)}>
+              Follow units
+            </button>
+          ) : null}
+          {activeTool?.kind === "place" ? (
+            <TrackPalette
+              title={`Place Track ${nextN}`}
+              what={activeTool.what}
+              onWhat={(what) => setTool({ ...activeTool, what })}
+              radius={activeTool.radius}
+              onRadius={(radius) => setTool({ ...activeTool, radius })}
+              area={area}
+              onPlace={putPlace}
+              symbols={symbols}
+              onClose={() => setTool(null)}
+              hint={activeTool.at ? null : "Click the map where it is, or find a place. Keys: H S U C F for whose, 1 to 9 for what, Esc to stop."}
+              footer={
+                activeTool.at ? (
+                  <DraftCard
+                    symbols={symbols}
+                    what={activeTool.what}
+                    title={`Track ${nextN} · ${describeWhat(activeTool.what)}`}
+                    detail={`${activeTool.at.label ?? "Naming the point…"} · ±${activeTool.radius} m${activeTool.at.place ? " or the place's size" : ""} · placed by ${COMMAND_POST}`}
+                    note={note}
+                    onNote={setNote}
+                    confirmLabel="Place"
+                    onConfirm={confirmDraft}
+                    onCancel={() => setTool({ ...activeTool, at: null })}
+                    busy={busy}
+                    error={toolError}
+                  />
+                ) : toolError ? (
+                  <p className={styles.error} role="alert">
+                    {toolError}
+                  </p>
+                ) : null
+              }
+            />
+          ) : activeTool?.kind === "move" && movingTrack ? (
+            <TrackPalette
+              title={`Move Track ${activeTool.n}`}
+              what={{ affiliation: movingTrack.affiliation, kind: movingTrack.kind, count: movingTrack.count ?? 1 }}
+              onWhat={() => {}}
+              showWhat={false}
+              radius={activeTool.radius}
+              onRadius={(radius) => setTool({ ...activeTool, radius })}
+              area={area}
+              onPlace={putPlace}
+              symbols={symbols}
+              onClose={() => setTool(null)}
+              hint={activeTool.at ? null : `Click the map where Track ${activeTool.n} is now, or find a place. Esc to stop.`}
+              footer={
+                activeTool.at ? (
+                  <DraftCard
+                    symbols={symbols}
+                    what={movingTrack}
+                    title={`Move Track ${activeTool.n} · ${describeTrack(movingTrack)}`}
+                    detail={`to ${activeTool.at.label ?? "naming the point…"} · ±${activeTool.radius} m`}
+                    note={note}
+                    onNote={setNote}
+                    confirmLabel="Move"
+                    onConfirm={confirmDraft}
+                    onCancel={() => setTool({ ...activeTool, at: null })}
+                    busy={busy}
+                    error={toolError}
+                  />
+                ) : toolError ? (
+                  <p className={styles.error} role="alert">
+                    {toolError}
+                  </p>
+                ) : null
+              }
+            />
+          ) : activeTool?.kind === "edit" ? (
+            <TrackPalette
+              title={`Change Track ${activeTool.n}`}
+              what={activeTool.what}
+              onWhat={(what) => setTool({ ...activeTool, what })}
+              symbols={symbols}
+              onClose={() => setTool(null)}
+              footer={
+                <div className={styles.draft}>
+                  <input className={styles.input} value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit()} placeholder="Source, if any: confirmed by drone" aria-label="Where this came from" maxLength={120} />
+                  {toolError ? (
+                    <p className={styles.error} role="alert">
+                      {toolError}
+                    </p>
+                  ) : null}
+                  <div className={styles.draftButtons}>
+                    <button type="button" className={styles.linkBtn} onClick={() => setTool(null)}>
+                      Cancel
+                    </button>
+                    <button type="button" className={styles.primaryBtn} onClick={saveEdit} disabled={busy}>
+                      {busy ? "Saving…" : `Save: ${describeWhat(activeTool.what)}`}
+                    </button>
+                  </div>
+                </div>
+              }
+            />
+          ) : pickedTrack ? (
+            <TrackCard
+              key={pickedTrack.n}
+              track={pickedTrack}
+              symbols={symbols}
+              canEdit={canEdit}
+              busy={busy}
+              error={toolError}
+              onChange={() => startEdit(pickedTrack)}
+              onMove={() => startMove(pickedTrack)}
+              onGone={() => markGone(pickedTrack.n, true)}
+              onRestore={() => markGone(pickedTrack.n, false)}
+              onClose={() => setPicked(null)}
+            />
+          ) : null}
+        </div>
         {/* A frame round the map says "this is a replay" from across the room. */}
         {mode === "replay" ? <div className={styles.replayFrame} aria-hidden="true" /> : null}
         <div className={styles.mapNotes}>
@@ -973,6 +1612,11 @@ export default function Receiver() {
           {lost ? (
             <div className={styles.lostBanner} role="alert">
               No answer from the coordinator since {fmtTime(lastOk)}. The map may be out of date.
+            </div>
+          ) : null}
+          {notice ? (
+            <div className={styles.mapNote} role="status">
+              {notice}
             </div>
           ) : null}
           {mode === "replay" ? (
@@ -1005,32 +1649,60 @@ export default function Receiver() {
             type="button"
             className={styles.playBtn}
             onClick={togglePlay}
-            disabled={!entries.length}
+            disabled={!stretches.length}
             aria-label={playing ? "Pause replay" : "Play replay"}
-            title={playing ? "Pause the replay" : "Replay from the start"}
+            title={playing ? "Pause the replay" : "Replay from the start of this mission"}
           >
             {playing ? "❚❚" : "▶"}
           </button>
-          <input
-            className={styles.slider}
-            type="range"
-            min={rangeStart}
-            max={rangeEnd}
-            step={1000}
-            value={sliderValue}
-            disabled={!entries.length}
-            onChange={(e) => {
-              setPlaying(false);
-              scrub(Number(e.target.value));
-            }}
-            aria-label="Replay time"
-            // No time before the first entry: the server's locale would not match the browser's.
-            aria-valuetext={entries.length ? fmtTime(sliderValue) : undefined}
-          />
+          {/* The day's missions in this area: a stretch for each, gray where none was running, and
+              a detent at every start and end. The replay never rests in the gray. */}
+          <div className={styles.timeline}>
+            <div className={styles.rail} aria-hidden="true">
+              {stretches.map((s) => (
+                <span
+                  key={s.code}
+                  className={styles.stretch}
+                  data-shown={s.code === session ? "" : undefined}
+                  style={{ left: `${barPct(s.start)}%`, width: `${barPct(s.end) - barPct(s.start)}%` }}
+                />
+              ))}
+              {detents(stretches).map((d) => (
+                <span key={d} className={styles.detent} style={{ left: `${barPct(d)}%` }} />
+              ))}
+            </div>
+            <input
+              className={styles.slider}
+              type="range"
+              min={rangeStart}
+              max={rangeEnd}
+              step="any"
+              value={sliderValue}
+              disabled={!stretches.length}
+              onChange={(e) => {
+                setPlaying(false);
+                // A start or end within a few pixels pulls the replay onto it.
+                const width = e.currentTarget.getBoundingClientRect().width - THUMB_PX;
+                const pull = width > 0 ? (barSpan * DETENT_PX) / width : 0;
+                scrub(Math.round(settle(stretches, Number(e.currentTarget.value), pull)));
+              }}
+              onKeyDown={(e) => {
+                const to = keyTarget(stretches, sliderValue, e.key);
+                if (to == null) return;
+                e.preventDefault();
+                setPlaying(false);
+                scrub(to);
+              }}
+              aria-label="Replay time"
+              title="The day's missions in this area; gray where none was running. Page Up and Page Down jump between starts and ends."
+              // No time before the first entry: the server's locale would not match the browser's.
+              aria-valuetext={stretches.length ? `${fmtTime(sliderValue)}${sliderMission ? `, ${sliderMission.name}` : ""}` : undefined}
+            />
+          </div>
           <div className={styles.time}>
             {mode === "replay" ? (
               <>
-                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(rangeEnd - replayT)} left</span>
+                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(Math.max(0, (shownStretch?.end ?? rangeEnd) - replayT))} left</span>
               </>
             ) : ended != null ? (
               <>Ended · {fmtTime(ended)}</>
@@ -1056,6 +1728,110 @@ export default function Receiver() {
       </main>
 
       <aside className={styles.side} data-tracks={view.tracks.length ? "" : undefined}>
+        {/* Radio reports the coordinator was not sure of: they wait here for the operator, and
+            nothing moves until the operator gives one to a unit [203]. */}
+        {view.held.length ? (
+          <section className={styles.section} aria-labelledby="held-h">
+            <h2 id="held-h" className={styles.h2}>
+              Unassigned <span className={styles.count}>{view.held.length}</span>
+            </h2>
+            <ol className={styles.held}>
+              {view.held.map((h) => {
+                const st = activeSettle?.held === h.id ? activeSettle : null;
+                const onRoster = (c: string) => view.roster.includes(c);
+                const give = [...new Set([...h.candidates, ...(h.read ? [h.read] : [])])].filter(onRoster);
+                const addable = h.read && !onRoster(h.read) ? h.read : null;
+                const others = view.roster.filter((c) => !give.includes(c));
+                const typed = newSign.held === h.id ? newSign.text : "";
+                const typedSign = callsignGiven(typed) ? callsignOf(typed) : null;
+                return (
+                  <li key={h.id} className={styles.heldItem}>
+                    <span className={styles.itemHead}>
+                      <span className={styles.itemTime}>{fmtTime(h.ts)}</span>
+                      <span className={styles.itemCall}>{h.heard ? `“${h.heard}”` : "Radio"}</span>
+                      <span className={styles.pill} data-status="ask">
+                        {HELD_TAG[h.reason]}
+                      </span>
+                    </span>
+                    <span className={styles.said}>{h.transcript ? `“${h.transcript}”` : "(no words heard)"}</span>
+                    <span className={styles.heldQuestion}>{h.question}</span>
+                    {h.audio && session ? (
+                      <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(session)}/audio/${encodeURIComponent(h.audio)}`}>
+                        The recording.
+                      </audio>
+                    ) : null}
+                    {!canEdit ? null : st ? (
+                      <div className={styles.confirm} role="group" aria-label="Confirm">
+                        <span className={styles.confirmText}>{settleText(st, h)}</span>
+                        <button type="button" className={st.action === "dismiss" ? styles.dangerBtn : styles.primaryBtn} onClick={() => sendHeld(st)} disabled={busy}>
+                          {st.action === "dismiss" ? "Dismiss" : st.action === "add" ? "Add and give" : "Give"}
+                        </button>
+                        <button type="button" className={styles.linkBtn} onClick={() => setSettling(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.heldActions}>
+                        {give.map((c) => (
+                          <button key={c} type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "assign", callsign: c })}>
+                            Give to {c}
+                          </button>
+                        ))}
+                        {addable ? (
+                          <button type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "add", callsign: addable })}>
+                            Add {addable}
+                          </button>
+                        ) : null}
+                        {others.length ? (
+                          <select
+                            className={styles.giveSelect}
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) setSettling({ held: h.id, action: "assign", callsign: e.target.value });
+                            }}
+                            aria-label="Give this report to a unit"
+                          >
+                            <option value="">{give.length ? "Another unit…" : "Give to…"}</option>
+                            {others.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        <form
+                          className={styles.giveForm}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (typedSign) setSettling({ held: h.id, action: onRoster(typedSign) ? "assign" : "add", callsign: typedSign });
+                          }}
+                        >
+                          <input
+                            className={styles.giveInput}
+                            value={typed}
+                            onChange={(e) => setNewSign({ held: h.id, text: e.target.value })}
+                            placeholder="New call sign"
+                            maxLength={24}
+                            autoCapitalize="characters"
+                            spellCheck={false}
+                            aria-label="A call sign to add to the roster"
+                          />
+                          <button type="submit" className={styles.linkBtn} disabled={!typedSign}>
+                            Add
+                          </button>
+                        </form>
+                        <button type="button" className={styles.linkBtn} onClick={() => setSettling({ held: h.id, action: "dismiss", callsign: null })}>
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ) : null}
+
         <section className={styles.section} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
@@ -1120,12 +1896,20 @@ export default function Receiver() {
               Tracks <span className={styles.count}>{view.tracks.length}</span>
             </h2>
             <ul className={`${styles.units} ${styles.tracks}`}>
-              {view.tracks.map((t) => {
+              {/* Tracks marked gone go last: they are off the map and kept for the record. */}
+              {[...view.tracks].sort((a, b) => Number(a.gone != null) - Number(b.gone != null) || a.n - b.n).map((t) => {
                 const old = isOld(t);
                 const st = trackStatus(t, old);
                 return (
                   <li key={t.n}>
-                    <button type="button" className={styles.unit} data-tone={st.tone} onClick={() => flyToTrack(t)} disabled={!t.position} title={t.position ? "Show on the map" : undefined}>
+                    <button
+                      type="button"
+                      className={styles.unit}
+                      data-tone={st.tone}
+                      data-selected={picked === t.n || undefined}
+                      onClick={() => flyToTrack(t)}
+                      title={t.position && t.gone == null ? "Show on the map" : "Show its card"}
+                    >
                       {/* The same standard symbol as on the map. Drawn by milsymbol from a code this page builds. */}
                       <span className={styles.trackSym} aria-hidden="true" dangerouslySetInnerHTML={symbols ? { __html: trackSvg(symbols, t, 18) } : undefined} />
                       <span className={styles.unitMain}>
@@ -1134,7 +1918,11 @@ export default function Receiver() {
                           <span className={styles.pill} data-status={t.affiliation}>
                             {AFFILIATION_LABEL[t.affiliation]}
                           </span>
-                          {t.pendingReport ? (
+                          {t.gone != null ? (
+                            <span className={styles.pill} data-status="silent">
+                              Gone
+                            </span>
+                          ) : t.pendingReport ? (
                             <span className={styles.pill} data-status="ask">
                               Awaiting answer
                             </span>
@@ -1168,6 +1956,30 @@ export default function Receiver() {
           {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
             {view.feed.map((f) => {
+              if (f.kind === "plot" || f.kind === "note") {
+                // Something the command post did to a track or a held report: one line, like a join.
+                return (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      className={styles.joinItem}
+                      data-plot=""
+                      data-selected={selected === f.id || undefined}
+                      onClick={() => {
+                        flyToItem(f);
+                        if (f.track != null) setPicked(f.track);
+                      }}
+                    >
+                      <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
+                      <span className={styles.itemCall}>
+                        <span className={styles.itemDot} style={{ background: CP_COLOUR }} aria-hidden="true" />
+                        {f.callsign}
+                      </span>
+                      <span className={styles.joinText}>{f.outcome}</span>
+                    </button>
+                  </li>
+                );
+              }
               if (f.kind === "join") {
                 return (
                   <li key={f.id}>
@@ -1190,7 +2002,7 @@ export default function Receiver() {
                 : f.expired
                   ? { tone: "none", tag: "Not answered" }
                   : f.status === "ambiguous"
-                    ? { tone: "answered", tag: "Answered" }
+                    ? { tone: "answered", tag: f.answer?.by ? `${f.answer.by} answered` : "Answered" }
                     : f.track != null && f.status === "resolved"
                       ? // A report about a track: it placed or changed the track, not the speaker.
                         { tone: "track", tag: `Track ${f.track}` }
@@ -1214,6 +2026,7 @@ export default function Receiver() {
                     </span>
                     <span className={styles.said}>{f.transcript ? `“${f.transcript}”` : "(no words heard)"}</span>
                     <span className={styles.outcome}>{f.outcome}</span>
+                    {f.sender ? <span className={styles.heardLine}>{describeSender(f.sender)}</span> : null}
                     {open && f.candidates.length ? (
                       <ol className={styles.choices}>
                         {f.candidates.map((c, i) => (
@@ -1230,6 +2043,44 @@ export default function Receiver() {
                       </ol>
                     ) : null}
                   </button>
+                  {/* The command post can answer for the unit, as when it has only a radio. Asked once more first. */}
+                  {open && canEdit && f.candidates.length ? (
+                    <div className={styles.answerBar}>
+                      {activeAnswer?.reportId === f.id ? (
+                        <div className={styles.confirm} role="group" aria-label="Confirm the answer">
+                          <span className={styles.confirmText}>
+                            {activeAnswer.choice ? `Choose ${activeAnswer.name} for ${f.callsign}?` : `None of these, for ${f.callsign}? The question closes and nothing moves.`}
+                          </span>
+                          <button type="button" className={styles.primaryBtn} onClick={() => sendAnswer(activeAnswer)} disabled={busy}>
+                            {activeAnswer.choice ? "Choose" : "None of these"}
+                          </button>
+                          <button type="button" className={styles.linkBtn} onClick={() => setAnswering(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={styles.answerLabel}>Answer for {f.callsign}:</span>
+                          {f.candidates.map((c, i) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className={styles.answerBtn}
+                              style={{ borderColor: f.colour }}
+                              onClick={() => setAnswering({ reportId: f.id, choice: c.id, name: c.name, callsign: f.callsign })}
+                              aria-label={`Choose ${i + 1}, ${c.name}, for ${f.callsign}`}
+                              title={c.name}
+                            >
+                              {i + 1}
+                            </button>
+                          ))}
+                          <button type="button" className={styles.linkBtn} onClick={() => setAnswering({ reportId: f.id, choice: null, name: "", callsign: f.callsign })}>
+                            None of these
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                 </li>
               );
             })}

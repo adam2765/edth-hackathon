@@ -29,7 +29,7 @@ Commits the working tree, merges `main` in, pushes the branch and says what it d
 
 1. Run `git merge --no-edit origin/main`. Merge, never rebase.
 2. On a conflict, resolve hunk by hunk and keep both sides' intent. Never use `-X ours`, `-X theirs`, or `git checkout --ours` or `--theirs` on a whole file. A hunk whose intent is unclear: stop and show both sides.
-3. **`DECISIONS.md`:** when both sides added lines at the end, keep both, `main`'s first, and renumber this branch's lines to follow. Fix the references to a renumbered line (`[172]`, "decision 172") in the files this branch changed.
+3. **`DECISIONS.md`:** when both sides added lines at the end, keep both, `main`'s first, and renumber this branch's lines to follow. Fix the references to a renumbered line (`[172]`, "decision 172", and a **Changed by 172.** or **Replaced by 172.** at the start of an older line) in the files this branch changed. When both sides marked the same older line, join the markers in number order: **Changed by 182 and 183.**
 4. Run the checks: `npm test && npx tsc --noEmit && npm run lint`, and `npx tsc --noEmit` in `transmitter/` when `lib/geo/types.ts` changed. Fix the merge, not the checks. Still failing: stop and report.
 5. Conclude a conflicted merge with `git commit --no-edit`.
 

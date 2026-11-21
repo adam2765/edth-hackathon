@@ -1,4 +1,4 @@
-// Everything you set once and then leave alone: who you are, which coordinator, and sound. Kept off the main screen so that screen is only for reporting.
+// Everything you set once and then leave alone: language, coordinator, and developer tools. Kept off the main screen so that screen is only for reporting.
 import { useState } from "react";
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -14,8 +14,6 @@ export interface SetupProps {
   /** True while a report is being recorded or sent: choices that would change it are locked. */
   locked: boolean;
 
-  callsign: string;
-  onCallsign: (v: string) => void;
   languages: { id: Lang; label: string }[];
   language: Lang;
   onLanguage: (l: Lang) => void;
@@ -29,8 +27,6 @@ export interface SetupProps {
   developer: boolean;
   onDeveloper: (enabled: boolean) => void;
 
-  speakReplies: boolean;
-  onSpeakReplies: (v: boolean) => void;
   playClips: boolean;
   onPlayClips: (v: boolean) => void;
   realTime: boolean;
@@ -65,27 +61,9 @@ export function SetupSheet(p: SetupProps) {
 
           <ScrollView contentContainerStyle={styles.body} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             <Group
-              title="This unit"
-              footer="The mission sets the area. Choose the language you speak."
+              title="Reports"
+              footer="The area decides which place names the coordinator looks reports up in; in a mission, the mission’s area counts. The language is the one you speak: speech-to-text listens for it, and the operator’s questions are written in it. Scenarios use each report’s own language."
             >
-              <Row
-                label="Call sign"
-                right={
-                  <TextInput
-                    style={styles.input}
-                    value={p.callsign}
-                    onChangeText={(t) => p.onCallsign(t.toUpperCase())}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    maxLength={16}
-                    placeholder="ALPHA 1"
-                    placeholderTextColor={color.textDim}
-                    selectionColor={color.accent}
-                    accessibilityLabel="Call sign"
-                  />
-                }
-              />
               <View style={styles.padded}>
                 <Segmented label="Language" options={p.languages} value={p.language} onChange={p.onLanguage} disabled={p.locked} />
               </View>
@@ -97,10 +75,6 @@ export function SetupSheet(p: SetupProps) {
                 {p.hosts.map((host) => <Row key={host.id} label={host.name} note={host.ready ? host.url : "Starting…"} selected={p.serverUrl === host.url} onPress={() => { p.onConnectHost(host); setHostsOpen(false); }} disabled={p.locked || !host.ready} />)}
                 {!p.hosts.length ? <Text style={[type.footnote, styles.padded]}>Looking for coordinators…</Text> : null}
               </View> : null}
-            </Group>
-
-            <Group title="Sound">
-              <SwitchRow label="Speak questions" note="Reads the coordinator’s question aloud" value={p.speakReplies} onValueChange={p.onSpeakReplies} />
             </Group>
 
             <Group title="Development">

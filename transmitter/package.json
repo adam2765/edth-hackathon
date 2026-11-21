@@ -34,7 +34,8 @@
     "postinstall": "npm run setup",
     "prestart": "npm run setup",
     "preandroid": "npm run setup",
-    "preios": "npm run setup"
+    "preios": "npm run setup",
+    "phones": "node scripts/phones.mjs"
   },
   "private": true
 }

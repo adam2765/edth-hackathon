@@ -12,19 +12,37 @@
  *      - they place the same thing: the first is used
  *      - they name different places: the app asks which one is the speaker's
  *      - one of them cannot be offered as a choice: the app asks the speaker to say it again
- * The app never picks between two voices by itself. It cannot tell whose voice is whose.
+ *      - with a last position: a voice that puts the speaker somewhere they could not have reached
+ *        since then is dropped; when exactly one voice is left, it is used without a question
+ * The app never picks between two places that are both reachable. It cannot tell whose voice is whose.
  *
  * Pure apart from the two functions it is given: the extractor and the resolver.
  */
 import { canonTokens, categoryOfToken } from "./gazetteer";
+import { distanceM } from "./geo";
 import { tokens } from "./normalize";
 import { choiceLabels } from "./resolver";
-import type { Candidate, GazetteerFeature, Intent, Resolution } from "./types";
+import type { Candidate, GazetteerFeature, Intent, LastPosition, Resolution } from "./types";
 
 type Lang = "en" | "fr" | "uk";
 
 /** More turns than this that look like reports, and the app asks again without reading each one. */
 export const MAX_VOICES_READ = 4;
+
+/** Fastest a speaker can plausibly move between two reports, m/s (54 km/h: a vehicle in town). Set high on purpose: a wrong drop hides the real speaker. */
+export const MAX_SPEED_MS = 15;
+/** Slack for the size of a place and the error of a position, metres. */
+const REACH_SLACK_M = 100;
+
+/**
+ * How far a speaker could have gone since their last position, metres: 15 m/s for the time since
+ * it, plus the position's uncertainty and 100 m [188]. A radio report that would move a unit
+ * farther waits for the operator [204].
+ */
+export function reachM(last: LastPosition, now: number): number {
+  const elapsed_s = Math.max(0, now - last.ts) / 1000;
+  return MAX_SPEED_MS * elapsed_s + Math.max(last.uncertainty_m ?? 0, last.radius_m ?? 0) + REACH_SLACK_M;
+}
 
 /** ">>" anywhere, or a dash at the very start or straight after the end of a sentence. */
 const VOICE_MARK = /\s*>>+\s*|(?:^|(?<=[.!?…»”"]))\s*[-–—]\s+/u;
@@ -139,7 +157,13 @@ function sayAgain(intent: Intent, rule: string, detail: string): Resolution {
  * One answer from the readings of several voice turns. Null when none of them says where anyone
  * is: the caller then keeps its reading of the whole transcript.
  */
-export function combineVoices(readings: VoiceReading[], heard: number, maxChoices = 3): { intent: Intent; resolution: Resolution } | null {
+export function combineVoices(
+  readings: VoiceReading[],
+  heard: number,
+  maxChoices = 3,
+  last?: LastPosition | null,
+  now?: number,
+): { intent: Intent; resolution: Resolution } | null {
   const said = readings.filter(counts);
   if (!said.length) return null;
   const first = said[0];
@@ -151,6 +175,28 @@ export function combineVoices(readings: VoiceReading[], heard: number, maxChoice
   const heardAs = said.map((r) => `voice ${r.voice} ${quote(r.text)} → ${r.resolution.status} (${r.resolution.evidence.rule})`).join("; ");
   // A report about a track and a report about the speaker cannot be offered as two places to tap.
   if (said.some((r) => r.resolution.track)) return { intent: first.intent, resolution: sayAgain(first.intent, "voices_differ", `${heard} voices heard, one about a track; ${heardAs}`) };
+
+  // Context: drop the voices that put the speaker somewhere they could not have reached since their
+  // last position. A voice that cannot be checked (a movement, an open question, no place) is kept.
+  if (last && now != null) {
+    const elapsed_s = Math.max(0, now - last.ts) / 1000;
+    const reach_m = reachM(last, now);
+    const far: string[] = [];
+    const reachable = said.filter((r) => {
+      const res = r.resolution;
+      const c = res.candidates.find((x) => x.id === res.evidence.feature_id);
+      if (r.intent.kind !== "position" || res.status !== "resolved" || !c) return true;
+      const d = distanceM(last, c);
+      if (d <= reach_m) return true;
+      far.push(`voice ${r.voice} ${c.name} ${Math.round(d)} m away`);
+      return false;
+    });
+    if (reachable.length === 1 && far.length) {
+      const r = reachable[0];
+      const why = `${heard} voices heard; ${far.join(", ")}, more than ${Math.round(reach_m)} m reachable in ${Math.round(elapsed_s)} s; read from voice ${r.voice}`;
+      return { intent: r.intent, resolution: { ...r.resolution, evidence: { ...r.resolution.evidence, rule: "voices_context", detail: `${r.resolution.evidence.detail}; ${why}` } } };
+    }
+  }
 
   const choices: Candidate[] = [];
   const add = (c: Candidate | undefined) => {
@@ -181,6 +227,9 @@ export interface ReadVoicesDeps {
   gazetteer: GazetteerFeature[];
   /** More words that make a turn look like a report, for example the words for a track. */
   alsoReport?: (turn: string) => boolean;
+  /** The speaker's last position and the time now: a voice placing them out of reach is dropped. */
+  last?: LastPosition | null;
+  now?: number;
 }
 
 export interface VoicesRead {
@@ -238,6 +287,6 @@ export async function readVoices(transcript: string, deps: ReadVoicesDeps): Prom
 
   const intents = await timed(() => Promise.all(likely.map((t) => deps.extract(t.text))));
   const readings = likely.map((t, i) => ({ ...t, intent: intents[i], resolution: resolve(intents[i], t.text) }));
-  const combined = combineVoices(readings, turns.length);
+  const combined = combineVoices(readings, turns.length, 3, deps.last, deps.now);
   return combined ? done(combined.intent, combined.resolution, turns.length) : asBefore();
 }

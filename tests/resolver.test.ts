@@ -80,6 +80,51 @@ describe("resolver", () => {
     expect(r.evidence.feature_id).toBe(CHATEAU_METRO.id);
   });
 
+  // Mission vincennes-21: "friendly at Vincennes Metro" put the track at the RER station, the only
+  // station called exactly "Vincennes"; the metro with that name in it is Château de Vincennes [181].
+  describe("a metro word with the whole name of a train station", () => {
+    const RER = gaz.find((f) => f.id === "node/1730998187")!;
+    const run = (transcript: string, from = MAIRIE_VINCENNES, language: Intent["language"] = "en") =>
+      resolve({ intent: intent({ landmark_name: "Vincennes", landmark_category: "metro_station", language }), transcript, lastPosition: at(from), now: NOW, gazetteer: gaz });
+
+    it("is the RER station Vincennes in this gazetteer", () => {
+      expect(RER).toMatchObject({ name: "Vincennes", category: "metro_station", subtype: "rail" });
+    });
+
+    it("asks between the train station and the metro station with the name", () => {
+      const r = run("friendly at Vincennes Metro");
+      expect(r.status).toBe("ambiguous");
+      expect(r.evidence.rule).toBe("named_metro_or_train");
+      expect(r.candidates.map((c) => c.id).sort()).toEqual([CHATEAU_METRO.id, RER.id].sort());
+      expect(r.question).toMatch(/^Which station: .*Vincennes.*Vincennes\?$/);
+      expect(r.pin).toBeUndefined();
+    });
+
+    it("asks even when the speaker stands at the train station", () => {
+      expect(run("I'm at Vincennes metro", RER).status).toBe("ambiguous");
+    });
+
+    it("asks in French", () => {
+      const r = run("Je suis au métro Vincennes", MAIRIE_VINCENNES, "fr");
+      expect(r.status).toBe("ambiguous");
+      expect(r.question).toMatch(/^Quelle station : /);
+    });
+
+    it("still places 'station' and 'RER' at the train station, as before [12]", () => {
+      for (const t of ["I'm at Vincennes station", "I'm at the Vincennes RER"]) {
+        const r = run(t);
+        expect(r.status).toBe("resolved");
+        expect(r.evidence.feature_id).toBe(RER.id);
+      }
+    });
+
+    it("leaves a metro station called by its whole name alone", () => {
+      const r = resolve({ intent: intent({ landmark_name: "Bérault", landmark_category: "metro_station" }), transcript: "I'm at Bérault metro", lastPosition: at(MAIRIE_VINCENNES), now: NOW, gazetteer: gaz });
+      expect(r.status).toBe("resolved");
+      expect(r.evidence.feature_id).toBe(BERAULT.id);
+    });
+  });
+
   it("an unknown name with no category is unresolved", () => {
     const r = resolve({ intent: intent({ landmark_name: "Gare du Nord" }), transcript: "I'm at Gare du Nord", now: NOW, gazetteer: gaz });
     expect(r.status).toBe("unresolved");
@@ -536,6 +581,35 @@ describe("cemeteries", () => {
   it("with no last position, asks which cemetery", () => {
     const r = resolve({ intent: intent({ landmark_text: "the cemetery", landmark_category: "cemetery" }), transcript: "I'm at the cemetery", now: NOW, gazetteer: gaz });
     expect(r.status).not.toBe("resolved");
+  });
+});
+
+describe("a type said outright against a lone name of another type [185]", () => {
+  const izium = loadGazetteer("izium");
+  const IZIUM_STATION = izium.find((f) => f.name === "Ізюм" && f.category === "metro_station")!;
+  const METEO = izium.find((f) => f.name === "Ізюмська метеорологічна станція")!;
+
+  it("asks among the stations when 'Vincent station' finds only a school", () => {
+    const r = resolve({ intent: intent({ landmark_text: "Vincent station", landmark_name: "Vincent", landmark_category: "metro_station" }), transcript: "I'm at Vincent station.", now: NOW, gazetteer: gaz });
+    expect(r.status).toBe("ambiguous");
+    expect(r.evidence.rule).toBe("named_type_mismatch");
+    expect(r.candidates.slice(0, -1).every((c) => c.category === "metro_station")).toBe(true);
+    expect(r.candidates.at(-1)!.category).toBe("school");
+  });
+
+  it("does not pin the weather station for a station heard through rain", () => {
+    // "I'm at Izium station" under rain as loud as the voice came back in Ukrainian (21 Nov).
+    const r = resolve({ intent: intent({ landmark_text: "Ізюмській станції", landmark_name: "Ізюмській станції", landmark_name_lemma: "Ізюмська станція", landmark_category: "metro_station", language: "uk" }), transcript: "А на Ізюмській станції.", now: NOW, gazetteer: izium });
+    expect(r.status).toBe("ambiguous");
+    expect(r.candidates.map((c) => c.id)).toEqual([IZIUM_STATION.id, METEO.id]);
+  });
+
+  it("still pins a name of the type said, and a road whose name holds another type's word", () => {
+    const station = resolve({ intent: intent({ landmark_text: "Bérault metro", landmark_name: "Bérault", landmark_category: "metro_station" }), transcript: "I'm at Bérault metro.", now: NOW, gazetteer: gaz });
+    expect(station.status).toBe("resolved");
+    expect(station.evidence.feature_id).toBe(BERAULT.id);
+    const road = resolve({ intent: intent({ landmark_text: "Route du Donjon", landmark_name: "Route du Donjon", landmark_category: "street" }), transcript: "I'm on Route du Donjon.", now: NOW, gazetteer: gaz });
+    expect(road.status).toBe("resolved");
   });
 });
 

@@ -4,10 +4,11 @@
  *           where the speaker changes, the transcript gets a ">>" mark, the same mark
  *           lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
  *   local   Whisper in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
- *           (decision 182). Audio never leaves the computer. It does not tell speakers apart.
+ *           (decisions 195, 215). Audio never leaves the computer. It does not tell speakers apart.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  */
 import { providerMode, whisperUrl } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface TranscribeResult {
   text: string;
@@ -100,12 +101,12 @@ class MistralTranscriber implements Transcriber {
     }
     // Repeated field, one entry per term (checked against Mistral docs and live API, 20 Nov 2026).
     for (const t of biasTerms.slice(0, 100)) form.append("context_bias", t);
-    const res = await fetch("https://api.mistral.ai/v1/audio/transcriptions", {
+    const res = await fetchRetrying("https://api.mistral.ai/v1/audio/transcriptions", () => ({
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}` },
       body: form,
       signal: AbortSignal.timeout(15_000),
-    });
+    }));
     if (!res.ok) {
       const msg = `Mistral STT ${res.status}: ${(await res.text()).slice(0, 200)}`;
       throw diarize && (res.status === 400 || res.status === 422) ? new DiarizeRefused(msg) : new Error(msg);
@@ -141,8 +142,8 @@ export function withoutSoundMarks(text: string): string {
  * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
  * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
  * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
- * scenario clips and twice put a prompt word in the transcript (upstream PR #23). Light mode
- * uses base with this request format; its recognition accuracy is not remeasured.
+ * scenario clips and twice put a prompt word in the transcript (docs/stt-comparison.md).
+ * Light mode uses base with the same request format; its accuracy is not remeasured.
  */
 class WhisperServerTranscriber implements Transcriber {
   name = "whisper-server";

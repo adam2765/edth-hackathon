@@ -1,14 +1,17 @@
 /**
- * Rebuilds the receiver's picture from the log: the mission, where each call sign is, its trail,
- * any open question, and the feed. Pure, so the live view and a replay are the same function, and a
- * replay is the log read up to a moment. The coordinator uses it too, for each unit's last
- * position. Safe to import on the client.
+ * Rebuilds the command post's picture from the log: the mission, where each call sign is, its
+ * trail, any open question, the tracks, and the feed. Pure, so the live view and a replay are the
+ * same function, and a replay is the log read up to a moment. The coordinator uses it too, for
+ * each unit's last position. Safe to import on the client.
  */
 import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
 import { describeTrack } from "../geo/trackKinds";
-import type { JoinEntry, LogEntry, ReportEntry, StartPoint, TrackSighting, UnitPosition } from "./types";
+import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, Sender, StartPoint, TrackSighting, UnitPosition } from "./types";
+
+/** The command post's colour in the feed: a slate grey no call sign is given. */
+export const CP_COLOUR = "#334155";
 
 /** One colour per call sign, in the order they first report. Distinct on the light map, each with a label as well. */
 export const UNIT_COLOURS = ["#ff6b2c", "#2c7fff", "#16a34a", "#b04ad8", "#e0367a", "#0d9488", "#a16207", "#475569"];
@@ -40,7 +43,7 @@ export interface UnitState {
   positionTs: number | null;
   /** Earlier positions, oldest first. */
   trail: { lat: number; lon: number; ts: number }[];
-  /** Last join, report or answer from this call sign. */
+  /** Last join, report or answer from this call sign; 0 for a call sign on the roster not heard yet. */
   lastHeard: number;
   pending: Pending | null;
   /** When it joined the mission; null for a call sign that reported without joining (no mission). */
@@ -83,11 +86,22 @@ export interface TrackState {
   openedTs: number;
   /** The report whose question about where the track is still waits for an answer. */
   pendingReport: string | null;
+  /** The latest place came from the command post, not from a unit's report. */
+  plotted: boolean;
+  /** The command post's latest change to whose or what it is, when there was one. */
+  changed: { by: string; ts: number } | null;
+  /** Where the command post's information came from, as typed. */
+  note: string | null;
+  /** When the command post marked it gone; null while it is on the map. A new report brings it back. */
+  gone: number | null;
 }
 
 export interface FeedItem {
-  /** A report, or a call sign joining. */
-  kind: "report" | "join";
+  /**
+   * A report, a call sign joining, something the command post did to a track, or a note of what it
+   * did with a held radio report (added a call sign, dismissed the report).
+   */
+  kind: "report" | "join" | "plot" | "note";
   /** The report's or the join's id. */
   id: string;
   ts: number;
@@ -103,9 +117,12 @@ export interface FeedItem {
   track: number | null;
   /** The choices offered, while a question is open or after it was answered. */
   candidates: Candidate[];
-  answer: { ts: number; choice: string | null; name: string | null } | null;
+  /** `by` is set when the command post chose for the unit. */
+  answer: { ts: number; choice: string | null; name: string | null; by: string | null } | null;
   /** The mission ended while the question was open, so it can no longer be answered. */
   expired: boolean;
+  /** For a radio report: how its sender was found [202]. */
+  sender?: Sender;
 }
 
 export interface MissionState {
@@ -120,7 +137,12 @@ export interface MissionState {
 export interface SessionState {
   /** Null for a session from before missions. */
   mission: MissionState | null;
+  /** Roster call signs first, in roster order, then any other that joined or reported. */
   units: UnitState[];
+  /** The call signs a radio report can go to [201]. */
+  roster: string[];
+  /** Radio reports waiting for the operator, oldest first [203]. */
+  held: HeldEntry[];
   /** By number. */
   tracks: TrackState[];
   /** Newest first. */
@@ -132,13 +154,32 @@ export interface SessionState {
   area: AreaId | null;
 }
 
-/** Colours by call sign, from the whole log, so a call sign keeps its colour through a replay. */
+/** Colours by call sign, from the whole log, so a call sign keeps its colour through a replay. Roster order first. */
 export function colourMap(entries: LogEntry[]): Map<string, string> {
   const m = new Map<string, string>();
+  const give = (c: string) => {
+    if (!m.has(c)) m.set(c, UNIT_COLOURS[m.size % UNIT_COLOURS.length]);
+  };
   for (const e of entries) {
-    if ((e.kind === "report" || e.kind === "join" || e.kind === "answer") && !m.has(e.callsign)) m.set(e.callsign, UNIT_COLOURS[m.size % UNIT_COLOURS.length]);
+    if (e.kind === "mission") (e.roster ?? []).forEach(give);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster") give(e.callsign);
   }
   return m;
+}
+
+/** How a radio report's sender was found, in words for the feed [202]. */
+export function describeSender(s: Sender): string {
+  const words = s.heard ? `“${s.heard}”` : "no call sign";
+  switch (s.how) {
+    case "exact":
+      return `Call sign heard: ${words}.`;
+    case "near":
+      return `Call sign heard: ${words}, close to this one only.`;
+    case "reply":
+      return "No call sign: taken as the reply to this unit's open question.";
+    case "operator":
+      return `Call sign heard: ${words}. Given to this unit by the command post.`;
+  }
 }
 
 export function describePosition(p: UnitPosition): string {
@@ -155,6 +196,25 @@ function joinOutcome(e: JoinEntry, again: boolean): string {
 /** "±80 m", with "estimated" in front for a place worked out from where the observer was. */
 function trackWhere(p: UnitPosition): string {
   return `${p.estimated ? "estimated " : "at "}${p.label} (±${p.radius_m} m)`;
+}
+
+/** What the command post did to a track, in words. */
+function plotOutcome(e: PlotEntry, t: TrackState): string {
+  const p = e.position;
+  const at = p ? `${p.label} (±${p.radius_m} m)` : "";
+  const note = e.note ? ` Source: ${e.note}.` : "";
+  switch (e.action) {
+    case "place":
+      return `Placed Track ${t.n}: ${describeTrack(t)}, ${at}.${note}`;
+    case "edit":
+      return `Changed Track ${t.n}: now ${describeTrack(t)}.${note}`;
+    case "move":
+      return `Moved Track ${t.n}: ${at}.${note}`;
+    case "gone":
+      return `Track ${t.n} marked gone. It is off the map.`;
+    case "restore":
+      return `Track ${t.n} back on the map.`;
+  }
 }
 
 /** What a report did to a track, in words, once the track has taken it in. */
@@ -204,6 +264,11 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   let last: number | null = null;
   let area: AreaId | null = null;
   let mission: MissionState | null = null;
+  const roster: string[] = [];
+  const held = new Map<string, HeldEntry>();
+  const enlist = (c: string) => {
+    if (!roster.includes(c)) roster.push(c);
+  };
 
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
@@ -251,6 +316,10 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         openedBy: e.callsign,
         openedTs: e.ts,
         pendingReport: null,
+        plotted: false,
+        changed: null,
+        note: null,
+        gone: null,
       };
       tracks.set(s.n, t);
     } else {
@@ -260,8 +329,11 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       if (s.text) t.text = s.text;
       t.seenBy = e.callsign;
       t.seenTs = e.ts;
+      // Reported again: it is there after all.
+      t.gone = null;
     }
     if (s.position) {
+      t.plotted = false;
       placeTrack(t, s.position, e.ts);
       // The way it was moving belongs to the sighting: an older one says nothing about now.
       t.heading = s.heading;
@@ -274,6 +346,61 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     return { track: t, opened };
   };
 
+  /** Takes in what the command post did to a track by hand. Null when the track is not known. */
+  const plotTrack = (e: PlotEntry): TrackState | null => {
+    let t = tracks.get(e.n);
+    if (e.action === "place" && !t) {
+      if (!e.position) return null;
+      t = {
+        n: e.n,
+        affiliation: e.affiliation ?? "unknown",
+        kind: e.track_kind ?? "other",
+        count: e.count ?? null,
+        text: null,
+        heading: null,
+        area: mission?.area ?? area ?? "vincennes",
+        position: null,
+        positionTs: null,
+        trail: [],
+        seenBy: e.by,
+        seenTs: e.ts,
+        // Nobody at the command post saw it from a point on the map: no line of sight.
+        from: null,
+        openedBy: e.by,
+        openedTs: e.ts,
+        pendingReport: null,
+        plotted: true,
+        changed: null,
+        note: e.note ?? null,
+        gone: null,
+      };
+      tracks.set(e.n, t);
+      placeTrack(t, e.position, e.ts);
+      return t;
+    }
+    if (!t) return null;
+    if (e.note) t.note = e.note;
+    if (e.action === "edit" || e.action === "place") {
+      if (e.affiliation) t.affiliation = e.affiliation;
+      if (e.track_kind) t.kind = e.track_kind;
+      if (e.count !== undefined) t.count = e.count;
+      t.changed = { by: e.by, ts: e.ts };
+    }
+    if ((e.action === "move" || e.action === "place") && e.position) {
+      placeTrack(t, e.position, e.ts);
+      t.seenBy = e.by;
+      t.seenTs = e.ts;
+      t.from = null;
+      // The way it was moving belonged to the last sighting.
+      t.heading = null;
+      t.plotted = true;
+      t.gone = null;
+    }
+    if (e.action === "gone") t.gone = e.ts;
+    if (e.action === "restore") t.gone = null;
+    return t;
+  };
+
   for (const e of entries) {
     if (e.ts > upTo) continue;
     first ??= e.ts;
@@ -282,6 +409,42 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     if (e.kind === "mission") {
       mission = { name: e.name, area: e.area, start: e.start, opened: e.ts, ended: null };
       area = e.area;
+      // The roster's units are listed from the start, not heard yet [201].
+      for (const c of e.roster ?? []) {
+        enlist(c);
+        unitFor(c, e.area);
+      }
+      continue;
+    }
+
+    if (e.kind === "held") {
+      held.set(e.id, e);
+      continue;
+    }
+
+    if (e.kind === "roster" || e.kind === "dismiss") {
+      const was = e.held ? held.get(e.held) : undefined;
+      if (e.kind === "dismiss") held.delete(e.held);
+      else {
+        enlist(e.callsign);
+        unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      }
+      feed.set(e.id, {
+        kind: "note",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: mission?.area ?? area ?? "vincennes",
+        transcript: was?.transcript ?? "",
+        status: "resolved",
+        outcome: e.kind === "roster" ? `Added ${e.callsign} to the roster.` : was?.transcript ? `Dismissed a radio report: “${was.transcript}”` : "Dismissed a radio report.",
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: null,
+      });
       continue;
     }
 
@@ -301,6 +464,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
 
     if (e.kind === "join") {
+      enlist(e.callsign);
       const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
       const again = u.joined != null;
       u.joined ??= e.ts;
@@ -332,6 +496,29 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       continue;
     }
 
+    if (e.kind === "plot") {
+      const t = plotTrack(e);
+      if (t) {
+        feed.set(e.id, {
+          kind: "plot",
+          id: e.id,
+          ts: e.ts,
+          callsign: e.by,
+          colour: CP_COLOUR,
+          area: t.area,
+          transcript: "",
+          status: "resolved",
+          outcome: plotOutcome(e, t),
+          position: e.position ?? null,
+          candidates: [],
+          answer: null,
+          expired: false,
+          track: t.n,
+        });
+      }
+      continue;
+    }
+
     if (e.kind === "report") {
       area = e.area;
       const u = unitFor(e.callsign, e.area);
@@ -340,6 +527,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       const r = e.resolution;
       // A report about a track: the unit was heard, and does not move. It owes the answer to any question.
       const seen = e.track ? seeTrack(e, e.track) : null;
+      // A held radio report the operator gave to this unit leaves the tray [203].
+      if (e.sender?.held) held.delete(e.sender.held);
       if (e.position && !seen) {
         move(u, e.position, e.ts);
         u.street = streetAfter(u.street, r.candidates.find((c) => c.id === r.evidence.feature_id));
@@ -364,6 +553,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         answer: null,
         expired: false,
         track: seen ? seen.track.n : null,
+        ...(e.sender ? { sender: e.sender } : {}),
       });
       continue;
     }
@@ -371,8 +561,11 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     // An answer to a question.
     const item = feed.get(e.report_id);
     const u = unitFor(e.callsign, item?.area ?? area ?? "vincennes");
-    u.lastHeard = Math.max(u.lastHeard, e.ts);
+    // An answer the command post chose says nothing about whether the unit is still there.
+    if (!e.by) u.lastHeard = Math.max(u.lastHeard, e.ts);
     if (u.pending?.reportId === e.report_id) u.pending = null;
+    const chose = e.by ? `${e.by} chose` : "Chose";
+    const none = e.by ? `${e.by}: none of the choices was right.` : "None of the choices was right.";
     const chosen = e.choice ? (item?.candidates.find((c) => c.id === e.choice) ?? null) : null;
     // A newer fix since the question beats a late answer to it.
     const reportTs = item?.ts ?? e.ts;
@@ -383,9 +576,9 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       if (t?.pendingReport === e.report_id) t.pendingReport = null;
       if (t && p && (t.positionTs == null || t.positionTs <= reportTs)) placeTrack(t, p, e.ts);
       if (item) {
-        item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null };
+        item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null, by: e.by ?? null };
         item.position = p;
-        item.outcome = e.choice ? `Chose ${chosen?.name ?? e.choice}. ${p ? `Track ${e.track.n} ${trackWhere(p)}` : "Nothing to place"}` : `None of the choices was right. Track ${e.track.n} is not placed.`;
+        item.outcome = e.choice ? `${chose} ${chosen?.name ?? e.choice}. ${p ? `Track ${e.track.n} ${trackWhere(p)}` : "Nothing to place"}` : `${none} Track ${e.track.n} is not placed.`;
       }
       continue;
     }
@@ -394,15 +587,17 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       u.street = streetAfter(u.street, chosen ?? undefined);
     }
     if (item) {
-      item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null };
+      item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null, by: e.by ?? null };
       item.position = e.position;
-      item.outcome = e.choice ? `Chose ${chosen?.name ?? e.choice}. ${e.position ? describePosition(e.position) : "Nothing to place"}` : "None of the choices was right.";
+      item.outcome = e.choice ? `${chose} ${chosen?.name ?? e.choice}. ${e.position ? describePosition(e.position) : "Nothing to place"}` : none;
     }
   }
 
   return {
     mission,
     units: [...units.values()],
+    roster,
+    held: [...held.values()],
     tracks: [...tracks.values()].sort((a, b) => a.n - b.n),
     feed: [...feed.values()].sort((a, b) => b.ts - a.ts),
     first,
