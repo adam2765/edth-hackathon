@@ -21,23 +21,12 @@ export interface SendResult {
 
 const TIMEOUT_MS = 20_000;
 
-/**
- * Sends one utterance to the coordinator: audio if there is a clip, otherwise the text. A test clip
- * ("Send clips") goes beside the text, with Whisper's segments; it may be all there is when the
- * phone heard no words.
- */
+/** Sends phone-transcribed text, optionally accompanied by a clip kept for testing. */
 export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<SendResult> {
   const form = new FormData();
-  if (u.audioUri) {
-    // Expo's fetch does not take React Native's old `{ uri, name, type }` part; it takes a
-    // file object from expo-file-system, which carries the file's name and type itself.
-    form.append("audio", new File(u.audioUri) as unknown as Blob);
-  } else if (u.text) {
-    form.append("text", u.text);
-  } else if (!u.clipUri) {
-    throw new Error("Utterance has neither audio nor text");
-  }
-  if (u.clipUri && !u.audioUri) {
+  if (u.text) form.append("text", u.text);
+  else if (!u.clipUri) throw new Error("Utterance has neither text nor a test clip");
+  if (u.clipUri) {
     form.append("clip", new File(u.clipUri) as unknown as Blob);
     form.append("segments", JSON.stringify(u.segments ?? []));
   }

@@ -171,12 +171,12 @@ export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/Library/Android/sdk/platform
 adb -d reverse tcp:3117 tcp:3117
 adb -d reverse tcp:8082 tcp:8082
 cd ~/Projects/edth-hackathon/transmitter
-CI=1 EXPO_PUBLIC_SERVER_URL=http://127.0.0.1:3117 npx expo start --dev-client --localhost --port 8082 --max-workers 2
+CI=1 EXPO_PUBLIC_SERVER_URL=http://127.0.0.1:3117 npm run start -- --dev-client --localhost --port 8082 --max-workers 2
 ```
 
 Open **Transmitter** on the phone. If asked for a development server, enter
-`http://127.0.0.1:8082`. In Setup choose **This Mac** and **Phone: base**; download its
-model once. Create a mission on the receiver and join it on the phone. Hold the talk
+`http://127.0.0.1:8082`. In Setup choose **This Mac**. Speech recognition is always on the phone;
+its model is installed automatically from the setup-provided app asset. Create a mission on the receiver and join it on the phone. Hold the talk
 button, wait for red, speak, then release. The report appears on the receiver.
 
 To stop, press **Ctrl+C** in each Terminal window. If a port is already in use, stop its
@@ -200,7 +200,7 @@ versions checked against the project on 21 November 2026.
 | Hosted coordinator | A Mistral API key in `.env.local`; no Ollama needed. |
 | Android transmitter | [Android Studio](https://developer.android.com/studio) with its bundled JDK. In SDK Manager: SDK Platform **37**, Build-Tools **37.0.0**, Platform-Tools, Command-line Tools, NDK **27.1.12297006**, CMake **3.22.1**. For an emulator, also Android Emulator and a system image (ARM64 on Apple Silicon). Accept SDK licenses. |
 | iOS transmitter (Mac only) | Xcode with Command Line Tools and an iOS simulator runtime, plus CocoaPods (`brew install cocoapods`). A real iPhone also needs your Apple ID for signing; see [setup](docs/setup.md#5-transmitter-on-an-iphone). |
-| Speech models | Phone mode: download Whisper base (56 MB) or small (181 MB) in the app's Setup. The web app tries to download its Ukrainian voice (77 MB) on first start; it falls back to the system voice if unavailable. |
+| Speech models | Whisper base is prepared on the Mac by `npm run setup --prefix transmitter` (57 MB once) and installed automatically on the phone. The web app tries to download its Ukrainian voice (77 MB) on first start; it falls back to the system voice if unavailable. |
 | Rebuild scenario audio only | macOS `say` and `afconvert` (built in), with Daniel, Jacques and Lesya voices installed in System Settings → Accessibility → Spoken Content / Read & Speak. Existing clips are included. |
 
 Homebrew is needed only for the `brew` commands. Internet is needed for installs, model downloads, hosted mode, map tiles and rebuilding gazetteers. Gradle, Expo CLI and Whisper's native code come from the project; no separate global install is needed.
@@ -210,6 +210,7 @@ From the repo root, install both sets of npm dependencies ([web](package.json), 
 ```bash
 npm ci
 npm ci --prefix transmitter
+npm run setup --prefix transmitter
 ```
 
 For an offline coordinator, start Ollama in window 1, then run
@@ -238,6 +239,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$PATH"
 cd ~/Projects/edth-hackathon/transmitter
+npm run setup
 npx expo prebuild --platform android
 cd android
 ./gradlew --stop
@@ -288,7 +290,7 @@ export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$PATH
 cd transmitter
 npx expo run:android       # build, install and start Metro
 # On later starts, if the native app is already installed:
-# npx expo start --dev-client
+# npm run start -- --dev-client
 ```
 
 The transmitter needs a native development build; Expo Go cannot run it. Keep the coordinator running on port 3117. Open `http://localhost:3117/receiver`, create a mission and join it in the app.
@@ -315,7 +317,7 @@ use `FEATHERLESS_API_KEY`. Optional model overrides: `MISTRAL_STT_MODEL`, `MISTR
 
 ### Offline: models on this computer
 
-`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter's phone modes, or typed. Audio gets a clear error.
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter (which always transcribes on the phone), or typed. Audio gets a clear error.
 
 Install current Ollama (0.40 or newer; `brew install ollama` on macOS), then use the
 daily startup above. The model download is needed only once.
