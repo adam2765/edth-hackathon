@@ -54,6 +54,7 @@ Every transcript, with each run's result, is in [`scenarios/results/stt-comparis
 
 - The Vincennes hints are mostly "Avenue …". With them, base heard "Enemy patrol" as "Avenue Patroule" and "Enemy vehicle to the east" as "Avenue via Colter the East".
 - The Kyiv and Izium hints are in Cyrillic. With them, base wrote an English report in Cyrillic, even with English pinned: "I'm at Izium station" became «Айматизиам Стейшен», and "Passing the next intersection" became «Парсинге на next intersection». This is the failure of decisions 76 and 106 ("Аймат the Golden Gate" on 20 Nov); pinning the language did not stop it.
+- Voxtral shows the same pull on clips that switch language: in Kyiv, the French half of a Ukrainian-then-French clip came back in Cyrillic or as made-up Ukrainian, 3 times out of 3 ([voices.md](voices.md#mixed-languages)).
 
 **Ukrainian in Latin or Polish letters** (decision 76) was not seen today. With the language pinned [106], base and small wrote all 11 Ukrainian clips in Cyrillic. On 20 Nov, with the language guessed, the phone wrote "Ruchaj z do Sofijskiego Soboru".
 
@@ -77,7 +78,8 @@ Every transcript, with each run's result, is in [`scenarios/results/stt-comparis
 | Whisper large-v3-turbo | The 574 MB download (q5_0) was not approved today | 809M parameters, 99 languages including Ukrainian, MIT |
 | Voxtral open weights: Mini 3B (2507), Mini 4B Realtime (2602) | Neither lists Ukrainian; 3.2 to 3.6 GB quantized; not approved | Apache 2.0; 8 and 13 languages |
 | Kyutai STT 1B | English and French only; about 2.4 GB; not approved | CC-BY 4.0 |
-| Real voices, whispers, noise | No clips kept | |
+| Real voices and whispers | No clips kept | |
+| Noise and mixed languages, for Whisper and Parakeet | Measured today for Voxtral only, in [voices.md](voices.md#noise) | |
 | Time on a real phone | Not in this session's reach | |
 
 The hosted model, `voxtral-mini-transcribe-3`, is not an open release. Mistral's docs list 53 languages for it, Ukrainian included, and it takes `context_bias`. It is a public preview, released on 20 Oct 2026.
@@ -98,7 +100,7 @@ The whisper.rn 0.7.4 README says the package can also run Parakeet (`initParakee
 
 ## Recommendation
 
-1. **When the coordinator is reachable in hosted mode, let Voxtral transcribe the phone's audio.** The web page and the Android microphone already go that way [175]. It got every step in every run, in all three languages, in about 0.4 s. It is European, and its bias terms fixed the names the others missed. Keep Whisper base on the phone for offline mode and for when there is no network. This brings back the server path that decision 172 removed, so it is Brian's call.
+1. **When the coordinator is reachable in hosted mode, let Voxtral transcribe the phone's audio.** The web page and the Android microphone already go that way [175]. It got every step in every run, in all three languages, in about 0.4 s. It is European, and its bias terms fixed the names the others missed. Keep Whisper base on the phone for offline mode and for when there is no network. This brings back the server path that decision 172 removed, so it is Brian's call. Two limits were measured elsewhere today: under field noise it missed 14 of the 32 rain and bang clips [185], and it loses French spoken after Ukrainian in Kyiv ([voices.md](voices.md#mixed-languages)).
 2. **If speech has to stay on the phone, Whisper small is not worth it.** It placed 1 to 5 more steps than base, at three times the size, slower, and worse in Ukrainian. Parakeet v3 was the best local option measured, but it is 638 MB, writes some Ukrainian as Russian, and needs the team's say on decision 42.
 3. **Cheap changes to try on Whisper base, whatever is chosen.** Give it hint names only in the speaker's script: no Cyrillic names when English or French is pinned, and Latin spellings for Kyiv and Izium when English is pinned. Use fewer "Avenue" names. Measure before and after with the script below.
 4. **Before deciding, record real reports.** Record 20 to 30 per language with `KEEP_CLIPS=1` [155]: normal voice, whisper, a street name, some noise. Then run the script below on them. Today's real reports show Whisper base doing worse than on these clean clips.
