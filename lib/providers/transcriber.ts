@@ -6,6 +6,7 @@
  * A local model can be added later behind the same interface; until then PROVIDER_MODE=local takes text only.
  */
 import { providerMode } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface TranscribeResult {
   text: string;
@@ -93,12 +94,12 @@ class MistralTranscriber implements Transcriber {
     }
     // Repeated field, one entry per term (checked against Mistral docs and live API, 20 Nov 2026).
     for (const t of biasTerms.slice(0, 100)) form.append("context_bias", t);
-    const res = await fetch("https://api.mistral.ai/v1/audio/transcriptions", {
+    const res = await fetchRetrying("https://api.mistral.ai/v1/audio/transcriptions", () => ({
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}` },
       body: form,
       signal: AbortSignal.timeout(15_000),
-    });
+    }));
     if (!res.ok) {
       const msg = `Mistral STT ${res.status}: ${(await res.text()).slice(0, 200)}`;
       throw diarize && (res.status === 400 || res.status === 422) ? new DiarizeRefused(msg) : new Error(msg);
