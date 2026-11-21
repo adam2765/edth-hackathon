@@ -345,7 +345,7 @@ export function resolve(input: ResolveInput): Resolution {
     };
   };
 
-  // A clock direction is finer than the eight compass points it was read as [197]: 2 o'clock is
+  // A clock direction is finer than the eight compass points it was read as [198]: 2 o'clock is
   // 60°, not north-east's 45°. A move reckoned on that compass point goes on the clock's bearing.
   const clock = clockSaid(transcript);
   const exact = (deg: number) => (clock && DIRECTION_DEG[clock.direction] === deg ? clock.deg : deg);

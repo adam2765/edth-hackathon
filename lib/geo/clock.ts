@@ -1,6 +1,6 @@
 /**
  * Clock directions: "200 metres at 3 o'clock", "à 3 heures", "на 3 години", "на три часа".
- * Read from the words, here in code [197]. The intent schema has only the eight compass words, and
+ * Read from the words, here in code [198]. The intent schema has only the eight compass words, and
  * the model turned "3 o'clock" into south-east. 12 o'clock is north, as on the map: the app does
  * not know which way the speaker faces. Pure.
  */

@@ -181,7 +181,7 @@ export function checkLanguage(said: Intent["language"], transcript: string, hint
 
 /**
  * Coerce whatever came back into a valid Intent. With the transcript, the language is checked too,
- * and a clock direction said ("at 3 o'clock") sets the compass way [197].
+ * and a clock direction said ("at 3 o'clock") sets the compass way [198].
  */
 export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

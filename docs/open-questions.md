@@ -57,7 +57,7 @@ The people:
 The words:
 
 7. **How do people name places?** Landmarks, streets, grid references, distance and bearing? Nicknames that are on no map, such as "checkpoint 3"?
-   - *Today:* named places, kinds of place ("the church"), relations ("behind", "south of"), "towards", crossings, and a distance with one of eight compass directions or a clock direction [197]. No grid references, no spoken coordinates, no nicknames.
+   - *Today:* named places, kinds of place ("the church"), relations ("behind", "south of"), "towards", crossings, and a distance with one of eight compass directions or a clock direction [198]. No grid references, no spoken coordinates, no nicknames.
    - *It decides:* which of those three gaps to close first.
 
 8. **For "I moved towards 35th street", where should the marker end up?**
