@@ -7,6 +7,7 @@
 import type { Category, Direction, Intent, Relation } from "../geo/types";
 import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
+import { fetchRetrying } from "./retry";
 
 export interface ExtractOptions {
   /** Language reported by speech-to-text, if any. */
@@ -226,7 +227,7 @@ class ChatJsonExtractor implements IntentExtractor {
     const response_format = this.useJsonSchema
       ? { type: "json_schema", json_schema: { name: "position_report_intent", schema: INTENT_SCHEMA, strict: true } }
       : { type: "json_object" };
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await fetchRetrying(`${this.baseUrl}/chat/completions`, () => ({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
@@ -240,7 +241,7 @@ class ChatJsonExtractor implements IntentExtractor {
         response_format,
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
-    });
+    }));
     if (!res.ok) throw new Error(`${this.provider} extract ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = j.choices?.[0]?.message?.content ?? "{}";

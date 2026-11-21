@@ -34,11 +34,11 @@ flowchart TB
     subgraph RUN["At run time"]
         direction LR
         RES["Resolver"]
-        BIAS["100 names as spelling hints<br/>for Mistral speech-to-text"]
+        BIAS["report words and place names,<br/>100 spelling hints<br/>for Mistral speech-to-text"]
         PLACES["GET /api/places<br/>a mission's start point"]
     end
 
-    HINTS[("transmitter/src/hints.generated.json<br/>24 to 40 names per area<br/>for Whisper on the phone")]
+    HINTS[("transmitter/src/hints.generated.json<br/>as many names as fit 223 tokens,<br/>then the report words,<br/>for Whisper on the phone")]
     SCN[("scenarios/*.json<br/>expected feature ids")]
 
     BOX --> BUILD
@@ -50,7 +50,9 @@ flowchart TB
     SCN -. "ids must still exist" .-> FILE
 ```
 
-The report endpoint loads the file once on the server (`lib/geo/gazetteer.ts`). Name search scans every entry with a cached index. The 100 place names sent to speech-to-text as spelling hints come from the same file, stations first. Pharmacies, fuel stations and buildings come last, so they never crowd out the landmarks.
+The report endpoint loads the file once on the server (`lib/geo/gazetteer.ts`). Name search scans every entry with a cached index. The spelling hints sent to speech-to-text come from the same file, stations first, after the area's report words (`speechWords` in `lib/geo/areas.ts`: "hostile", "enemy", "Track" and so on), 100 in all. Pharmacies, fuel stations and buildings come last, so they never crowd out the landmarks.
+
+Whisper on the phone gets a shorter list as its prompt, and keeps only the last 223 tokens of it: what does not fit is dropped from the start without a warning. On 21 Nov the Vincennes list was 268 tokens, so its first seven names, the metro stations and the château, never reached Whisper. Now `scripts/build-transmitter-hints.ts` fits the names to the budget, counting tokens the way whisper.cpp does when the phone's model is on the Mac, and ends the list with the report words [189].
 
 **What it still leaves out:** shops, cafés and restaurants, banks, and house numbers. OpenStreetMap has them (about 1,200 shops and cafés in the Vincennes box and 3,500 in Kyiv, counted 20 November), but each needs more than a query line. Many shops belong to chains, so the resolver needs "the Franprix on rue de Fontenay", a place narrowed by a street, before they help more than they ask back. House numbers are a street plus a number, not a name, and need a field in the intent. See [known gaps](known-gaps.md).
 
@@ -88,10 +90,10 @@ In Vincennes (rebuilt 20 November), 16 names are two streets each, every pair in
 
 ## Adding an area
 
-1. Add the area to `lib/geo/areas.ts`: id, label, place description, centre, zoom, box, hint text and `townAdminLevel`. For the town level, use OpenStreetMap's `admin_level` of the municipality in that country, the level at which street names are unique. In Ukraine outside Kyiv that is the settlement, level 8. The hromada is level 7 and holds many villages, each with its own вулиця Шевченка. Use a central square as the centre, not the middle of the box: "the church" with no last position is looked for around it.
+1. Add the area to `lib/geo/areas.ts`: id, label, place description, centre, zoom, box, hint text, `speechWords` (the report words in the languages spoken there) and `townAdminLevel`. For the town level, use OpenStreetMap's `admin_level` of the municipality in that country, the level at which street names are unique. In Ukraine outside Kyiv that is the settlement, level 8. The hromada is level 7 and holds many villages, each with its own вулиця Шевченка. Use a central square as the centre, not the middle of the box: "the church" with no last position is looked for around it.
 2. Run `npm run gazetteer -- <id>` (needs network).
 3. Import the new file in `lib/geo/gazetteer.ts`.
-4. Add the id to the transmitter: `AreaId` in `transmitter/src/types.ts`, the list in `transmitter/App.tsx`, and `MAX_NAMES` in `scripts/build-transmitter-hints.ts`. Then run `npx tsx scripts/build-transmitter-hints.ts`. The web page and the command post list the areas themselves.
+4. Add the id to the transmitter: `AreaId` in `transmitter/src/types.ts`, the list in `transmitter/App.tsx`, and `FALLBACK_NAMES` in `scripts/build-transmitter-hints.ts`. Then run `npx tsx scripts/build-transmitter-hints.ts` on a Mac that has the phone's model (`npm run setup`), so the names are fitted to Whisper's 223 tokens. The web page and the command post list the areas themselves.
 5. Run `npm test`, and try a few typed reports in the web page.
 
 A coordinator that is running picks up a new area only when the import and the file are both there. Create the file first, then the import, then the area.

@@ -5,7 +5,7 @@ import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
 import { readVoices } from "@/lib/geo/voices";
 import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/reports/clips";
-import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
+import { AREAS, DEFAULT_AREA, isAreaId, speechHints, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { reportContext, saveReport, type ReportInput } from "@/lib/reports/record";
 import { callsignOf, sessionCode } from "@/lib/reports/types";
@@ -20,14 +20,17 @@ const RATE_MAX = 30;
 const AREA_DATA = Object.fromEntries(
   (Object.keys(AREAS) as AreaId[]).map((id) => {
     const gazetteer = loadGazetteer(id);
-    return [id, { gazetteer, bias: biasTerms(gazetteer, 100) }];
+    // The report words first, so the 100 always hold them.
+    const words = AREAS[id].speechWords;
+    return [id, { gazetteer, bias: [...words, ...biasTerms(gazetteer, 100 - words.length)] }];
   }),
 ) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
 
 const NO_WORDS: Record<string, string> = {
-  uk: "Не розчув. Повторіть, будь ласка.",
-  fr: "Je n'ai pas compris. Répétez, s'il vous plaît.",
-  en: "I didn't catch that. Try again.",
+  // Bangs, rain or a phone held away gave empty transcripts in the noise tests: say what helps [192].
+  uk: "Не розчув. Говоріть ближче до мікрофона і повторіть.",
+  fr: "Je n'ai rien entendu. Parlez plus près du micro et répétez.",
+  en: "I didn't catch that. Speak closer to the microphone and try again.",
 };
 
 // Per-instance, best effort. Enough to stop a runaway loop in stage 1.
@@ -59,7 +62,7 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
  * number and the words to say back, or, when nothing was saved, with words that say it has none.
  */
 async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string; resolution: Resolution }> {
-  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent) : input.resolution };
+  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent, input.transcript) : input.resolution };
   if (!session) return unsaved;
   try {
     const saved = await saveReport({ session, ...input });
@@ -139,7 +142,8 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias);
+      // A speaker whose language is not the area's gets phrases in their own language first [190].
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", speechHints(area, bias, pinned));
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -174,6 +178,8 @@ export async function POST(req: Request) {
       // About the speaker, or about a track the speaker sees: the words decide, and the resolver places either.
       resolve: (intent, text) => resolveReport({ intent, transcript: text, lastPosition, now, gazetteer, areaCentre: area.centre, tracks, observer: callsign }),
       gazetteer,
+      last: lastPosition,
+      now,
       alsoReport: (text) => kindSaid(text) != null || affiliationSaid(text) != null || trackNumberSaid(text) != null,
     });
     const { intent, resolution } = read;
