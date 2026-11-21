@@ -11,16 +11,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
-import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
+import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KIND_NAME, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
-import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply } from "@/lib/reports/types";
+import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
-import { SendDrone, TrackRecon, type TaskBody } from "./ReconTools";
+import { SendDrone, TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -818,6 +818,14 @@ export default function CommandPost() {
       if (!a || !b || d.gone != null || seen!.gone != null || distanceM(a, b) < 5) continue;
       task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
     }
+    // And from a drone unit on the net, from where it last was [235].
+    for (const u of view.units) {
+      const seen = u.task ? view.tracks.find((t) => t.n === u.task!.n) : undefined;
+      const a = u.position;
+      const b = seen?.position;
+      if (!a || !b || seen!.gone != null || distanceM(a, b) < 5) continue;
+      task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
+    }
     // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
     // keeps its spot and a new one moves.
     const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
@@ -1328,6 +1336,27 @@ export default function CommandPost() {
     [session],
   );
 
+  /** The operator says what a unit is, so a drone team on the net can be sent to look [235]. */
+  const sendUnitKind = useCallback(
+    async (callsign: string, kind: TrackKind | null) => {
+      if (!session) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(session)}/units`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ callsign, kind }) });
+        const data = (await res.json().catch(() => ({}))) as Partial<UnitReply> & { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+        if (data.entry) setNotice(kind ? `${callsign} is a ${TRACK_KIND_NAME[kind].toLowerCase()}` : `${callsign}: what it is, cleared`);
+        pollNow.current();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Saving that failed.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [session],
+  );
+
   /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. */
   const sendHeld = useCallback(
     async (st: Settling) => {
@@ -1631,7 +1660,7 @@ export default function CommandPost() {
               onRestore={() => markGone(pickedTrack.n, false)}
               onClose={() => setPicked(null)}
             >
-              <TrackRecon track={pickedTrack} tracks={view.tracks} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
+              <TrackRecon track={pickedTrack} tracks={view.tracks} units={view.units} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
             </TrackCard>
           ) : null}
         </div>
@@ -1900,7 +1929,7 @@ export default function CommandPost() {
                     ) : (
                       <span className={styles.heldQuestion}>No track named. Pick the track to look at.</span>
                     )}
-                    {canEdit ? <SendDrone key={`${r.id}:${r.n}`} n={t ? t.n : null} tracks={view.tracks} request={r} busy={busy} onTask={sendTask} /> : null}
+                    {canEdit ? <SendDrone key={`${r.id}:${r.n}`} n={t ? t.n : null} tracks={view.tracks} units={view.units} request={r} busy={busy} onTask={sendTask} /> : null}
                   </li>
                 );
               })}
@@ -1957,6 +1986,7 @@ export default function CommandPost() {
                         </span>
                       ) : null}
                     </button>
+                    <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask} />
                   </li>
                 );
               })}

@@ -638,6 +638,37 @@
   color: var(--warn);
 }
 
+/* Under a unit: what it is, as the command post said, and its recon when it is a drone team [235].
+   Lined up with the call sign, past the dot. */
+.unitRecon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 2px 0 0;
+  padding: 0 10px 0 36px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Quiet until used: it reads as a word, not a form field. */
+.unitKind {
+  min-height: 30px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.unitKind:hover:not(:disabled),
+.unitKind:focus-visible {
+  border-color: var(--line);
+  color: var(--text);
+}
+
 /* ---------- tracks: what the units have seen ---------- */
 /* With tracks listed, the three lists share the height: units and tracks a third each at most. */
 .side[data-tracks] .units {

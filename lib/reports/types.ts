@@ -142,6 +142,23 @@ export interface RosterEntry {
   held?: string;
 }
 
+/**
+ * A person at the command post says what a unit is [235]: a foot patrol, a vehicle crew, a drone
+ * team. The same kinds as a track's; null when not said. Never read from the call sign or from the
+ * words: "DRONE 1" proves nothing. A unit whose kind is drone or drone team can be sent to look at a
+ * track [234].
+ */
+export interface UnitEntry {
+  kind: "unit";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who said it: "CP". */
+  by: string;
+  callsign: string;
+  unit_kind: TrackKind | null;
+}
+
 /** The operator dismisses a held report: noise, or not for this net [203]. It stays in the log. */
 export interface DismissEntry {
   kind: "dismiss";
@@ -232,9 +249,10 @@ export interface RequestEntry {
 export type TaskAction = "send" | "done" | "decline";
 
 /**
- * A person at the command post sends a friendly drone or drone team track to look at a track, ends
- * that, or turns a request down [234]. Never written by a model or worked out by the app: no range,
- * no nearest, no ranking. A drone looks at one track at a time; sending it again moves it.
+ * A person at the command post sends a friendly drone or drone team to look at a track, ends that,
+ * or turns a request down [234]. The drone is a friendly track, or a unit on the net whose kind is
+ * drone or drone team [235]. Never written by a model or worked out by the app: no range, no
+ * nearest, no ranking. A drone looks at one track at a time; sending it again moves it.
  */
 export interface TaskEntry {
   kind: "task";
@@ -246,6 +264,8 @@ export interface TaskEntry {
   action: TaskAction;
   /** For `send` and `done`: the friendly drone or drone team, by its track number. */
   asset?: number;
+  /** For `send` and `done`, instead of `asset`: a unit on the net whose kind is drone or drone team [235]. */
+  unit?: string;
   /** For `send`: the track it is to look at. */
   n?: number;
   /** For `send` and `decline`: the request it answers, if any. */
@@ -301,7 +321,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -360,6 +380,12 @@ export interface TaskReply {
   entry: TaskEntry | null;
   /** True when someone had settled the request already: the first decision stands. */
   already: boolean;
+}
+
+/** `POST /api/sessions/<code>/units`: what a person at the command post said a unit is [235]. */
+export interface UnitReply {
+  /** Null when the unit already had that kind: nothing was written. */
+  entry: UnitEntry | null;
 }
 
 /** The `request` field of the report reply: the request read from the words, as saved [234]. */

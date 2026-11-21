@@ -11,7 +11,7 @@ import { endOf, missionOf, missionRoster, sortMissions, startPosition, summarize
 import { nextTrackNumber, plotPosition, type PlotInput } from "./plot";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { AUDIO_FILE, getStore, newEntryId, withSessionLock } from "./store";
-import { checkTask, trackInLog, type TaskInput } from "./tasks";
+import { checkTask, checkUnit, trackInLog, type TaskInput, type UnitInput } from "./tasks";
 import type {
   AnswerEntry,
   DismissEntry,
@@ -31,6 +31,7 @@ import type {
   RosterEntry,
   Sender,
   TaskEntry,
+  UnitEntry,
   StartPoint,
   Timings,
   TrackSighting,
@@ -361,14 +362,35 @@ export async function recordTask(session: string, input: TaskInput, by: string, 
     if ("already" in fits) return { ok: true, entry: null, already: true };
     if (!fits.ok) return { ok: false, status: fits.status, error: fits.error };
     const base = { kind: "task" as const, id: newEntryId(now), session, ts: now, by };
+    const drone = (d: TaskInput & { action: "send" | "done" }) => (d.unit != null ? { unit: d.unit } : { asset: d.asset });
     const entry: TaskEntry =
       input.action === "send"
-        ? { ...base, action: "send", asset: input.asset, n: input.n, ...(input.request ? { request: input.request } : {}) }
+        ? { ...base, action: "send", ...drone(input), n: input.n, ...(input.request ? { request: input.request } : {}) }
         : input.action === "done"
-          ? { ...base, action: "done", asset: input.asset }
+          ? { ...base, action: "done", ...drone(input) }
           : { ...base, action: "decline", request: input.request };
     await store.append(entry);
     return { ok: true, entry, already: false };
+  });
+}
+
+/**
+ * A person at the command post says what a unit is [235], so a drone team on the net can be sent to
+ * look at a track. The same kind again writes nothing.
+ */
+export async function recordUnit(session: string, input: UnitInput, by: string, now = Date.now()): Promise<{ ok: true; entry: UnitEntry | null } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!missionOf(entries)) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    const fits = checkUnit(foldLog(entries), missionRoster(entries), input);
+    if (!fits.ok) return { ok: false, status: fits.status, error: fits.error };
+    if (fits.same) return { ok: true, entry: null };
+    const entry: UnitEntry = { kind: "unit", id: newEntryId(now), session, ts: now, by, callsign: input.callsign, unit_kind: input.kind };
+    await store.append(entry);
+    return { ok: true, entry };
   });
 }
 

@@ -4,10 +4,10 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Resolution } from "../lib/geo/types";
 import { foldLog } from "../lib/reports/fold";
-import { createMission, endMission, recordPlot, recordTask, saveReport, saveRequest } from "../lib/reports/record";
+import { createMission, endMission, recordPlot, recordTask, recordUnit, saveReport, saveRequest } from "../lib/reports/record";
 import { getStore } from "../lib/reports/store";
-import { parseTask } from "../lib/reports/tasks";
-import type { LogEntry, PlotEntry, RequestEntry, TaskEntry } from "../lib/reports/types";
+import { parseTask, parseUnit } from "../lib/reports/tasks";
+import type { LogEntry, PlotEntry, RequestEntry, TaskEntry, UnitEntry } from "../lib/reports/types";
 
 const T0 = Date.UTC(2026, 10, 21, 20, 30, 0);
 const at = (s: number) => T0 + s * 1000;
@@ -47,6 +47,66 @@ describe("checking what the command post sent", () => {
     expect(parseTask({ action: "engage", asset: 1, n: 2 })).toMatchObject({ ok: false });
     expect(parseTask({ action: "send", asset: 1, n: 2, request: "../x" })).toMatchObject({ ok: false });
   });
+
+  it("the drone is a track or a unit on the net, never both [235]", () => {
+    expect(parseTask({ action: "send", unit: " bravo  2 ", n: 2 })).toEqual({ ok: true, input: { action: "send", unit: "BRAVO 2", n: 2, request: null } });
+    expect(parseTask({ action: "done", unit: "BRAVO 2" })).toEqual({ ok: true, input: { action: "done", unit: "BRAVO 2" } });
+    expect(parseTask({ action: "send", asset: 1, unit: "BRAVO 2", n: 2 })).toMatchObject({ ok: false });
+    expect(parseTask({ action: "send", unit: "  ", n: 2 })).toMatchObject({ ok: false });
+    expect(parseTask({ action: "done" })).toMatchObject({ ok: false });
+  });
+
+  it("what a unit is: one of the track kinds, or null to clear it [235]", () => {
+    expect(parseUnit({ callsign: "bravo 2", kind: "drone_team" })).toEqual({ ok: true, input: { callsign: "BRAVO 2", kind: "drone_team" } });
+    expect(parseUnit({ callsign: "BRAVO 2", kind: null })).toEqual({ ok: true, input: { callsign: "BRAVO 2", kind: null } });
+    expect(parseUnit({ callsign: "BRAVO 2", kind: "tank" })).toMatchObject({ ok: false });
+    expect(parseUnit({ callsign: "BRAVO 2" })).toMatchObject({ ok: false });
+    expect(parseUnit({ kind: "drone" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("a unit a person says is a drone team [235]", () => {
+  const unit = (id: string, s: number, callsign: string, unit_kind: UnitEntry["unit_kind"]): UnitEntry => ({ kind: "unit", id, session: SESSION, ts: at(s), by: "CP", callsign, unit_kind });
+  const log: LogEntry[] = [
+    ...MAP,
+    unit("u1", 35, "BRAVO 2", "drone_team"),
+    request("r1", 40, 2),
+    task("t1", 50, { action: "send", unit: "BRAVO 2", n: 2, request: "r1" }),
+    task("t2", 60, { action: "send", unit: "BRAVO 2", n: 3 }),
+    task("t3", 70, { action: "done", unit: "BRAVO 2" }),
+  ];
+
+  it("has the kind the command post gave it, said in the feed", () => {
+    const s = foldLog(log.slice(0, 5));
+    expect(s.units.find((u) => u.callsign === "BRAVO 2")).toMatchObject({ kind: "drone_team", task: null });
+    expect(s.feed.find((f) => f.id === "u1")).toMatchObject({ callsign: "CP", outcome: "BRAVO 2 is a drone team." });
+    expect(foldLog([...log.slice(0, 5), unit("u2", 45, "BRAVO 2", null)]).feed[0].outcome).toBe("BRAVO 2: what it is, cleared.");
+  });
+
+  it("is sent like a drone track, moves when sent elsewhere, and only a person ends it", () => {
+    const sent = foldLog(log, at(55));
+    expect(sent.units.find((u) => u.callsign === "BRAVO 2")?.task).toMatchObject({ n: 2, by: "CP" });
+    expect(sent.tracks.find((t) => t.n === 2)?.recon).toEqual([{ asset: null, unit: "BRAVO 2", ts: at(50) }]);
+    expect(sent.requests).toEqual([]);
+    expect(sent.feed.find((f) => f.id === "r1")?.outcome).toMatch(/CP sent BRAVO 2\.$/);
+    expect(sent.feed.find((f) => f.id === "t1")).toMatchObject({ outcome: "Sent BRAVO 2 (drone team) to look at Track 2. ALPHA 1 had asked.", track: 2 });
+
+    const moved = foldLog(log, at(65));
+    expect(moved.tracks.find((t) => t.n === 2)?.recon).toEqual([]);
+    expect(moved.tracks.find((t) => t.n === 3)?.recon).toEqual([{ asset: null, unit: "BRAVO 2", ts: at(60) }]);
+    expect(moved.feed.find((f) => f.id === "t2")?.outcome).toBe("Sent BRAVO 2 (drone team) to look at Track 3, instead of Track 2.");
+
+    const done = foldLog(log);
+    expect(done.units.find((u) => u.callsign === "BRAVO 2")?.task).toBeNull();
+    expect(done.tracks.every((t) => t.recon.length === 0)).toBe(true);
+    expect(done.feed.find((f) => f.id === "t3")).toMatchObject({ outcome: "BRAVO 2 (drone team): recon of Track 3 done.", track: 3 });
+  });
+
+  it("stops looking when the mission ends", () => {
+    const ended = foldLog([...log.slice(0, 5), { kind: "end", id: "e", session: SESSION, ts: at(80) }]);
+    expect(ended.units.find((u) => u.callsign === "BRAVO 2")?.task).toBeNull();
+    expect(ended.tracks.every((t) => t.recon.length === 0)).toBe(true);
+  });
 });
 
 describe("requests and tasks in the log", () => {
@@ -59,7 +119,7 @@ describe("requests and tasks in the log", () => {
     const after = foldLog(log);
     expect(after.requests).toEqual([]);
     expect(after.tracks.find((t) => t.n === 1)?.task).toMatchObject({ n: 2, ts: at(50), by: "CP" });
-    expect(after.tracks.find((t) => t.n === 2)?.recon).toEqual([{ asset: 1, ts: at(50) }]);
+    expect(after.tracks.find((t) => t.n === 2)?.recon).toEqual([{ asset: 1, unit: null, ts: at(50) }]);
     expect(after.feed.find((f) => f.id === "r1")).toMatchObject({ kind: "request", outcome: "Asked for recon on Track 2: “send the drone” CP sent Track 1.", track: 2 });
     expect(after.feed.find((f) => f.id === "t1")).toMatchObject({ kind: "task", callsign: "CP", outcome: "Sent Track 1 (friendly drone team) to look at Track 2. ALPHA 1 had asked.", track: 2 });
   });
@@ -75,7 +135,7 @@ describe("requests and tasks in the log", () => {
     const s = foldLog(log);
     expect(s.requests).toEqual([]);
     expect(s.tracks.find((t) => t.n === 2)?.recon).toEqual([]);
-    expect(s.tracks.find((t) => t.n === 3)?.recon).toEqual([{ asset: 1, ts: at(60) }]);
+    expect(s.tracks.find((t) => t.n === 3)?.recon).toEqual([{ asset: 1, unit: null, ts: at(60) }]);
     expect(s.feed.find((f) => f.id === "t2")?.outcome).toBe("Sent Track 1 (friendly drone team) to look at Track 3, instead of Track 2.");
 
     const done = foldLog([...log, task("t3", 70, { action: "done", asset: 1 })]);
@@ -182,5 +242,33 @@ describe("recon on the coordinator", () => {
 
     await endMission(code, at(170));
     expect(await recordTask(code, { action: "send", asset: 1, n: 2, request: null }, "CP", at(180))).toMatchObject({ ok: false, ended: true });
+  });
+
+  it("a unit on the roster is sent once a person says it is a drone team [235]", async () => {
+    const m = await createMission({ area: "vincennes", name: "Units", start: null, roster: ["ALPHA 1", "BRAVO 2"] }, at(200));
+    if (!m.ok) throw new Error(m.error);
+    const code = m.mission.code;
+    await recordPlot(code, { action: "place", affiliation: "unknown", track_kind: "vehicle", count: null, where: MAIRIE, radius_m: 50, note: null }, "CP", at(210)); // 1
+
+    // The call sign proves nothing: BRAVO 2 is not sent until a person says what it is.
+    expect(await recordTask(code, { action: "send", unit: "BRAVO 2", n: 1, request: null }, "CP", at(215))).toMatchObject({ ok: false, status: 400 });
+    expect(await recordUnit(code, { callsign: "ZULU 9", kind: "drone_team" }, "CP", at(216))).toMatchObject({ ok: false, status: 404 });
+    expect(await recordUnit(code, { callsign: "ALPHA 1", kind: "people" }, "CP", at(217))).toMatchObject({ ok: true, entry: { unit_kind: "people" } });
+    expect(await recordTask(code, { action: "send", unit: "ALPHA 1", n: 1, request: null }, "CP", at(218))).toMatchObject({ ok: false, error: "ALPHA 1 is not marked as a drone or drone team." });
+
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: "drone_team" }, "CP", at(220))).toMatchObject({ ok: true, entry: { kind: "unit", callsign: "BRAVO 2", unit_kind: "drone_team", by: "CP" } });
+    // The same kind again writes nothing.
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: "drone_team" }, "CP", at(221))).toEqual({ ok: true, entry: null });
+
+    expect(await recordTask(code, { action: "send", unit: "BRAVO 2", n: 1, request: null }, "CP", at(230))).toMatchObject({ ok: true, entry: { action: "send", unit: "BRAVO 2", n: 1 } });
+    // While it looks, it stays a drone or drone team: changing what it is does not end a task.
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: "people" }, "CP", at(235))).toMatchObject({ ok: false, status: 400, error: "BRAVO 2 is looking at Track 1. End that first." });
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: "drone" }, "CP", at(236))).toMatchObject({ ok: true });
+    expect(await recordTask(code, { action: "done", unit: "BRAVO 2" }, "CP", at(240))).toMatchObject({ ok: true, entry: { action: "done", unit: "BRAVO 2" } });
+    expect(await recordTask(code, { action: "done", unit: "BRAVO 2" }, "CP", at(241))).toMatchObject({ ok: false, status: 400 });
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: null }, "CP", at(245))).toMatchObject({ ok: true, entry: { unit_kind: null } });
+
+    await endMission(code, at(250));
+    expect(await recordUnit(code, { callsign: "BRAVO 2", kind: "drone_team" }, "CP", at(260))).toMatchObject({ ok: false, ended: true });
   });
 });
