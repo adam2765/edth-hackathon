@@ -241,6 +241,26 @@ Confirmed by Alex on 20 Nov: the first option each time [107].
 - **More than one base station** sharing a mission.
 - **Logins and roles.**
 
+## Tracks: what a unit sees
+
+Built on Saturday 21 November: steps 1 to 3. The rules are in the [README](../README.md#tracks) and the contract in [contracts.md](contracts.md#tracks) [145 to 152].
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Types, the log, the receiver's symbols and list | Built |
+| 2 | Extraction, and placing by a place or from the observer | Built |
+| 3 | The number said back; "Track 3 moved", "Track 3 is hostile" | Built |
+| 4 | A new sighting close to an open track asks "Is this Track 3, or a new one?"; "Track 3 is gone" | Not started. Until then every unnumbered sighting opens a new track. |
+| 5 | A range ring for a system, when the speaker says the range | Not started |
+
+Still open, for Alex:
+
+- **The word.** "Track" is in. "Object" was the other candidate. The French "Piste" and the Ukrainian "Об'єкт" need a native check.
+- **Where a range comes from** (step 5): only when said, set at the base, or a table by kind in code.
+- **Operator edits:** whether the operator may change or close a track by click. It makes the receiver editable, the same question as decision 1 of the [receiver review](receiver-review.md).
+- **Unit colours:** the fifth unit colour is a pink-red (`#e0367a`). Hostile tracks are red, so a fifth call sign would be a red-ish friendly dot. Not changed yet.
+- **A demo script with tracks.** There is none. It should use made-up sightings, and not in Izium [140].
+
 ## Local mode
 
 The uplink-off demo. Mandatory for Demo Day; target Saturday midday. About 1.5 to 2 person-days; the riskiest part is the network and HTTPS, not the models.

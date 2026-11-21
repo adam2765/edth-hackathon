@@ -37,6 +37,8 @@ export interface SetupProps {
   onDownload: () => void;
   useHints: boolean;
   onUseHints: (v: boolean) => void;
+  sendClips: boolean;
+  onSendClips: (v: boolean) => void;
 
   speakReplies: boolean;
   onSpeakReplies: (v: boolean) => void;
@@ -167,6 +169,7 @@ export function SetupSheet(p: SetupProps) {
                 </View>
               ) : null}
               {phoneMode ? <SwitchRow label="Place-name hints" note="Gives the phone’s model the area’s place names" value={p.useHints} onValueChange={p.onUseHints} /> : null}
+              {phoneMode ? <SwitchRow label="Send clips for testing" note="Also sends each recording. The coordinator keeps it only when started with KEEP_CLIPS=1" value={p.sendClips} onValueChange={p.onSendClips} /> : null}
             </Group>
 
             <Group title="Sound">

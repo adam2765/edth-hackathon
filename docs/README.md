@@ -26,6 +26,7 @@ New to the project? Read these in order:
 | [open-questions.md](open-questions.md) | Questions for the team and for Lysk | A question is asked, answered or dropped |
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
+| [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: five streams of work for four people, with one for the pitch | The team agrees a split, or the mentors' answers move it |

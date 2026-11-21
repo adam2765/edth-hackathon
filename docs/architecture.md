@@ -8,6 +8,7 @@ One speaker's path works end to end on the live site, in two areas and three lan
 - **Coordinator**: the server endpoint `POST /api/report`. Speech-to-text, then intent extraction, then the resolver. It keeps missions: each report in a mission goes to that mission's log, and the unit's last position comes from that log [99, 107, 108].
 - **Receiver**: the shared map at the base station, with every call sign and a replay. `/receiver`; it opens and ends missions and otherwise only shows [98, 113].
 - **Mission**: one run, with a code, an area and an optional start point. Phones join it before they report [107, 114].
+- **Track**: something on the map that is not a reporting unit. A unit sees it and reports it by voice; the coordinator numbers it and the receiver draws it with its standard symbol. For reconnaissance only [145 to 152].
 - **Area**: a region with its own gazetteer file (`vincennes`, `kyiv`, and since 21 November `izium`). All three are on the live site.
 
 ```
@@ -17,7 +18,8 @@ phone web page ──┐           POST /api/report
 native app ──────┼─ audio ──►  1. speech-to-text   Mistral voxtral-mini-transcribe-3,
 scenario clip ───┘  or text      (skipped for text)  place names sent as context_bias
                     + area     2. extraction       Mistral mistral-small-latest, strict JSON schema
-                    + last     3. resolver         pure code + data/gazetteer.<area>.json
+                    + last     3. resolver         pure code + data/gazetteer.<area>.json; first it settles
+                    position                       who the report is about: the speaker, or a track
                     position   4. save             session log, one file per session
                     + session ◄─ { transcript, language, intent, resolution, timings_ms, report_id }
 native app ── POST /api/answer (tapped choice) ──►  saved to the same log
@@ -54,6 +56,7 @@ native app ── POST /api/answer (tapped choice) ──►  saved to the same 
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 2 scenarios, 9 steps, synthetic voices. A third, `izium-demo.json` (9 steps, 21 November), has no clips yet: `npm run scenarios` makes them. |
 | Shared map, call signs, replay | `app/receiver/page.tsx`, `components/Receiver.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. Not yet run with phones sending, or on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
 | Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/JoinCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. |
+| Tracks: what a unit sees, numbered and drawn with APP-6 symbols | `lib/geo/tracks.ts`, `lib/geo/trackKinds.ts`, `lib/reports/fold.ts`, `components/Receiver.tsx`, `tests/tracks.test.ts` | Built Saturday 21 November, steps 1 to 3 of five [145 to 152]: a unit reports a thing by a place or by a distance and direction from itself, the app says its number back, and "Track 3 moved to the station" or "Track 3 is hostile" updates it. Checked with typed reports through hosted Mistral and the local model, on the receiver in a desktop browser. Not yet with a phone or a voice. Not built: a question when a sighting is close to an old track, "gone", range rings, operator edits. |
 | Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
 
@@ -74,3 +77,4 @@ The full rule table is in the [README](../README.md#resolver-rules). A report re
 - Movement towards a place moves the marker to the middle of the leg, with a circle spanning the leg and an arrow [46]. A stated distance moves it that far along the leg instead [55].
 - Dead reckoning ("moved 300 metres north") moves from the last position; the circle grows with each leg until a report names a place again [54].
 - A position that is an estimate only wins "nearest" if that still holds when it is off by its full radius [47].
+- A report about a track is placed by the same rules, measured from the observer, and never moves the speaker. Who the report is about and whose the track is are read from the words in code; when the model and the words disagree, the app asks [147 to 149].

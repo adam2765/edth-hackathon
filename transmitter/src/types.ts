@@ -9,6 +9,13 @@ export type { JoinReply, MissionListReply, MissionSummary, UnitPosition };
 export type AreaId = "vincennes" | "kyiv" | "izium";
 export type Lang = "en" | "fr" | "uk";
 
+/** A stretch of speech as Whisper on the phone timed it: t0 and t1 as whisper.rn gives them. */
+export interface PhoneSegment {
+  text: string;
+  t0: number;
+  t1: number;
+}
+
 export interface ScenarioStep {
   id: string;
   /** Seconds from the start of the scenario. */
@@ -47,6 +54,9 @@ export interface Utterance {
   mime?: string;
   /** The words, when speech-to-text already ran on the phone. */
   text?: string;
+  /** For tests ("Send clips"): the recording beside the words, and Whisper's timed stretches of it. */
+  clipUri?: string;
+  segments?: PhoneSegment[];
   /** Epoch ms. */
   startedAt: number;
   endedAt: number;
@@ -61,6 +71,8 @@ export interface ReportReply {
   timings_ms: { stt: number; extract: number; resolve: number; total: number };
   /** Set when the coordinator saved the report for the receiver; send it back with the answer to a question. */
   report_id?: string;
+  /** The file name, when the coordinator kept the clip for tests (KEEP_CLIPS=1). */
+  clip?: string;
   error?: string;
   /** With an error: the mission has ended, so the phone should join another. */
   ended?: boolean;

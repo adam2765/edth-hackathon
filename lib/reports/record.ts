@@ -1,6 +1,7 @@
 /** Saving to the shared record: missions, joins, reports, answers and ends. Server only. */
 import type { AreaId } from "@/lib/geo/areas";
 import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
+import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
 import { positionFromPlacement, positionFromReport } from "./position";
@@ -17,6 +18,7 @@ import type {
   ReportEntry,
   StartPoint,
   Timings,
+  TrackSighting,
 } from "./types";
 
 /** A refusal, with the HTTP status the endpoint returns. `ended` and `taken` let a phone say why. */
@@ -124,13 +126,14 @@ export async function deleteMission(session: string): Promise<{ ok: true } | Ref
 // ---- reports ----
 
 /** What a report in a session works with: the mission's area, and the unit's last position from the log. */
-export type ReportContext = { ok: true; area: AreaId; lastPosition: LastPosition | null; inMission: boolean };
+export type ReportContext = { ok: true; area: AreaId; lastPosition: LastPosition | null; inMission: boolean; tracks: KnownTrack[] };
 
 /**
  * For a report to a mission: refuses an unknown or ended mission, and gives the area and the
  * speaker's last position from the log (their latest fix, else the start point). The phone's own
  * `lastPosition` is then ignored, so the receiver and the resolver agree on where a unit is.
  * With no record kept, the phone's area and position are used as before.
+ * It also lists the mission's tracks, so a number the speaker says ("Track 3") can be checked.
  */
 export async function reportContext(
   session: string,
@@ -139,12 +142,13 @@ export async function reportContext(
   now = Date.now(),
 ): Promise<ReportContext | Refusal> {
   const store = getStore();
-  if (store.kind === "none") return { ok: true, ...fallback, inMission: false };
+  if (store.kind === "none") return { ok: true, ...fallback, inMission: false, tracks: [] };
   const { entries } = await store.list(session);
   const mission = missionOf(entries);
   if (!mission) return NO_MISSION;
   if (endOf(entries)) return ENDED;
-  const u = foldLog(entries).units.find((x) => x.callsign === callsign);
+  const state = foldLog(entries);
+  const u = state.units.find((x) => x.callsign === callsign);
   let lastPosition: LastPosition | null = null;
   if (u?.position && u.positionTs != null) {
     // The street and the way it was going let "the next crossing" be found (decision 117).
@@ -153,7 +157,7 @@ export async function reportContext(
   } else if (mission.start) {
     lastPosition = { ...toLastPosition(startPosition(mission.start), now), ...(mission.start.category === "street" ? { street: mission.start.id } : {}) };
   }
-  return { ok: true, area: mission.area, lastPosition, inMission: true };
+  return { ok: true, area: mission.area, lastPosition, inMission: true, tracks: state.tracks.map((t) => ({ n: t.n })) };
 }
 
 export interface ReportInput {
@@ -170,13 +174,22 @@ export interface ReportInput {
   timings_ms: Timings;
 }
 
+/** A saved report: its id, and the resolution as saved, which for a track now carries its number. */
+export interface SavedReport {
+  id: string;
+  resolution: Resolution;
+}
+
 /**
- * Saves one report and returns its id, or null when this coordinator keeps no record or the
- * mission ended while the report was being worked out. A report sent twice (same call sign, `seq`
- * and client time) is saved once and gets the first id back. A call sign that reports without
- * having joined joins with that report.
+ * Saves one report, or returns null when this coordinator keeps no record or the mission ended
+ * while the report was being worked out. A report sent twice (same call sign, `seq` and client
+ * time) is saved once and gets the first one back. A call sign that reports without having joined
+ * joins with that report.
+ *
+ * A report about a track gets the track's number here, inside the lock, so two phones reporting
+ * at once cannot be given the same one: the number the speaker named, or the next free one.
  */
-export async function recordReport(input: ReportInput, now = Date.now()): Promise<string | null> {
+export async function saveReport(input: ReportInput, now = Date.now()): Promise<SavedReport | null> {
   const store = getStore();
   if (store.kind === "none") return null;
   return withSessionLock(input.session, async () => {
@@ -184,8 +197,8 @@ export async function recordReport(input: ReportInput, now = Date.now()): Promis
     const mission = missionOf(entries);
     if (endOf(entries)) return null;
     if (input.seq != null && input.clientTs != null) {
-      const dup = entries.find((e) => e.kind === "report" && e.callsign === input.callsign && e.seq === input.seq && e.clientTs === input.clientTs);
-      if (dup) return dup.id;
+      const dup = entries.find((e): e is ReportEntry => e.kind === "report" && e.callsign === input.callsign && e.seq === input.seq && e.clientTs === input.clientTs);
+      if (dup) return { id: dup.id, resolution: dup.resolution };
     }
     if (mission && !joinedAlready(entries, input.callsign)) {
       const join: JoinEntry = {
@@ -199,10 +212,36 @@ export async function recordReport(input: ReportInput, now = Date.now()): Promis
       };
       await store.append(join);
     }
-    const entry: ReportEntry = { kind: "report", id: newEntryId(now), ts: now, ...input, position: positionFromReport(input.resolution, input.intent) };
+    let resolution = input.resolution;
+    let track: TrackSighting | null = null;
+    const t = resolution.track;
+    // A report that could not be placed opens no track: there is nothing to number yet.
+    if (t && resolution.status !== "unresolved") {
+      const n = t.n ?? Math.max(0, ...entries.map((e) => (e.kind === "report" && e.track ? e.track.n : 0))) + 1;
+      resolution = input.intent ? withTrackNumber(resolution, n, input.intent) : { ...resolution, track: { ...t, n } };
+      const from = input.lastPosition;
+      track = {
+        n,
+        affiliation: t.affiliation,
+        kind: t.kind,
+        count: t.count,
+        text: t.text,
+        heading: t.heading,
+        position: t.placement ? positionFromPlacement(t.placement, t.label ?? "position") : null,
+        from: from ? { lat: from.lat, lon: from.lon } : null,
+      };
+    }
+    // A report about a track never moves the speaker.
+    const position = t ? null : positionFromReport(resolution, input.intent);
+    const entry: ReportEntry = { kind: "report", id: newEntryId(now), ts: now, ...input, resolution, position, ...(track ? { track } : {}) };
     await store.append(entry);
-    return entry.id;
+    return { id: entry.id, resolution };
   });
+}
+
+/** As `saveReport`, for callers that only need the report's id. */
+export async function recordReport(input: ReportInput, now = Date.now()): Promise<string | null> {
+  return (await saveReport(input, now))?.id ?? null;
 }
 
 function joinedAlready(entries: LogEntry[], callsign: string): boolean {
@@ -224,12 +263,15 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     if (earlier) return { ok: true, entry: earlier };
     if (endOf(entries)) return ENDED;
     let position = null;
+    // A question about a track: the choice places the track, and the speaker stays where they are.
+    let track: AnswerEntry["track"] = report.track ? { n: report.track.n, position: null } : null;
     if (choice !== null) {
       const c = report.resolution.status === "ambiguous" ? report.resolution.candidates.find((x) => x.id === choice) : undefined;
       if (!c) return { ok: false, status: 400, error: "That choice was not offered." };
-      position = positionFromPlacement(c.placement, c.name);
+      if (track) track = { n: track.n, position: c.track_placement ? positionFromPlacement(c.track_placement, c.name) : null };
+      else position = positionFromPlacement(c.placement, c.name);
     }
-    const entry: AnswerEntry = { kind: "answer", id: newEntryId(now), session, callsign: report.callsign, ts: now, report_id: reportId, choice, position };
+    const entry: AnswerEntry = { kind: "answer", id: newEntryId(now), session, callsign: report.callsign, ts: now, report_id: reportId, choice, position, ...(track ? { track } : {}) };
     await store.append(entry);
     return { ok: true, entry };
   });

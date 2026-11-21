@@ -23,6 +23,8 @@ components/Receiver.tsx     the receiver at /receiver: shared map, units, feed, 
 lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
+lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report is about, whose a track is, where it is
+lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
@@ -54,6 +56,7 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - The language model never produces coordinates. It extracts intent; `lib/geo/resolver.ts` places it against the gazetteer. Do not add a path where a model output becomes a position.
 - The app never reads the phone's GPS.
 - When a report is ambiguous, ask back. Do not add silent guesses.
+- Tracks are for reconnaissance only (decision 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between a unit and a track: no range check, no pairing, no "target" wording.
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).
 - Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours.
 - Secrets live in env vars only. The repo is public.

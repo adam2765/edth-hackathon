@@ -7,7 +7,7 @@ import * as Device from "expo-device";
 import { Directory, File, Paths } from "expo-file-system";
 import { initWhisper, type WhisperContext } from "whisper.rn";
 import hints from "./hints.generated.json";
-import type { AreaId } from "./types";
+import type { AreaId, PhoneSegment } from "./types";
 
 export type SttMode = "server" | "phone-base" | "phone-small";
 export type PhoneMode = Exclude<SttMode, "server">;
@@ -63,6 +63,8 @@ export interface PhoneTranscript {
   text: string;
   language: string | null;
   ms: number;
+  /** Timed stretches, for test clips: loudness and whispering are measured per stretch. */
+  segments: PhoneSegment[];
 }
 
 /** Transcribes a 16 kHz mono WAV file on the phone. Loads the model on first use. */
@@ -77,5 +79,6 @@ export async function transcribeOnPhone(mode: PhoneMode, wavUri: string, opts: {
   const t0 = Date.now();
   const { promise } = loaded.context.transcribe(wavUri, { language: opts.language ?? "auto", prompt: opts.prompt || undefined, maxThreads: 4 });
   const r = await promise;
-  return { text: r.result.trim(), language: r.language || null, ms: Date.now() - t0 };
+  const segments = (r.segments ?? []).map((s) => ({ text: s.text.trim(), t0: s.t0, t1: s.t1 }));
+  return { text: r.result.trim(), language: r.language || null, ms: Date.now() - t0, segments };
 }
