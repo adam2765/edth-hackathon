@@ -202,6 +202,25 @@ describe("placing a track", () => {
     expect(r.track?.placement?.pin?.lon).toBeGreaterThan(CASTLE.lon);
   });
 
+  it("the compass word that says where it is is not also its heading", () => {
+    // The model's reading on 21 Nov: "east" as where it is and as the way it moves.
+    const said = track({ kind: "other", distance_m: 1000, direction: "east", track_kind: "drone_team", track_text: "Hostel", track_heading: "east" });
+    const r = resolveReport({ ...base, intent: said, transcript: "Hostel Drone 1 km east", lastPosition: at(CASTLE) });
+    expect(r.status).toBe("resolved");
+    expect(r.track).toMatchObject({ kind: "drone", heading: null, label: "1000 m east of ALPHA 1" });
+    expect(r.evidence.detail).toMatch(/"east" is where it is, not the way it moves/);
+    // A word for moving keeps it; so does a heading that differs from where it is.
+    const moving = resolveReport({ ...base, intent: said, transcript: "Hostile drone 1 km east, moving east", lastPosition: at(CASTLE) });
+    expect(moving.track?.heading).toBe("east");
+    const other = resolveReport({ ...base, intent: { ...said, track_heading: "north" }, transcript: "Hostile drone 1 km east going north", lastPosition: at(CASTLE) });
+    expect(other.track?.heading).toBe("north");
+    // With a place, "moving east" stays a heading.
+    const placed = resolveReport({ ...base, intent: track({ landmark_name: "Avenue de Paris", landmark_category: "street", relation: "at", track_kind: "vehicle", track_heading: "east" }), transcript: "Two enemy vehicles on Avenue de Paris, moving east", lastPosition: at(CASTLE) });
+    expect(placed.track?.heading).toBe("east");
+    const french = resolveReport({ ...base, intent: { ...said, track_heading: "east" }, transcript: "Drone ennemi à 1 km à l'est, il se dirige vers l'est", lastPosition: at(CASTLE) });
+    expect(french.track?.heading).toBe("east");
+  });
+
   it("asks when the observer has no position, or only a direction was said", () => {
     const noStart = resolveReport({ ...base, intent: track({ distance_m: 300, direction: "north" }), transcript: "Drone 300 metres north of me", lastPosition: null });
     expect(noStart).toMatchObject({ status: "unresolved", evidence: { rule: "dead_reckoning_no_start" } });

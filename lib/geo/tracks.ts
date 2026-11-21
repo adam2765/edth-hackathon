@@ -117,6 +117,21 @@ const ON_ITS_WAY: Lexicon = {
   phrases: ["en route", "on its way", "on the way", "в бік"],
 };
 
+/**
+ * Words for a thing on the move. "Drone 1 km east" says where it is; the model has also given
+ * "east" as its heading (21 Nov). A heading that is the same compass word as where it is counts
+ * only with one of these: "1 km east, moving east".
+ */
+const MOVING: Lexicon = {
+  words: [
+    "moving", "moves", "moved", "heading", "headed", "heads", "going", "goes", "travelling", "traveling", "flying", "flies", "driving", "drives",
+    "advancing", "advances", "retreating", "withdrawing", "bound", "northbound", "southbound", "eastbound", "westbound",
+    "roule", "roulent", "vole", "volent", "avance", "avancent", "dirige", "dirigent", "deplace", "deplacent", "recule", "reculent",
+  ],
+  stems: ["руха", "прямує", "прямують", "летить", "летять", "летит", "летят", "їде", "їдуть", "едет", "едут", "движ", "наступа", "відход", "отход", "наближа", "приближа"],
+  phrases: ["en route", "on its way", "on the way", "в бік"],
+};
+
 /** The word a track is named by: "Track 3", "Piste 3", "Об'єкт 3". */
 const DESIGNATOR: Lexicon = { words: ["track", "piste"], stems: ["обєкт", "объект", "трек"] };
 const NUMBER_FILLER = new Set(["number", "no", "n", "numero", "num", "номер"]);
@@ -286,6 +301,17 @@ function bearingSaid(intent: Intent): Direction | null {
   return intent.relation && /_of$/.test(intent.relation) ? (intent.relation.replace(/_of$/, "") as Direction) : null;
 }
 
+/**
+ * The way the thing is moving. The same compass word as where it is ("drone 1 km east") is only a
+ * heading when a word for moving was said ("1 km east, moving east"); a different one always is.
+ */
+function headingSaid(intent: Intent, transcript: string): Direction | null {
+  const heading = intent.track_heading ?? null;
+  if (!heading || heading !== bearingSaid(intent)) return heading;
+  const text = fold(transcript);
+  return says(MOVING, text.split(" "), text) ? heading : null;
+}
+
 /** What the phone says back: "Track 3, unknown vehicle, Mairie de Vincennes." */
 export function sayBack(res: Resolution, intent: Intent): string | undefined {
   const t = res.track;
@@ -394,6 +420,8 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   }
 
   const count = Number.isInteger(intent.track_count) && intent.track_count! > 0 && intent.track_count! < 1000 ? intent.track_count! : null;
+  const heading = headingSaid(intent, transcript);
+  const why = heading === (intent.track_heading ?? null) ? reading.why : `${reading.why}; "${intent.track_heading}" is where it is, not the way it moves`;
   const track: TrackResolution = {
     n: reading.ref,
     opened: reading.ref == null,
@@ -401,18 +429,18 @@ export function resolveReport(input: ReportResolveInput): Resolution {
     kind: reading.kind,
     count,
     text: intent.track_text?.trim() || null,
-    heading: intent.track_heading ?? null,
+    heading,
   };
   const ask = (rule: string, detail: string, which: TrackPrompt): Resolution => ({
     status: "unresolved",
     candidates: [],
     question: prompt(lang, which, bearingSaid(intent)),
-    evidence: { rule, detail: `${reading.why}; ${detail}` },
+    evidence: { rule, detail: `${why}; ${detail}` },
     track,
   });
 
   if (reading.ref != null && !(input.tracks ?? []).some((t) => t.n === reading.ref)) {
-    return { status: "unresolved", candidates: [], question: noSuchTrack(lang, reading.ref), evidence: { rule: "track_unknown", detail: `${reading.why}; the mission has no track ${reading.ref}` }, track };
+    return { status: "unresolved", candidates: [], question: noSuchTrack(lang, reading.ref), evidence: { rule: "track_unknown", detail: `${why}; the mission has no track ${reading.ref}` }, track };
   }
 
   const hasPlace = !!(intent.landmark_name?.trim() || intent.landmark_name_lemma?.trim() || intent.landmark_category);
@@ -420,7 +448,7 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   if (!hasPlace && !hasMove) {
     // "Track 3 is hostile": nothing about where, so only what the track is changes.
     if (reading.ref != null && (track.affiliation || track.kind || track.count)) {
-      return { status: "resolved", candidates: [], evidence: { rule: "track_described", detail: `${reading.why}; no place said, so the track stays where it is` }, track };
+      return { status: "resolved", candidates: [], evidence: { rule: "track_described", detail: `${why}; no place said, so the track stays where it is` }, track };
     }
     return ask("track_no_place", "nothing says where it is", "where");
   }
@@ -438,7 +466,7 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   // unless blocks are counted that way: "two blocks east on Avenue de Paris".
   const where: Intent = { ...intent, kind: "position", relation, direction: hasPlace && !blocksSaid(transcript) ? null : intent.direction };
   const r = resolve({ ...input, intent: where });
-  const evidence = { ...r.evidence, detail: `${reading.why}; ${r.evidence.detail}` };
+  const evidence = { ...r.evidence, detail: `${why}; ${r.evidence.detail}` };
 
   if (r.status === "ambiguous") return { status: "ambiguous", candidates: r.candidates.map(forTrack), question: r.question, evidence, track };
   // Blocks that could not be counted: how far. From a place, the resolver's question names it.
