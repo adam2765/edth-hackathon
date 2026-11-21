@@ -4,15 +4,13 @@ import Constants from "expo-constants";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
-import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
+import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
-import { startPcm, stopPcm } from "./src/pcm";
 import { discoverHosts, serverOrigin, type FoundHost } from "./src/hosts";
 import { CoordinatorError, callsignKey, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
-import { ensureModel, hasModel, hintPrompt, transcribeOnPhone } from "./src/stt";
 import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button, Segmented } from "./src/ui/controls";
@@ -120,22 +118,8 @@ function Transmitter() {
   const [realTime, setRealTime] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
   const [playClips, setPlayClips] = useState(false);
-  const useHints = true; // Fixed default for the development speech-to-text stub.
   const [developer, setDeveloper] = useState(false);
   useEffect(() => { writeSaved({ ...saved, server: serverUrl }); }, [saved, serverUrl]);
-  // Tests only: send each recording beside the phone's words, for the coordinator to keep (KEEP_CLIPS=1).
-  const [sendClips, setSendClips] = useState(false);
-  const [modelReady, setModelReady] = useState(hasModel);
-  const [modelError, setModelError] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    ensureModel().then(() => {
-      if (!cancelled) setModelReady(true);
-    }).catch((error: unknown) => {
-      if (!cancelled) setModelError(error instanceof Error ? error.message : "Speech setup failed. Reopen the app.");
-    });
-    return () => { cancelled = true; };
-  }, []);
   /** The coordinator's missions; null when it has none to offer (an older deployment). */
   const [missionList, setMissionList] = useState<MissionListReply | null>(null);
   const [joined, setJoined] = useState<{ code: string; name: string; area: AreaId; callsign: string } | null>(null);
@@ -164,9 +148,7 @@ function Transmitter() {
   const releasedRef = useRef(false);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelScenarioRef = useRef(false);
-  /** Phone speech-to-text times of the current scenario run, for the summary line. */
-  const phoneTimesRef = useRef<number[]>([]);
-  const recorder = useAudioRecorder(SPEECH_RECORDING_WAV);
+  const recorder = useAudioRecorder(SPEECH_RECORDING);
 
   // Probe the USB/Metro host and remembered hosts, then their LAN discovery lists.
   useEffect(() => {
@@ -280,7 +262,7 @@ function Transmitter() {
    * apply the reply, speak a question back. Returns the reply and the log entry id.
    */
   const handleUtterance = useCallback(
-    async (u: Utterance, opts: { area: AreaId; language: Lang; scripted?: string; quiet?: boolean; phoneMs?: number }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
+    async (u: Utterance, opts: { area: AreaId; language: Lang; scripted?: string; quiet?: boolean }): Promise<{ reply: ReportReply; entryId: string; roundTripMs: number } | null> => {
       if (needsConnect || needsJoin || reach !== "ok") { setStatus("Waiting for connection to the newest running mission."); return null; }
       const entryId = `${u.callsign}-${u.seq}-${u.endedAt}`;
       try {
@@ -288,7 +270,7 @@ function Transmitter() {
         const res = reply.resolution;
         const lang = langOf(reply, opts.language);
         const t = reply.timings_ms;
-        const timings = `${opts.phoneMs != null ? `phone STT ${opts.phoneMs} · ` : ""}${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms${reply.clip ? " · clip kept" : ""}`;
+        const timings = `${t.stt ? `STT ${t.stt} · ` : ""}extract ${t.extract} · server ${t.total} · round trip ${roundTripMs} ms${reply.clip ? " · clip kept" : ""}`;
         const base = { id: entryId, ts: u.endedAt, callsign: u.callsign, source: u.source, scripted: opts.scripted, transcript: reply.transcript || "(no words heard)", timings };
         if (res.status === "resolved" && res.track) {
           // A report about a track, something this unit saw: this unit does not move. The
@@ -373,17 +355,8 @@ function Transmitter() {
 
       // Optional: let the room hear the clip first, as if someone had just said it.
       if (playClips) await playClipAloud(step.audio);
-      // Speech-to-text on the phone: only the words travel. Each step says its own language.
-      const heard = await transcribeOnPhone(await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined, language: step.lang });
-      const phoneMs = heard.ms;
-      phoneTimesRef.current.push(heard.ms);
-      if (!heard.text) {
-        console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "phone-base", hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
-        setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "the phone heard nothing" } }));
-        return false;
-      }
-      const u: Utterance = { ...base, text: heard.text, endedAt: Date.now() };
-      const out = await handleUtterance(u, { area: sc.area, language: step.lang, scripted: step.text, quiet: !speakReplies, phoneMs });
+      const u: Utterance = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
+      const out = await handleUtterance(u, { area: sc.area, language: step.lang, scripted: step.text, quiet: !speakReplies });
       if (!out) {
         setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "no answer from the coordinator" } }));
         return false;
@@ -397,11 +370,11 @@ function Transmitter() {
       const verdict = evaluate(step, out.reply, chosen);
       if (manual && verdict.pass && chosen) verdict.note = "asked a question";
       // One line per step in the dev-server log, so runs in different modes can be compared.
-      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "phone-base", hints: useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
+      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "coordinator", said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
       return verdict.pass;
     },
-    [handleUtterance, choose, speakReplies, useHints, playClips],
+    [handleUtterance, choose, speakReplies, playClips],
   );
 
   const playScenario = useCallback(async () => {
@@ -413,7 +386,6 @@ function Transmitter() {
     setPositionBoth(null); // a scenario starts from a clean slate, like a fresh page
     setStepResults((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith(`${sc.id}/`))));
     const started = Date.now();
-    phoneTimesRef.current = [];
     let passed = 0;
     for (const step of sc.steps) {
       if (cancelScenarioRef.current) break;
@@ -425,9 +397,7 @@ function Transmitter() {
       if (await runStep(sc, step)) passed++;
     }
     // Shown on screen so the figure can be read off a phone that is not attached to a computer.
-    const times = [...phoneTimesRef.current].sort((a, b) => a - b);
-    const speed = times.length ? ` Phone speech-to-text: median ${times[Math.floor(times.length / 2)]} ms, slowest ${times[times.length - 1]} ms.` : "";
-    setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.${speed}`);
+    setStatus(cancelScenarioRef.current ? "Scenario stopped." : `${sc.title}: ${passed} of ${sc.steps.length} steps as expected.`);
     setBusyBoth("idle");
   }, [effectiveScenarioId, realTime, runStep]);
 
@@ -444,10 +414,6 @@ function Transmitter() {
     [runStep],
   );
 
-  // ---------- speech-to-text on the phone ----------
-  const modelMissing = !modelReady;
-  const androidPcm = Platform.OS === "android";
-
   // ---------- source: microphone, hold to talk ----------
   const stopAndSend = useCallback(async () => {
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
@@ -455,32 +421,23 @@ function Transmitter() {
     setBusyBoth("sending");
     const endedAt = Date.now();
     try {
-      const pcmUri = androidPcm ? await stopPcm() : null;
-      if (!androidPcm) await recorder.stop();
+      await recorder.stop();
       // Hand the audio session back so the spoken question uses the loudspeaker, not the earpiece.
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      const uri = androidPcm ? pcmUri : recorder.uri;
+      const uri = recorder.uri;
       if (!uri || endedAt - recordStartRef.current < MIN_CLIP_MS) {
         setStatus("Too short. Hold the button while you speak.");
         return;
       }
       const base = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic" as const, startedAt: recordStartRef.current, endedAt };
-      setStatus("Transcribing on the phone…");
-      const heard = await transcribeOnPhone(uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
-      // With "Send clips" on, a clip the phone heard no words in still goes: a missed whisper is a result.
-      if (!heard.text && !sendClips) {
-        setStatus("The phone heard nothing. Try again.");
-        return;
-      }
-      setStatus("Sending…");
-      const clip = sendClips ? { clipUri: uri, segments: heard.segments } : {};
-      await handleUtterance({ ...base, text: heard.text || undefined, ...clip }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
+      setStatus("Sending audio to the coordinator…");
+      await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language, quiet: !speakReplies });
     } catch (e) {
       setStatus(e instanceof Error ? `Recording failed: ${e.message}` : "Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, androidPcm, useHints, sendClips]);
+  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -495,12 +452,8 @@ function Transmitter() {
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      if (androidPcm) {
-        await startPcm();
-      } else {
-        await recorder.prepareToRecordAsync(SPEECH_RECORDING_WAV);
-        recorder.record();
-      }
+      await recorder.prepareToRecordAsync(SPEECH_RECORDING);
+      recorder.record();
       recordStartRef.current = Date.now();
       setBusyBoth("recording");
       setStatus("Listening… release to send.");
@@ -513,7 +466,7 @@ function Transmitter() {
       setStatus(e instanceof Error ? `Could not open the microphone: ${e.message}` : "Could not open the microphone.");
       setBusyBoth("idle");
     }
-  }, [recorder, stopAndSend, androidPcm]);
+  }, [recorder, stopAndSend]);
 
   const onPressOut = useCallback(() => {
     releasedRef.current = true;
@@ -578,11 +531,6 @@ function Transmitter() {
         <Text style={styles.noticeText}>{joinError ?? (newestMission ? `Connecting to ${newestMission.name}…` : "No running mission. Waiting for the server to start one.")}</Text>
         {!newestMission ? <Button label="Waiting for mission" disabled onPress={() => {}} /> : null}
       </View>
-    ) : modelMissing ? (
-      <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
-        <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
-        <Text style={styles.noticeText}>{modelError ?? "Preparing speech recognition…"}</Text>
-      </View>
     ) : null;
 
   return (
@@ -629,7 +577,7 @@ function Transmitter() {
         {notice}
 
         <View style={styles.talk}>
-          <TalkButton state={busy} blocked={needsConnect ? "Connect first" : reach !== "ok" ? "Coordinator offline" : needsJoin ? (newestMission ? "Connecting to mission" : "Waiting for mission") : modelMissing ? (modelError ? "Speech unavailable" : "Preparing speech") : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <TalkButton state={busy} blocked={needsConnect ? "Connect first" : reach !== "ok" ? "Coordinator offline" : needsJoin ? (newestMission ? "Connecting to mission" : "Waiting for mission") : null} onPressIn={onPressIn} onPressOut={onPressOut} />
           <View style={styles.readout}>
             <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
               {asking ? "The coordinator needs an answer." : status}
@@ -659,7 +607,7 @@ function Transmitter() {
             onSelect={setScenarioId}
             results={stepResults}
             running={busy === "scenario"}
-            blocked={modelMissing || needsConnect || needsJoin || reach !== "ok" || (busy !== "idle" && busy !== "scenario")}
+            blocked={needsConnect || needsJoin || reach !== "ok" || (busy !== "idle" && busy !== "scenario")}
             onPlay={playScenario}
             onStop={() => (cancelScenarioRef.current = true)}
             onSendStep={sendOneStep}
@@ -688,8 +636,6 @@ function Transmitter() {
         reach={reach}
         developer={developer}
         onDeveloper={setDeveloper}
-        sendClips={sendClips}
-        onSendClips={setSendClips}
         speakReplies={speakReplies}
         onSpeakReplies={setSpeakReplies}
         playClips={playClips}

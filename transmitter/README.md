@@ -30,7 +30,7 @@ The receiver flags recent reports arriving in another mission and can open that 
 
 Setup contains call sign, language, detected Hosts, spoken questions and Developer tools.
 Developer tools contains host override, scenarios, test clips and technical timings.
-The mission sets the area. Phone speech-to-text remains a fixed development stub.
+The mission sets the area. Phone speech-to-text is replaced by audio capture and coordinator transcription.
 
 ## Run it
 
@@ -46,7 +46,7 @@ Mac with Xcode; free Apple provisioning expires after seven days. No EAS.
 
 Advanced developers can still run the component commands listed in
 [setup](../docs/setup.md#advanced-console-use). Phone JavaScript is served by Metro;
-only native changes need a new native binary. Voice-to-text stays a development stub.
+only native changes need a new native binary. Voice-to-text runs on the coordinator.
 
 ## Which coordinator it talks to
 
@@ -59,24 +59,18 @@ Setup → Hosts lists discovered reachable coordinators. A manual override remai
 Developer tools. No new native phone dependency is needed for discovery: the existing
 Metro/USB host browses LAN advertisements and the phone verifies each candidate.
 
-## Speech-to-text on the phone
+## Speech-to-text on the coordinator
 
-This is a development stub, kept at fixed defaults. It is not a future provider platform.
+Microphone and scenario utterances send audio through the same report path. The phone
+records 16 kHz mono AAC/m4a and sends it with the selected language; it does not load a
+speech model or transcribe. In local mode, the coordinator uses Whisper large-v3-turbo
+through whisper-server with Silero VAD and ffmpeg conversion. Hosted mode uses Mistral.
+A report counts as successful only after the coordinator acknowledges saving it.
 
-Microphone and scenario reports always use Whisper base (`ggml-base-q5_1`), on Android
-and iOS. There is no mode selector or download button, and no native server-transcription
-fallback. The coordinator receives text; optional test clips still use the separate `clip` field.
-
-Run `npm run setup` in this folder during installation. It fetches the model on the Mac,
-checks its size and SHA-256, and keeps it in ignored `assets/models/`. `npm run start`,
-`npm run android` and `npm run ios` also prepare it automatically. Use those npm commands
-rather than calling Expo directly, or run setup first. A fresh clone needs the one-time
-57 MB download; the model is not committed to Git.
-
-Metro bundles the model as an asset. At first launch the app automatically copies it into
-its documents; development builds receive it from Metro over the existing USB/network link.
-The phone needs no Hugging Face access. Existing complete base models are reused.
-Native builds and exports must run setup before bundling, on either platform.
+Build prepares the host’s models. Start/Stop manage the speech server with the other
+components. The native package dependencies are retained for compatibility with installed
+builds; the active recording and scenario paths no longer import the phone transcriber.
+No speech mode, model download or test-clip selector is needed on the phone.
 
 ### Historical model comparison
 
@@ -102,16 +96,9 @@ A step counts when the coordinator's answer is the expected one.
   this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
 - The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
 
-Whisper base transcribes both scenario clips and the microphone on Android and iOS. Android uses
-the local Expo module in `modules/pcm-recorder` to write 16 kHz mono 16-bit PCM WAV with
-`AudioRecord`; iOS uses expo-audio. Both call the same Whisper function and send text through
-the existing report path. Rebuild the Android development app after adding the native module.
-
-Checked on 21 Nov on a Samsung Galaxy S10 (SM-G973U): microphone audio reaches the offline
-coordinator as text (`timings_ms.stt: 0`). Two live reports, "I am at the town hall in Vincennes",
-placed the unit at Mairie de Vincennes (±31 m) on the receiver. This verifies build and connections;
-recognition accuracy, old question cards and transcription speed remain separate runtime work.
-The iOS path was not tested in this Android change.
+The measurements above describe the old on-phone path. They are not measurements of
+the merged coordinator path. Live microphone recognition on this Mac/phone pair remains
+to check after the coordinator tools and models are installed.
 
 ## What you hear
 

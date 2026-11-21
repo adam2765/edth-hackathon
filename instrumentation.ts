@@ -16,8 +16,11 @@ export async function register() {
     setReady(!!process.env.MISTRAL_API_KEY || !!process.env.FEATHERLESS_API_KEY);
     return;
   }
-  console.log("[providers] Offline mode: extraction through Ollama on this computer; no key needed.");
+  console.log("[providers] Offline mode: speech-to-text through Whisper and extraction through Ollama on this computer; no key needed.");
   const { warmUpExtractor } = await import("./lib/providers/extractor");
   const { AREAS } = await import("./lib/geo/areas");
+  const { checkLocalTranscriber } = await import("./lib/providers/transcriber");
+  // Speech readiness is checked live by /api/health, so a later speech-server start can recover.
+  void checkLocalTranscriber();
   void warmUpExtractor(Object.values(AREAS).map((a) => a.place)).then(setReady);
 }

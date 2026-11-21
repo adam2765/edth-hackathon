@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { NoLocalTranscriberError, getTranscriber } from "@/lib/providers/transcriber";
+import { LocalTranscriberDownError, getTranscriber } from "@/lib/providers/transcriber";
 import { getExtractor, pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
@@ -85,8 +85,8 @@ export async function POST(req: Request) {
 
   const audio = form.get("audio");
   const textIn = form.get("text");
-  // Test clips: the phone's own recording and Whisper's timed segments, sent beside its text when
-  // its "Send clips" switch is on. Kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
+  // Legacy developer clients can send a test clip beside text. New phone reports use audio.
+  // Clips are kept only with KEEP_CLIPS=1 (lib/reports/clips.ts).
   const clipIn = form.get("clip");
   const clip = clipIn instanceof Blob && clipIn.size > 0 && clipIn.size <= MAX_AUDIO_BYTES ? clipIn : null;
   const segments = clipSegments(form.get("segments"));
@@ -139,7 +139,8 @@ export async function POST(req: Request) {
     if (audio instanceof Blob && audio.size > 0) {
       if (audio.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Clip too large (1 MB max, about 15 s)." }, { status: 413 });
       const s = performance.now();
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias);
+      // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", bias, { language: pinned });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
@@ -187,9 +188,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ transcript, language, intent, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
   } catch (err) {
     timings.total = Math.round(performance.now() - t0);
-    if (err instanceof NoLocalTranscriberError) {
-      const error = "This coordinator runs offline and cannot turn speech into text yet. Use speech-to-text on the phone, or type the report.";
-      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 501 });
+    if (err instanceof LocalTranscriberDownError) {
+      console.warn(`[stt] ${err.message}. Run \`npm run build\` then \`npm start\`.`);
+      const error = "Speech-to-text on the coordinator is not ready. Start the servers with npm start; run npm run build first if speech models are missing.";
+      return NextResponse.json({ error, transcript, timings_ms: timings }, { status: 503 });
     }
     console.error("report failed", err);
     return NextResponse.json({ error: "Processing failed. Try again or type the report.", transcript, timings_ms: timings }, { status: 502 });

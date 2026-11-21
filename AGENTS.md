@@ -58,7 +58,7 @@ npm run eval:outcomes -- --check   # check the eval's expected outcomes against 
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
 
-A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: only Ollama on the same computer with `ministral-3:3b` (`docs/setup.md`). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
+A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MISTRAL_API_KEY` and network access. Offline mode (`PROVIDER_MODE=local npm run dev -- -p 3117`) needs no key: Ollama with `ministral-3:3b` and whisper.cpp/ffmpeg with the host speech models on the same computer (`docs/setup.md`). Never stop work to wait for a key; use offline mode instead. A sandbox without network can run the tests, not the live pipeline.
 
 ## Rules
 

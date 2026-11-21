@@ -86,5 +86,5 @@ export async function openBrowser(url) {
 // Scan the process table, independent of configured or listening port numbers.
 export async function stopExternalServers(root, ports, env) {
   const { stopProjectProcesses } = await import('./shutdown.mjs');
-  return stopProjectProcesses(root, { env, ollamaPorts: ports.ollama ? [ports.ollama] : [] });
+  return stopProjectProcesses(root, { env, ollamaPorts: ports.ollama ? [ports.ollama] : [], whisperPorts: ports.whisper ? [ports.whisper] : [] });
 }

@@ -9,7 +9,7 @@ Agents never read `.env` files or print keys. Setup does not push or deploy the 
 | Needed for | Tools |
 |---|---|
 | Everyone | Git, Node.js 24.3+ and npm; a current browser |
-| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM) |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper large-v3-turbo and Silero VAD (about 575 MB, checksum-verified by Build) |
 | Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
 | iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
@@ -23,7 +23,8 @@ access. Add your Apple ID in Xcode → Settings → Accounts. Export `APPLE_TEAM
 own `TRANSMITTER_BUNDLE_ID` before starting; do not change app.json for personal signing.
 Check: `xcrun devicectl list devices` lists the phone as available. With a free account,
 trust the developer under Settings → General → VPN & Device Management after installation.
-The install expires after seven days; use Reinstall phone when needed.
+The install expires after seven days; expired signing needs a fresh signed native install
+(see advanced console use).
 
 From the repo root:
 
@@ -34,10 +35,19 @@ npm run setup --prefix transmitter
 ollama pull ministral-3:3b
 ```
 
-Phone setup downloads and verifies the fixed 57 MB Whisper asset once. The web build
-prepares the map worker and browser speech runtime, and tries to fetch a 77 MB Ukrainian
-voice; if that voice is unavailable, the browser uses its system voice. No model download
-or model selector is needed on the phone. These setup downloads require internet.
+The phone records compressed audio and sends it to the coordinator; no speech model is
+prepared or downloaded on the phone. Its existing setup command is now a quick readiness
+notice. Existing native libraries stay compatible, so this change needs a JavaScript reload,
+not a native rebuild. Scenarios use their compressed audio through the same report path.
+
+For local speech, install whisper.cpp and ffmpeg once (on macOS: `brew install whisper-cpp ffmpeg`). Build prepares the pinned Whisper turbo and VAD models on the host, about 575 MB.
+Ask before these system installs and large downloads. Start validates existing models and
+starts whisper-server; it does not download them. `WHISPER_MODEL_FILE` can provide a local
+copy of the pinned turbo model instead of a download.
+
+The web build prepares the map worker and browser speech runtime, and tries to fetch a
+77 MB Ukrainian reply voice. If unavailable, the browser uses its system voice. Setup
+and model downloads need internet; runtime local transcription does not.
 
 ## Daily use
 
@@ -51,7 +61,7 @@ npm stop
 
 - **Build** checks file contents and dependencies. It rebuilds changed components and loads
   the phone app if changed or missing. No connected phone means only the coordinator is built.
-- **Start** stops existing project servers and starts all required servers, including the
+- **Start** stops existing project servers and starts all required servers, including local Whisper speech-to-text and the
   phone’s code server. When ready, it prints the receiver URL and opens it; it does not
   launch the phone app or build code.
 - **Stop** stops project components, the connected phone app, and the internal controller.
@@ -68,7 +78,7 @@ the mission log for replay. Restarting the servers preserves open missions.
 
 Hosts lists discovered reachable servers. The phone automatically follows the newest running mission, switching only between reports. Developer tools has a manual
 address override, scenarios, test clips and timings. The area comes from the mission.
-Voice-to-text on the phone is a fixed development stub, without provider/model controls.
+Voice-to-text is on the coordinator, with no phone provider/model controls.
 
 Android USB uses reverse forwarding; Start restores it without launching the app. On an
 iPhone the app reaches the host’s `.local` name. iPhone builds still need Mac/Xcode and
@@ -86,6 +96,7 @@ component. The three normal commands above remain the daily procedure.
 | Web build | `npm run build:web` |
 | Coordinator | `npm run start:coordinator` |
 | Ollama | `npm run start:ollama` |
+| Local speech-to-text | `npm run start:stt` (after Build prepares models) |
 | Phone code server | `npm run start:phone` |
 | Web development server | `npm run dev -- -p 3117` |
 
@@ -123,5 +134,16 @@ scans processes by checkout path, working directory and parent/child ownership a
 ports, including servers started directly and orphan workers. It requests a clean stop,
 forces termination after a timeout, and rescans before reporting Stopped. Inspection or
 cleanup failure is an error; a controller’s old Stopped flag is never accepted as proof.
-Ollama on the configured local port and project-owned Ollama processes are included;
+Ollama and Whisper on their configured local ports and project-owned model processes are included;
 unrelated services and the shared ADB server are left alone.
+
+To reclaim old speech-model storage on an Android development build, first load the updated
+app, then run this with the phone connected. It removes only the two old model files and
+keeps app settings:
+
+```bash
+adb shell run-as dev.voicetomap.transmitter rm -f files/models/ggml-base-q5_1.bin files/models/ggml-small-q5_1.bin
+```
+
+Whisper keeps upstream port 3118. The private controller uses 3116 and migrates an old
+conflicting setting automatically. The receiver remains on 3117 and Metro on 8082.

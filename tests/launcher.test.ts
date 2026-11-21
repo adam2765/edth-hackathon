@@ -86,7 +86,7 @@ describe("owned processes", () => {
   }, 20_000);
 });
 describe("basic start/stop", () => {
-  it("restarts servers without building or opening the phone, then stops everything", async () => {
+  it.each(["hosted", "local"])("restarts %s servers without building or opening the phone, then stops everything", async (mode) => {
     const root = await fixture();
     await cp(new URL("../scripts/launcher/", import.meta.url), path.join(root, "scripts/launcher"), { recursive: true });
     // OS process discovery is covered by the separate orphan shutdown regression.
@@ -98,7 +98,8 @@ describe("basic start/stop", () => {
     const port = await unusedPort();
     const metroPort = await unusedPort();
     const ollamaPort = await unusedPort();
-    await writeFile(path.join(root, ".run/config.json"), JSON.stringify({ controlPort, port, metroPort, phone: "android", mode: "hosted", open: false }));
+    const whisperPort = await unusedPort();
+    await writeFile(path.join(root, ".run/config.json"), JSON.stringify({ controlPort, port, metroPort, phone: "android", mode, open: false }));
     await writeFile(path.join(root, "scripts/launcher/devices.mjs"), `
       export const toolEnvironment = () => process.env;
       export const listDevices = async () => [{platform:'android',id:'test-phone'}];
@@ -113,11 +114,13 @@ describe("basic start/stop", () => {
     await writeFile(path.join(root, "scripts/launcher/service.mjs"), `
       import {createServer} from 'node:http';
       const server=createServer((req,res)=>{res.writeHead(200);res.end('ready')});
-      server.listen(Number(process.argv[5]),'127.0.0.1');
+      const kind=process.argv[2];
+      const port=kind==='ollama'?new URL(process.env.OLLAMA_URL).port:kind==='whisper'?new URL(process.env.WHISPER_URL).port:process.argv[5];
+      server.listen(Number(port),'127.0.0.1');
       process.on('message',()=>{server.close(()=>process.exit(0));server.closeIdleConnections()});
       process.on('disconnect',()=>process.exit(0));
     `);
-    const child = fork(path.join(root, "scripts/launcher/supervisor.mjs"), [], { stdio: "ignore", env: {...process.env, OLLAMA_URL:`http://127.0.0.1:${ollamaPort}`} });
+    const child = fork(path.join(root, "scripts/launcher/supervisor.mjs"), [], { stdio: "ignore", env: {...process.env, OLLAMA_URL:`http://127.0.0.1:${ollamaPort}`, WHISPER_URL:`http://127.0.0.1:${whisperPort}`, PROVIDER_MODE:mode} });
     processes.push(child);
     const base = `http://127.0.0.1:${controlPort}`;
     await waitFor(() => fetch(`${base}/status`).then((r) => r.ok).catch(() => false), "server control", 5000);
@@ -126,6 +129,7 @@ describe("basic start/stop", () => {
     await waitFor(() => fetch(`${base}/status`).then((r) => r.json()).then((s) => { if (s.error) throw new Error(s.error); return s.status === "Ready"; }), "startup", 5000);
     const first = await fetch(`${base}/status`).then((r) => r.json());
     expect((await fetch(`http://127.0.0.1:${port}/api/health`)).ok).toBe(true);
+    expect(!!first.services.whisper).toBe(mode === "local");
     expect((await act("start")).status).toBe(202);
     await waitFor(() => fetch(`${base}/status`).then((r) => r.json()).then((s) => s.status === "Ready" && s.services.coordinator.pid !== first.services.coordinator.pid), "restart", 5000);
     const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -133,5 +137,6 @@ describe("basic start/stop", () => {
     await exited;
     await expect(fetch(`http://127.0.0.1:${port}/api/health`)).rejects.toThrow();
     await expect(fetch(`${base}/status`)).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${whisperPort}/health`)).rejects.toThrow();
   }, 15_000);
 });

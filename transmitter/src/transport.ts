@@ -19,15 +19,26 @@ export interface SendResult {
   roundTripMs: number;
 }
 
-const TIMEOUT_MS = 20_000;
+// Allow the coordinator speech and extraction timeouts to finish before the phone gives up.
+const TIMEOUT_MS = 60_000;
 
-/** Sends phone-transcribed text, optionally accompanied by a clip kept for testing. */
+/**
+ * Sends microphone/scenario audio to the coordinator for transcription, or developer text.
+ * Legacy clip fields are still accepted for compatibility with older developer clients.
+ */
 export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<SendResult> {
   if (!ctx.session) throw new Error("Join a running mission before reporting.");
   const form = new FormData();
-  if (u.text) form.append("text", u.text);
-  else if (!u.clipUri) throw new Error("Utterance has neither text nor a test clip");
-  if (u.clipUri) {
+  if (u.audioUri) {
+    // Expo's fetch does not take React Native's old `{ uri, name, type }` part; it takes a
+    // file object from expo-file-system, which carries the file's name and type itself.
+    form.append("audio", new File(u.audioUri) as unknown as Blob);
+  } else if (u.text) {
+    form.append("text", u.text);
+  } else if (!u.clipUri) {
+    throw new Error("Utterance has neither audio nor text");
+  }
+  if (u.clipUri && !u.audioUri) {
     form.append("clip", new File(u.clipUri) as unknown as Blob);
     form.append("segments", JSON.stringify(u.segments ?? []));
   }

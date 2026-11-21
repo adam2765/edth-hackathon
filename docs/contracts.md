@@ -124,7 +124,7 @@ A track is something on the map that is not a reporting unit: a unit sees it, or
 
 ## Utterance (transmitter side)
 
-One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scenario, open_mic), phone-transcribed text (or an optional test clip with no words), start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
+One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scenario, open_mic), an audio file URI and MIME type (or text for developer callers), start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
 
 ## Scenario file
 
@@ -136,4 +136,8 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 
 ## Provider interfaces
 
-`Transcriber.transcribe(audio, mime, biasTerms) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`.
+`Transcriber.transcribe(audio, mime, biasTerms, { language? }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`.
+
+In local mode audio goes to loopback whisper-server; an unavailable or loading speech
+service returns HTTP 503. The phone allows up to 60 s for coordinator speech and extraction
+and requires `report_id` before showing a successful saved report.

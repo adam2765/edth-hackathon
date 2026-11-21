@@ -1,9 +1,9 @@
 import { realpath } from 'node:fs/promises';
 import { output, delay } from './processes.mjs';
 
-const runtime = /\b(?:node(?:\.exe)?|next-server|ollama(?:\.exe)?|expo|metro)\b/i;
+const runtime = /\b(?:node(?:\.exe)?|next-server|ollama(?:\.exe)?|whisper-server(?:\.exe)?|expo|metro)\b/i;
 const controller = /[\\/]scripts[\\/]launcher[\\/]supervisor\.mjs(?:\s|$)/;
-const role = /(?:next-server|[\\/]next[\\/]|[\\/]expo[\\/]|[\\/]metro[\\/]|[\\/]jest-worker[\\/]|[\\/]scripts[\\/]launcher[\\/](?:supervisor|service)\.mjs|\bollama(?:\.exe)?\s+(?:serve|runner))/i;
+const role = /(?:whisper-server|next-server|[\\/]next[\\/]|[\\/]expo[\\/]|[\\/]metro[\\/]|[\\/]jest-worker[\\/]|[\\/]scripts[\\/]launcher[\\/](?:supervisor|service)\.mjs|\bollama(?:\.exe)?\s+(?:serve|runner))/i;
 const normalize = (value = '') => {
   const name = value.replace(/\\/g, '/').replace(/\/$/, '');
   return process.platform === 'win32' ? name.toLowerCase() : name;
@@ -12,7 +12,7 @@ const compact = (value) => value.trim().replace(/\s+/g, ' ');
 
 // Port numbers are deliberately irrelevant to ownership. A checkout path or cwd,
 // a server role/listener, and the same user identify roots; their workers follow.
-export function selectProjectProcesses(root, processes, { selfPid = process.pid, parentPid = process.ppid, includeControllers = true, ollamaPorts = [11434] } = {}) {
+export function selectProjectProcesses(root, processes, { selfPid = process.pid, parentPid = process.ppid, includeControllers = true, ollamaPorts = [11434], whisperPorts = [3118] } = {}) {
   const base = normalize(root);
   const byPid = new Map(processes.map((p) => [p.pid, p]));
   const excluded = new Set([selfPid]);
@@ -34,7 +34,7 @@ export function selectProjectProcesses(root, processes, { selfPid = process.pid,
   for (const item of processes) {
     if (excluded.has(item.pid) || item.owned === false || !runtime.test(item.command)) continue;
     if (!includeControllers && controller.test(item.command)) continue;
-    const project = inside(item.cwd) || references(item.command) || (/\bollama(?:\.exe)?\s+serve\b/i.test(item.command) && item.ports?.some((p) => ollamaPorts.includes(p)));
+    const project = inside(item.cwd) || references(item.command) || (/\bollama(?:\.exe)?\s+serve\b/i.test(item.command) && item.ports?.some((p) => ollamaPorts.includes(p))) || (/\bwhisper-server(?:\.exe)?\b/i.test(item.command) && item.ports?.some((p) => whisperPorts.includes(p)));
     if (project && (role.test(item.command) || item.ports?.length)) chosen.add(item.pid);
   }
   let added = true;
@@ -58,7 +58,7 @@ async function lsof(args, env) {
 }
 export async function processSnapshot(env = process.env) {
   if (process.platform === 'win32') {
-    const script = `$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $items=@(Get-CimInstance Win32_Process); $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue); @($items | ForEach-Object { $p=$_; $mine=$false; if ($p.CommandLine -match 'node|next|expo|metro|ollama') { $mine=(Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction SilentlyContinue).Sid -eq $sid }; [pscustomobject]@{pid=[int]$p.ProcessId;ppid=[int]$p.ParentProcessId;started=$p.CreationDate.ToUniversalTime().ToString('o');command=[string]$p.CommandLine;owned=$mine;ports=@($listeners | Where-Object OwningProcess -eq $p.ProcessId | ForEach-Object LocalPort)} }) | ConvertTo-Json -Depth 4 -Compress`;
+    const script = `$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $items=@(Get-CimInstance Win32_Process); $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue); @($items | ForEach-Object { $p=$_; $mine=$false; if ($p.CommandLine -match 'node|next|expo|metro|ollama|whisper') { $mine=(Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction SilentlyContinue).Sid -eq $sid }; [pscustomobject]@{pid=[int]$p.ProcessId;ppid=[int]$p.ParentProcessId;started=$p.CreationDate.ToUniversalTime().ToString('o');command=[string]$p.CommandLine;owned=$mine;ports=@($listeners | Where-Object OwningProcess -eq $p.ProcessId | ForEach-Object LocalPort)} }) | ConvertTo-Json -Depth 4 -Compress`;
     const parsed = JSON.parse(await output('powershell.exe', ['-NoProfile', '-Command', script], { env }));
     return Array.isArray(parsed) ? parsed : [parsed];
   }
@@ -119,7 +119,7 @@ async function askControllerToStop(record, root) {
     } catch { /* The verified process is still checked and terminated below. */ }
   }
 }
-export async function stopProjectProcesses(root, { env = process.env, includeControllers = true, ollamaPorts = [11434], snapshot = () => processSnapshot(env), signal = (p, s) => signalProcess(p, s, env), graceMs = 16_000, forceMs = 2000, selfPid = process.pid, parentPid = process.ppid } = {}) {
+export async function stopProjectProcesses(root, { env = process.env, includeControllers = true, ollamaPorts = [11434], whisperPorts = [3118], snapshot = () => processSnapshot(env), signal = (p, s) => signalProcess(p, s, env), graceMs = 16_000, forceMs = 2000, selfPid = process.pid, parentPid = process.ppid } = {}) {
   root = await realpath(root);
   const pending = new Map();
   const signalled = new Set();
@@ -128,7 +128,7 @@ export async function stopProjectProcesses(root, { env = process.env, includeCon
     const all = await snapshot();
     const alive = new Set(all.filter((p) => !/defunct|^\(node\)$/.test(p.command || '')).map(key));
     for (const id of pending.keys()) if (!alive.has(id)) pending.delete(id);
-    for (const p of selectProjectProcesses(root, all, { selfPid, parentPid, includeControllers, ollamaPorts })) if (alive.has(key(p))) pending.set(key(p), p);
+    for (const p of selectProjectProcesses(root, all, { selfPid, parentPid, includeControllers, ollamaPorts, whisperPorts })) if (alive.has(key(p))) pending.set(key(p), p);
   };
   try { await refresh(); } catch (error) { throw new Error(`Cannot inspect project processes; shutdown is not verified: ${error.message}`); }
   const seen = new Set();

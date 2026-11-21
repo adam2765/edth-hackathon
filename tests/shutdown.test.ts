@@ -35,8 +35,11 @@ describe("orphan shutdown", () => {
       item(21, "next-server", { owned: false, ports: [3117] }),
       item(22, `node ${root}2/node_modules/next/dist/bin/next start`, { cwd: "/elsewhere", ports: [6000] }),
       item(23, "node custom-server.js", { ports: [49152] }),
+      item(24, "whisper-server -m models/turbo.bin --port 49153", { ports: [49153] }),
+      item(25, "whisper-server --port 3118", { cwd: "/elsewhere", ports: [3118] }),
+      item(26, "whisper-server --port 47777", { cwd: "/elsewhere", ports: [47777] }),
     ];
-    expect(selectProjectProcesses(root, processes, { selfPid: 100, parentPid: 90 }).map((p: { pid: number }) => p.pid)).toEqual([10, 11, 12, 13, 23]);
+    expect(selectProjectProcesses(root, processes, { selfPid: 100, parentPid: 90 }).map((p: { pid: number }) => p.pid)).toEqual([10, 11, 12, 13, 23, 24, 25]);
   });
 
   it("closes a stale Stopped controller and an orphan on random ports, keeping an unrelated server alive", async () => {

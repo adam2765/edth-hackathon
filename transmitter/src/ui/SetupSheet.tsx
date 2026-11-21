@@ -28,8 +28,6 @@ export interface SetupProps {
 
   developer: boolean;
   onDeveloper: (enabled: boolean) => void;
-  sendClips: boolean;
-  onSendClips: (v: boolean) => void;
 
   speakReplies: boolean;
   onSpeakReplies: (v: boolean) => void;
@@ -106,11 +104,10 @@ export function SetupSheet(p: SetupProps) {
             </Group>
 
             <Group title="Development">
-              <SwitchRow label="Developer tools" note="Shows scenarios, test clips and connection override" value={p.developer} onValueChange={p.onDeveloper} disabled={p.locked} />
+              <SwitchRow label="Developer tools" note="Shows scenarios and connection override" value={p.developer} onValueChange={p.onDeveloper} disabled={p.locked} />
             </Group>
-            {p.developer ? <Group title="Developer and demo settings" footer="Phone speech-to-text is a development stub with a fixed model and place-name hints.">
+            {p.developer ? <Group title="Developer and demo settings" footer="The phone records audio; the coordinator transcribes it.">
               <Row label="Host override" right={<TextInput style={[styles.input, styles.address]} value={p.serverUrl} onChangeText={p.onServerUrl} editable={!p.locked} autoCapitalize="none" autoCorrect={false} keyboardType="url" accessibilityLabel="Coordinator address" />} />
-              <SwitchRow label="Send clips for testing" note="Requires KEEP_CLIPS=1 on the host to keep recordings" value={p.sendClips} onValueChange={p.onSendClips} disabled={p.locked} />
               <SwitchRow label="Play scenario clips aloud" value={p.playClips} onValueChange={p.onPlayClips} disabled={p.locked} />
               <SwitchRow label="Keep the script’s timing" value={p.realTime} onValueChange={p.onRealTime} disabled={p.locked} />
             </Group> : null}

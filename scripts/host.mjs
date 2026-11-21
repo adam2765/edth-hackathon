@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { mkdir, open } from 'node:fs/promises';
+import { loadSettings } from './launcher/settings.mjs';
 import { readJson, saveJson } from './launcher/files.mjs';
 import { stopProjectProcesses } from './launcher/shutdown.mjs';
 import { toolEnvironment, listDevices, selectDevice, stopPhone } from './launcher/devices.mjs';
@@ -13,8 +14,8 @@ const command = process.argv[2];
 if (!['build', 'start', 'stop'].includes(command) || process.argv.length > 3) {
   console.error('Use npm run build, npm start or npm stop.'); process.exit(1);
 }
-const config = await readJson(path.join(root, '.run/config.json'), {});
-const base = `http://127.0.0.1:${config.controlPort || 3118}`;
+const config = await loadSettings(root);
+const base = `http://127.0.0.1:${config.controlPort}`;
 async function status() {
   const response = await fetch(`${base}/status`, { signal: AbortSignal.timeout(1500) });
   if (!response.ok) throw new Error(`Server control: HTTP ${response.status}`);
@@ -26,7 +27,7 @@ try {
   // Run shutdown from the current code, never by trusting a resident controller's
   // Stopped flag. Retire old controllers as well, regardless of their ports.
   const env = toolEnvironment();
-  await stopProjectProcesses(root, { env, ollamaPorts: [Number(new URL(env.OLLAMA_URL || 'http://127.0.0.1:11434').port || 11434)] });
+  await stopProjectProcesses(root, { env, ollamaPorts: [Number(new URL(env.OLLAMA_URL || 'http://127.0.0.1:11434').port || 11434)], whisperPorts: [config.whisperPort] });
   if (command === 'stop') {
     const device = selectDevice(await listDevices(env), { phone: 'auto', ...config });
     if (device) await stopPhone(root, device, env);

@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadSettings } from './settings.mjs';
 import { groups, fingerprint, readJson, saveJson } from './files.mjs';
-import { delay, run, waitFor, portBusy, processIdentity, ownsProcess, killTree, openBrowser, stopExternalServers, setCancellation } from './processes.mjs';
+import { delay, run, waitFor, processIdentity, ownsProcess, killTree, openBrowser, stopExternalServers, setCancellation } from './processes.mjs';
 import { toolEnvironment, listDevices, selectDevice, deploy, phoneServer, connect, forward, disconnect, stopPhone } from './devices.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ const configFile = path.join(directory, 'config.json');
 const stateFile = path.join(directory, 'state.json');
 const buildFile = path.join(directory, 'build.json');
 const env = toolEnvironment();
-const config = { mode: 'local', phone: 'auto', device: '', port: 3117, metroPort: 8082, controlPort: 3118, open: true, ...await readJson(configFile, {}), ...(env.PROVIDER_MODE ? { mode: env.PROVIDER_MODE } : {}) };
+const config = await loadSettings(root, env);
 const state = { services: {}, ...await readJson(stateFile, {}), root, status: 'Stopped', error: null, busy: false };
 const children = new Map();
 let stopping = false;
@@ -25,7 +26,7 @@ let operation;
 let stopRequested = false;
 const save = () => saveJson(stateFile, state);
 async function phase(message) { state.message = message; console.log(message); await save(); }
-const runtimeEnv = (extra = {}) => ({ ...env, PROVIDER_MODE: config.mode, REPORT_STORE: 'file', REPORT_STORE_DIR: path.join(root, '.data/sessions'), ...extra });
+const runtimeEnv = (extra = {}) => ({ ...env, PROVIDER_MODE: config.mode, WHISPER_URL: config.whisperUrl, REPORT_STORE: 'file', REPORT_STORE_DIR: path.join(root, '.data/sessions'), ...extra });
 
 async function launch(kind, cwd, args, extra = {}) {
   const id = randomUUID();
@@ -45,7 +46,7 @@ async function launch(kind, cwd, args, extra = {}) {
 async function stopOwned() {
   stopping = true;
   clearInterval(reconnectTimer);
-  for (const kind of ['metro', 'coordinator', 'ollama']) {
+  for (const kind of ['metro', 'coordinator', 'whisper', 'ollama']) {
     const child = children.get(kind);
     const record = state.services[kind];
     if (child && child.exitCode == null && child.signalCode == null) {
@@ -68,7 +69,7 @@ async function stopOwned() {
 }
 async function stopAll(stopApp = true) {
   await stopOwned();
-  await stopExternalServers(root, { coordinator: config.port, metro: config.metroPort, ollama: Number(new URL(env.OLLAMA_URL || 'http://127.0.0.1:11434').port || 11434) }, env);
+  await stopExternalServers(root, { coordinator: config.port, metro: config.metroPort, ollama: Number(new URL(env.OLLAMA_URL || 'http://127.0.0.1:11434').port || 11434), whisper: config.whisperPort }, env);
   if (stopApp) {
     const device = selectDevice(await listDevices(env), config);
     if (device) await stopPhone(root, device, env);
@@ -94,6 +95,10 @@ async function metro(device) {
 async function build() {
   state.status = 'Building';
   await dependencies();
+  if (config.mode === 'local') {
+    await phase('Preparing coordinator speech-to-text…');
+    await run(process.execPath, [path.join(root, 'scripts/stt-server.mjs'), '--prepare'], { cwd: root, env: runtimeEnv() });
+  }
   const previous = await readJson(buildFile, {});
   const webHash = await fingerprint(root, groups.web, { node: process.version, platform: process.platform, arch: process.arch });
   const webChanged = previous.web !== webHash || !existsSync(path.join(root, '.next/BUILD_ID'));
@@ -136,6 +141,13 @@ async function start() {
   if (!existsSync(path.join(root, '.next/BUILD_ID'))) throw new Error('Run npm run build first.');
   state.status = 'Starting'; await phase('Starting servers…');
   if (config.mode === 'local') {
+    const whisper = new URL(config.whisperUrl);
+    if (!['127.0.0.1', 'localhost'].includes(whisper.hostname)) throw new Error('Local speech-to-text must run on this computer.');
+    await launch('whisper', root, [process.execPath, path.join(root, 'scripts/stt-server.mjs')]);
+    await waitFor(async () => {
+      if (!children.has('whisper')) throw new Error('Speech-to-text stopped. Run npm run build to prepare it; details in .run/launcher.log.');
+      return fetch(config.whisperUrl + '/health', { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false);
+    }, 'Whisper model readiness', 240_000);
     const url = (env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
     if (!['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw new Error('Local mode needs Ollama on this server.');
     await launch('ollama', root, ['ollama', 'serve'], { OLLAMA_HOST: new URL(url).host, OLLAMA_NO_CLOUD: '1', OLLAMA_KEEP_ALIVE: '-1', OLLAMA_CONTEXT_LENGTH: '4096' });

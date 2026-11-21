@@ -3,7 +3,7 @@ import { readdir, readFile, stat, mkdir, rename, writeFile } from 'node:fs/promi
 import path from 'node:path';
 
 export const groups = {
-  web: ['app', 'components', 'lib', 'data', 'public', 'scripts/copy-maplibre-worker.mjs', 'scripts/prepare-tts.mjs', 'instrumentation.ts', 'next.config.ts', 'tsconfig.json', 'package.json', 'package-lock.json'],
+  web: ['app', 'components', 'lib', 'data', 'public', 'scripts/copy-maplibre-worker.mjs', 'scripts/prepare-tts.mjs', 'scripts/stt-server.mjs', 'instrumentation.ts', 'next.config.ts', 'tsconfig.json', 'package.json', 'package-lock.json'],
   phone: ['transmitter/App.tsx', 'transmitter/index.ts', 'transmitter/src', 'transmitter/assets', 'transmitter/scenarios', 'transmitter/metro.config.js', 'transmitter/tsconfig.json', 'transmitter/babel.config.js', 'lib/geo/types.ts', 'lib/reports/types.ts'],
   native: ['transmitter/modules', 'transmitter/plugins', 'transmitter/app.json', 'transmitter/app.config.ts', 'transmitter/package.json', 'transmitter/package-lock.json'],
 };

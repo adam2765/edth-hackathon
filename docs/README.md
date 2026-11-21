@@ -28,6 +28,7 @@ New to the project? Read these in order:
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
 | [tracks.md](tracks.md) | Tracks: screenshots of the receiver and the phone, the symbols, and diagrams of how a report becomes a track | The track rules or the screens for them change; retake the pictures |
+| [merge-coordinator-stt.md](merge-coordinator-stt.md) | Selected PRs, merge scope and first-time speech setup | Coordinator transcription integration changes |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
 | [work-split.md](work-split.md) | A proposal, not a decision: four roles for the four of us, one of them evidence then pitch, and what we leave out to fit | The team agrees a split, or the mentors' answers move it |

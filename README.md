@@ -8,8 +8,8 @@ Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no repor
 ## How it works
 
 ```
-phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcribe-3, place names as context_bias)
-                         ─► intent extraction (Mistral mistral-small-latest, JSON schema; never coordinates)
+phone mic ─► /api/report ─► speech-to-text (local Whisper, or hosted Mistral)
+                         ─► intent extraction (local Ollama, or hosted Mistral; never coordinates)
                          ─► resolver (deterministic, local gazetteer of the chosen area from OpenStreetMap)
                          ◄─ { transcript, language, intent, resolution, timings_ms }
 ```
@@ -30,7 +30,7 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | Category only ("the church") | candidates of that category within 1.5 km of the last position (or area centre) |
 | Several candidates | `resolved` only if the last position is under 10 min old and nearest < 0.4 × second nearest; otherwise `ambiguous` with the top 3 |
 | Name not in gazetteer but a category was said | ask among that category, never a silent guess |
-| Two voices in one clip name different places (Whisper marks the change of voice) | `ambiguous`: "I heard more than one voice. Which place is yours?" ([voices](docs/voices.md)) |
+| Two voices in one clip name different places (hosted Mistral marks the change of voice) | `ambiguous`: "I heard more than one voice. Which place is yours?" ([voices](docs/voices.md)) |
 | Same name, same spot (station + the square above it) | one place, no question; the circle widens to cover all of them |
 | Street and station share a name ("на Хрещатику") | `ambiguous`: the street is 1.2 km long, the station is one point |
 | No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
@@ -152,7 +152,7 @@ npm stop
 | Command | What it does |
 |---|---|
 | `npm run build` | Builds components whose source/dependencies changed; builds or reloads the phone app and loads it on the connected phone when needed |
-| `npm start` | Stops existing project servers, then starts Ollama, coordinator/web server and phone code server; opens the receiver, leaving phone app launch to you |
+| `npm start` | Stops existing project servers, then starts Whisper speech-to-text, Ollama, coordinator/web server and phone code server; opens the receiver, leaving phone app launch to you |
 | `npm stop` | Stops project processes and the connected phone app, including servers and the internal process controller; keeps mission data |
 
 `build` needs `npm run`; `start` and `stop` are npm’s built-in shortcuts. No routine command
@@ -168,10 +168,9 @@ On the receiver, use **Start mission**; the phone joins the newest running missi
 and starting/stopping missions are separate actions.
 
 Hosts lists reachable coordinators discovered through the USB/Metro host and LAN advertisements. Tap Connect beside the server you want. Manual host override,
-scenarios and test settings are under Developer tools. Phone voice-to-text remains a fixed
-development stub. The mission supplies the area. Replay controls open through **Replay**.
+scenarios and test settings are under Developer tools. The phone records audio; voice-to-text runs on the coordinator. The mission supplies the area. Replay controls open through **Replay**.
 
-Local inference is the default; install Ollama and its model once. Advanced developers can
+Local inference is the default; install Ollama, whisper.cpp and ffmpeg on the host once. No AI model is installed on the phone. Advanced developers can
 still run components directly; see [setup](docs/setup.md#advanced-console-use). Logs are in
 `.run/launcher.log`. Shutdown scans project processes across all ports, including old
 controllers and orphan workers, and verifies they have exited before reporting Stopped.
@@ -179,9 +178,9 @@ Unrelated processes are left alone.
 
 ### Offline: models on this computer
 
-`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. There is no speech-to-text on the computer yet, so reports must arrive as text: the transmitter (which always transcribes on the phone), or typed. Audio gets a clear error.
+`PROVIDER_MODE=local` makes the coordinator call nothing outside this computer. Intent extraction runs through Ollama with the same prompt and schema. Speech-to-text runs locally through whisper.cpp’s whisper-server with Whisper large-v3-turbo and Silero VAD. The phone sends audio, with its language; typed reports still work. Build prepares the checksum-verified host models once (about 575 MB); Start runs the service and waits for readiness.
 
-Install current Ollama (0.40 or newer; `brew install ollama` on macOS), then use `npm start` above. The model download is needed only once.
+Install the host tools and Ollama model using [setup](docs/setup.md#install-once). On macOS the tools are `brew install ollama whisper-cpp ffmpeg`. Then use Build followed by Start above; Build prepares the Whisper models once.
 
 `LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server warms the model and each area's prompt. The launcher waits for this before showing Ready.
 
@@ -226,7 +225,7 @@ app/api/sessions/                          list and open missions; [code]: the l
 app/api/places/route.ts                    GET places by name, to pick a start point
 lib/reports/                               missions and their logs: entry types, store, record, position rule, foldLog
 lib/geo/tracks.ts, lib/geo/trackKinds.ts   tracks: who a report is about, whose a track is, where it is; kinds and symbol codes
-lib/providers/transcriber.ts               Transcriber interface + Mistral
+lib/providers/transcriber.ts               Transcriber interface + Mistral or local whisper-server
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text
 lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms

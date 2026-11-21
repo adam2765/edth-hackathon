@@ -272,22 +272,22 @@ The uplink-off setup. Dashed boxes and lines are not built yet, as of Saturday 2
 ```mermaid
 flowchart LR
     subgraph NET["Wi-Fi with no internet"]
-        NAT["Native app<br/>Whisper on the phone, sends text<br/>plain http"]
+        NAT["Native app<br/>records and sends compressed audio<br/>plain http"]
         WEB["Phone web page<br/>needs HTTPS for the microphone"]:::todo
         subgraph MAC["MacBook, M1 Pro"]
             CO["Coordinator<br/>PROVIDER_MODE=local"]
             OLL["Ollama<br/>ministral-3:3b"]
-            WHS["Whisper large-v3-turbo<br/>speech-to-text on the Mac"]:::todo
+            WHS["Whisper large-v3-turbo<br/>speech-to-text on the coordinator"]
             ST[("File store<br/>.data/sessions/")]
             RX["Receiver<br/>on the Mac's screen"]
             TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
         end
     end
 
-    NAT -- "text" --> CO
+    NAT -- "audio" --> CO
     WEB -. "audio or text" .-> CO
     CO -- "extraction" --> OLL
-    CO -. "audio" .-> WHS
+    CO -- "audio" --> WHS
     CO --> ST
     RX --> CO
     RX -. "map" .-> TILES
@@ -304,7 +304,7 @@ Until track C is done, the receiver's map still loads from OpenFreeMap and needs
 | A | Serve the app from the MacBook over HTTPS the phones accept | 1 to 3 h |
 | A | Prove on iOS and Android, mobile data off, that the microphone opens | 0.5 h |
 | B. Models | The `PROVIDER_MODE` switch | done |
-| B | Local speech-to-text: Whisper large-v3-turbo (whisper.cpp server or MLX), about 1.6 GB, plus the adapter. Not needed for the transmitter's phone modes | 2 to 3 h |
+| B | Local speech-to-text: whisper-server with quantized large-v3-turbo, VAD and ffmpeg, about 575 MB of host models | integrated; live validation pending setup |
 | B | Local extraction: Ministral 3 3B through Ollama with the same schema, 3 GB. Built; the prompt is not tuned for it yet | done |
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
@@ -316,11 +316,11 @@ A, B and C can run in parallel.
 Things already found:
 
 - **No PMTiles needed.** Both areas together are 164 tiles with a margin for panning, so a plain folder of files does. OpenFreeMap allows offline downloads up to 3,000 tiles.
-- **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position.
+- **Whisper prompt:** the merged turbo path sends no place-name prompt, following PR #23’s comparisons.
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#install-once) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].
-- **On the MacBook now:** Ollama 0.40.16 with `ministral-3:3b` and `ministral-3:8b`; no Whisper; ffmpeg present; no local certificate tool.
-- **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone.
+- **Host setup:** local inference needs Ollama, whisper-server, ffmpeg and the host models. See [setup](setup.md); installation depends on the computer.
+- **Target under 4 s** from end of speech to pin. The merged coordinator speech path still needs a live phone measurement.
 
 Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localhost`). Offline, no public certificate is possible for a private address. Options:
 
@@ -330,19 +330,19 @@ Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localho
 | Our own certificate authority installed on the phone | Installs a profile once | Our phones only | 1 to 2 h |
 | Real certificate for a domain we own, router points it at the MacBook | Nothing | Any phone, including a judge's | 2 to 3 h, needs a domain and a travel router |
 
-The native transmitter sidesteps this: it may use plain `http://` on the local network, and with on-device speech-to-text (see [Transmitter](#transmitter)) the MacBook only runs extraction and the resolver. The receiver on the MacBook's own screen and typed reports need no certificate at all.
+The native transmitter sidesteps this: it may send compressed audio over plain `http://` on the local network. The coordinator runs speech-to-text, extraction and the resolver. The receiver on the MacBook's own screen and typed reports need no certificate at all.
 
 Open calls for Alex: whose phones (ours only, or any phone); travel router or the Mac's hotspot; Ukrainian offline or English and French only (a small model may handle Ukrainian dictionary forms poorly); Mistral's open models first for the European story, or whichever is fastest.
 
 ## Transmitter
 
 - **Startup:** Build changed components with `npm run build`; `npm start` restarts the servers and `npm stop` stops processes. Open the phone app and tap Connect. Start/Stop mission controls are on the receiver. Hosts lists discovered coordinators; the phone automatically joins the newest running mission; developer overrides and direct console commands remain. See [setup](setup.md).
-- **Scope:** phone voice-to-text is a development stub. Keep the fixed model and defaults; do not build a future provider framework for it.
+- **Scope:** phone voice-to-text is replaced by compressed audio capture and coordinator transcription. Keep the simple Connect and automatic mission flow.
 
-- **Built:** on-device speech-to-text with Whisper (`whisper.rn`), fixed to `ggml-base-q5_1`. Setup prepares the model on the Mac; the app installs it from an asset automatically. Both microphone and scenarios send text, with no server mode or model controls. Android uses the local PCM module; iOS uses expo-audio. Historical comparisons and remaining runtime checks are in [transmitter/README.md](../transmitter/README.md).
+- **Merged:** microphone and scenarios send compressed audio to the coordinator. Both phones use expo-audio recording; no phone model is prepared or installed. Existing native dependencies remain compatible with installed builds. See [transmitter/README.md](../transmitter/README.md) for historical comparisons and the pending live check.
 - **Later, about one day:** an open microphone with no button, cutting at pauses. Tuning against hall noise is the risk. The microphone is muted while the app speaks a question, and the coordinator learns to drop non-reports and duplicates. Screen-off listening is another half day and not planned.
 - **Stress scenarios** to build as data files: eight to ten call signs at once; late, out-of-order and duplicate reports; several open questions at once; implausible jumps (3 km in 20 s); units that go silent; radio-style audio with static and clipping; mixed languages; a spoken call sign that does not match the device. A laptop script can play many units at once with no phones.
-- **Installing:** iPhones by cable from a Mac with Xcode, with a free Apple ID; each phone needs Developer Mode and the install expires after 7 days. Android by install file. Expo Go cannot run it, because on-device speech-to-text and an open microphone need native modules [59].
+- **Installing:** iPhones by cable from a Mac with Xcode, with a free Apple ID; each phone needs Developer Mode and the install expires after 7 days. Android by install file. Use the existing native development build; its native dependencies are retained [59, 182].
 
 ## Evaluation harness
 

@@ -8,7 +8,8 @@ Where this app differs from the Expo template advice below:
 
 - **Connection:** detect coordinators through the Metro/USB host and LAN discovery, show Connect per server, then automatically follow the newest running mission between reports. No mission picker or Join/Leave controls.
 - **One screen, no Expo Router** (decision 65). Ignore the routing section below unless the app grows a second screen.
-- **Native development build, not Expo Go** (decision 59): on-device speech-to-text and an open microphone need native modules. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
+- **Transcription runs on the coordinator:** send compressed microphone/scenario audio. Do not restore phone model setup or transcription controls. The existing native dependencies are retained for installed-build compatibility.
+- **Native development build, not Expo Go** (decision 59): installed builds still include the existing native audio dependencies. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.
 - **Signing comes from the environment** (decision 96): each teammate signs with their own Apple ID, so `app.config.ts` takes `TRANSMITTER_BUNDLE_ID` and `APPLE_TEAM_ID` over `app.json`. Do not change the bundle ID in `app.json` for one person's build. Setup steps: `../docs/setup.md`.
 - **No EAS.** There is no paid Apple account, so iPhones get the app by cable from a Mac and Android by install file. Do not set up EAS build, submit or update.
 - **Every source makes an `Utterance`** (`src/types.ts`) and goes down one send path. Add a new source (for example an open microphone) as another producer of utterances, not as a second path.
