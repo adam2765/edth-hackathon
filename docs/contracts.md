@@ -49,10 +49,12 @@ flowchart TB
 | `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. Used only with no mission: in a mission the coordinator takes the unit's last position from the log, its latest fix or else the start point [108]. It then also sets `street` (the gazetteer id of the street the unit is on) and `heading_deg` (the bearing from its previous fix), which the phone's own `lastPosition` never carries [117]. |
 | `clientTs` | Client time, epoch ms |
 | `session` | The mission's code. With one, the mission has to be open: 404 for an unknown code, 409 with `ended: true` for an ended one [108]. The report is saved to the mission's log for the command post. Without one (the web page, or a coordinator that keeps no record), nothing is saved [99]. |
-| `callsign`, `seq` | Who sent it, and the transmitter's own counter. With `clientTs`, `seq` lets the server save a report sent twice only once [102]. Call signs are stored in capitals [111]. A call sign that has not joined the mission joins with its first report. |
+| `callsign`, `seq` | Who sent it, and the transmitter's own counter. With `clientTs`, `seq` lets the server save a report sent twice only once [102]. Call signs are stored in capitals [111]. A call sign that has not joined the mission joins with its first report. In a mission, a report with no `callsign` is a **radio report** [202]: who sent it is read from its words, against the mission's roster ([callsigns.md](callsigns.md)). |
 | `clip` (file), `segments` | Tests only. Beside text from the phone's own speech-to-text: the recording it came from, and Whisper's timed stretches as JSON `[{ text, t0, t1 }]`. A clip with no text is taken as a report with no words. Kept only when the coordinator runs with `KEEP_CLIPS=1` [155]. |
 
 Reply: `{ transcript, language, intent, resolution, timings_ms: { stt, extract, resolve, total }, area, report_id?, clip? }`. `area` is the one used. `report_id` is there when the report was saved; send it back with the answer to a question. `clip` is the kept file's name, when the coordinator kept a test clip [155]. For a report about a track, `resolution.track` is set and `resolution.track.say` holds the words to speak back; see [Tracks](#tracks).
+
+A radio report found its unit: the reply also has `callsign` and `sender: { heard, how }`, where `heard` is the call sign as speech-to-text wrote it and `how` is `exact`, `near`, or `reply` (no call sign said, and that unit's question was open and recent) [202, 204]. A radio report the coordinator was not sure of is **held** for the operator instead: no `resolution` and no `report_id`, but `held: { id, reason, question, audio }` [203]. `reason` is `which` (two units fit), `unknown` (a call sign not on the roster), `none` (no call sign, or no words) or `far` (a move the unit could not have made) [204].
 
 Limits: 1 MB per clip (about 15 s), 500 characters of text, 30 requests a minute per IP per server instance [24]. No auth.
 
@@ -66,13 +68,15 @@ A mission is a session with a name, an area, an optional start point, and an end
 
 | Endpoint | Does |
 |---|---|
-| `GET /api/sessions` | `{ stored, missions }`: every mission on this coordinator, open ones first, newest first. Each has `code`, `name`, `area`, `start`, `opened`, `ended` (null while open), `units`, `reports`, `last`. `stored` is false, and the list empty, when the coordinator keeps no record. |
-| `POST /api/sessions` | Opens a mission. JSON `{ area, name?, start? }`; `start` is a gazetteer place id or null. 201 with `{ mission }`. The code is `<area>-<n>`, never reused [109]. |
+| `GET /api/sessions` | `{ stored, missions }`: every mission on this coordinator, open ones first, newest first. Each has `code`, `name`, `area`, `start`, `opened`, `ended` (null while open), `units`, `reports`, `last`, `roster`. `stored` is false, and the list empty, when the coordinator keeps no record. |
+| `POST /api/sessions` | Opens a mission. JSON `{ area, name?, start?, roster? }`; `start` is a gazetteer place id or null; `roster` is the call signs on the radio net, a list or text split by commas or lines, at most 30 [201]. 201 with `{ mission }`. The code is `<area>-<n>`, never reused [109]. |
 | `POST /api/sessions/<code>/join` | JSON `{ callsign, device }`; `device` is an id the phone made up and keeps (8 to 64 letters, digits, `-`, `_`). Reply `{ mission, callsign, position, positionTs, rejoined }`: where the coordinator has the unit, the start point (≈) on a first join. The same device joining again gets its unit back and nothing is written. 404 for an unknown mission; 409 with `ended: true` for an ended one, or with `taken: true` when another phone has used the call sign in the last 3 minutes [111]. |
 | `POST /api/sessions/<code>/end` | Ends the mission: joins, reports and answers are refused after it. Ending it again changes nothing. |
 | `POST /api/sessions/<code>/tracks` | The command post places a track by hand [177]. JSON `{ affiliation, kind, count?, lat, lon, radius_m?, note? }`, or `place` (a gazetteer place id) instead of `lat` and `lon`. `radius_m` is 5 to 2000 m, 50 if left out; `note` is the source, up to 120 characters. The track gets the mission's next number. 201 with `{ entry }`, the `plot` entry. 400 for a point outside the mission's area; 409 with `ended: true` for an ended mission. |
 | `PATCH /api/sessions/<code>/tracks/<n>` | Changes track n by hand [177]. JSON `{ action, … }`: `edit` with `affiliation`, `kind`, `count?`, `note?`; `move` with `lat` and `lon` (or `place`), `radius_m?`, `note?`; `gone` or `restore` with nothing else. 200 with `{ entry }`; 404 when the mission has no track n. |
-| `DELETE /api/sessions/<code>` | Deletes an ended mission; its file moves to `deleted/` [112]. 409 for an open one. |
+| `POST /api/sessions/<code>/held/<id>` | The operator settles a held radio report [203]. JSON `{ action, callsign? }`: `assign` gives it to `callsign`, a unit on the roster; `add` puts `callsign` on the roster first, then gives it the report; `dismiss` drops it. A report given to a unit is read again from where that unit was when the report came in. Reply `{ report_id, callsign, already }`; `already` is true when it was settled before, and nothing changed: the first decision stands. 400 for a call sign not on the roster with `assign`; 404 for an unknown held report. |
+| `GET /api/sessions/<code>/audio/<file>` | A held report's recording, for the operator to listen to [203]. |
+| `DELETE /api/sessions/<code>` | Deletes an ended mission; its file, and its held reports' recordings, move to `deleted/` [112, 203]. 409 for an open one. |
 | `GET /api/places?area=&q=` | Up to 8 gazetteer places matching `q`, each as the start point it would make: `{ id, name, category, lat, lon, radius_m }`. With `lat` and `lon` instead of `q`: `{ places: [], label }`, the name a track placed at that point gets ("120 m east of Église Saint-Louis") [177]; 400 outside the area. |
 
 A start point is a circle of 300 m, or the place's own size if larger, and always an estimate [110].
@@ -83,14 +87,19 @@ A start point is a circle of 300 m, or the place's own size if larger, and alway
 
 Each entry has `kind`, `id`, `session` and server time `ts`, and is one of:
 
-- `mission`, the first line: `area`, `name`, `start` (null, or `{ id, name, category, lat, lon, radius_m }`).
+- `mission`, the first line: `area`, `name`, `start` (null, or `{ id, name, category, lat, lon, radius_m }`), and `roster` when the operator gave one [201].
 - `join`: `callsign`, `device` (null when the call sign joined with its first report), `position` (the start point as an estimate, or null).
-- `report`: the report endpoint's reply plus `callsign`, `seq`, `clientTs`, `area`, the `lastPosition` used, and `position`: where it leaves the speaker, or null. A report about a track also has `track`: `{ n, affiliation, kind, count, text, heading, position, from }`, where `position` is where the track is (null while its question is open, or when the report only says what it is) and `from` is where the observer was. Its own `position` is then null.
+- `report`: the report endpoint's reply plus `callsign`, `seq`, `clientTs`, `area`, the `lastPosition` used, and `position`: where it leaves the speaker, or null. A report about a track also has `track`: `{ n, affiliation, kind, count, text, heading, position, from }`, where `position` is where the track is (null while its question is open, or when the report only says what it is) and `from` is where the observer was. Its own `position` is then null. A radio report also has `sender: { heard, how, held? }` [202]: `how` is `exact`, `near`, `reply`, or `operator` when the operator gave it to the unit from the tray, and then `held` is the held report's id.
 - `answer`: `callsign`, `report_id`, `choice`, `position`. For a question about a track: `track: { n, position }`, and `position` is null. `by: "CP"` when the command post chose [178].
 - `plot`: a change to a track made by hand at the command post [177]: `by` (`"CP"`), `action` (place, edit, move, gone, restore), `n`, and what the action sets: `affiliation`, `track_kind` and `count` for place and edit; `position`, with its `label`, for place and move; `note` when one was given.
+- `held`: a radio report waiting for the operator [203]: `clientTs`, `area`, `transcript`, `language`, `reason`, `heard`, `read` (a call sign heard that is not on the roster, or null), `candidates` (the units it may be from), `question`, `position` (for `far`: where it would have put the unit), `audio` (the recording's file name, or null).
+- `roster`: the operator added `callsign` to the roster [201]. `by` is `"CP"`; `held` is the held report it was heard in, if any.
+- `dismiss`: the operator dropped held report `held`. `by` is `"CP"`.
 - `end`: nothing more.
 
 Types in `lib/reports/types.ts`. The log is append-only; nothing in it is edited. A session from before missions has no `mission` line; the command post still shows it, and reports to it are refused.
+
+The roster is the mission's `roster`, then each `roster` entry, then each call sign that joined from a phone. A radio report goes only to a call sign on it: a transcript never creates a unit [200, 201].
 
 ## Intent (what the model returns)
 
@@ -134,3 +143,5 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 ## Provider interfaces
 
 `Transcriber.transcribe(audio, mime, biasTerms, { language }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`: whisper-server and Ollama on the computer [83, 195]. `language` is the language the device pinned; Whisper listens for it, Mistral ignores it. Whisper takes no bias terms.
+
+`ReplyReader.read(reply, question) → { kind, choice }` reads a reply to an open question ([ask-back.md](ask-back.md)). Same providers and switch. Only the reply eval uses it so far [199].

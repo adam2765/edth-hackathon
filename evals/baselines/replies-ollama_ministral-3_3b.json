@@ -1,0 +1,504 @@
+{
+  "reader": "ollama:ministral-3:3b",
+  "prompt_id": "b256e0c36b",
+  "at": "2026-11-21T15:26:00.000Z",
+  "repeat": 3,
+  "cases": {
+    "e-two": {
+      "pass": true,
+      "costly": null
+    },
+    "e-number-one-over": {
+      "pass": true,
+      "costly": null
+    },
+    "e-castle": {
+      "pass": true,
+      "costly": null
+    },
+    "e-metro": {
+      "pass": true,
+      "costly": null
+    },
+    "e-castle-walls": {
+      "pass": true,
+      "costly": null
+    },
+    "e-subway": {
+      "pass": true,
+      "costly": null
+    },
+    "e-no-second": {
+      "pass": true,
+      "costly": null
+    },
+    "e-not-castle": {
+      "pass": true,
+      "costly": null
+    },
+    "e-no-wait": {
+      "pass": true,
+      "costly": null
+    },
+    "e-pick-and-move": {
+      "pass": true,
+      "costly": null
+    },
+    "e-yes-two-choices": {
+      "pass": true,
+      "costly": null
+    },
+    "e-neither": {
+      "pass": true,
+      "costly": null
+    },
+    "e-no-alone": {
+      "pass": true,
+      "costly": null
+    },
+    "e-neither-townhall": {
+      "pass": true,
+      "costly": null
+    },
+    "e-say-again": {
+      "pass": true,
+      "costly": null
+    },
+    "e-which-closer": {
+      "pass": true,
+      "costly": null
+    },
+    "e-wait-one": {
+      "pass": true,
+      "costly": null
+    },
+    "e-hang-on": {
+      "pass": true,
+      "costly": null
+    },
+    "e-no-idea": {
+      "pass": true,
+      "costly": null
+    },
+    "e-disregard": {
+      "pass": true,
+      "costly": null
+    },
+    "e-scratch-that": {
+      "pass": true,
+      "costly": null
+    },
+    "e-moving-north": {
+      "pass": true,
+      "costly": null
+    },
+    "e-enemy-vehicle": {
+      "pass": true,
+      "costly": null
+    },
+    "e-two-blocks": {
+      "pass": true,
+      "costly": null
+    },
+    "e-uh": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-vincennes": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-saint-mande": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-closer": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-further": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-misheard": {
+      "pass": false,
+      "costly": null
+    },
+    "e-th-first": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-second-floor": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-white-building": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-neither-berault": {
+      "pass": true,
+      "costly": null
+    },
+    "e-th-none": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-yes": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-affirm": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-thats-it": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-negative": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-no-bakery": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-two": {
+      "pass": true,
+      "costly": null
+    },
+    "e-one-come-again": {
+      "pass": true,
+      "costly": null
+    },
+    "e-corner-montreuil": {
+      "pass": true,
+      "costly": null
+    },
+    "e-corner-avenue": {
+      "pass": true,
+      "costly": null
+    },
+    "e-corner-third": {
+      "pass": true,
+      "costly": null
+    },
+    "e-corner-fontenay": {
+      "pass": false,
+      "costly": "wrong_pick"
+    },
+    "e-corner-pompidou": {
+      "pass": true,
+      "costly": null
+    },
+    "e-corner-last": {
+      "pass": true,
+      "costly": null
+    },
+    "e-voices-church": {
+      "pass": true,
+      "costly": null
+    },
+    "e-voices-townhall": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-north": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-south": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-by-townhall": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-correction-east": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-im-at-townhall": {
+      "pass": false,
+      "costly": "wrong_subject"
+    },
+    "e-tr-moving-south": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-second-patrol": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-own-guys": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-too-far": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-stand-by": {
+      "pass": true,
+      "costly": null
+    },
+    "e-tr-neither-park": {
+      "pass": true,
+      "costly": null
+    },
+    "f-deux": {
+      "pass": true,
+      "costly": null
+    },
+    "f-premier": {
+      "pass": true,
+      "costly": null
+    },
+    "f-chateau": {
+      "pass": true,
+      "costly": null
+    },
+    "f-metro": {
+      "pass": true,
+      "costly": null
+    },
+    "f-cour": {
+      "pass": false,
+      "costly": null
+    },
+    "f-non-deuxieme": {
+      "pass": true,
+      "costly": null
+    },
+    "f-pas-chateau": {
+      "pass": true,
+      "costly": null
+    },
+    "f-aucun": {
+      "pass": true,
+      "costly": null
+    },
+    "f-repetez": {
+      "pass": true,
+      "costly": null
+    },
+    "f-redire": {
+      "pass": true,
+      "costly": null
+    },
+    "f-attendez": {
+      "pass": true,
+      "costly": null
+    },
+    "f-une-seconde": {
+      "pass": false,
+      "costly": null
+    },
+    "f-sais-pas": {
+      "pass": true,
+      "costly": null
+    },
+    "f-annulez": {
+      "pass": true,
+      "costly": null
+    },
+    "f-nord": {
+      "pass": true,
+      "costly": null
+    },
+    "f-deux-vehicules": {
+      "pass": true,
+      "costly": null
+    },
+    "f-oui-two-choices": {
+      "pass": true,
+      "costly": null
+    },
+    "f-euh": {
+      "pass": true,
+      "costly": null
+    },
+    "f-th-saint-mande": {
+      "pass": true,
+      "costly": null
+    },
+    "f-th-proche": {
+      "pass": true,
+      "costly": null
+    },
+    "f-th-gare": {
+      "pass": true,
+      "costly": null
+    },
+    "f-th-ni-lune": {
+      "pass": true,
+      "costly": null
+    },
+    "f-one-oui": {
+      "pass": true,
+      "costly": null
+    },
+    "f-one-non": {
+      "pass": true,
+      "costly": null
+    },
+    "f-one-affirmatif": {
+      "pass": true,
+      "costly": null
+    },
+    "f-tr-nord": {
+      "pass": true,
+      "costly": null
+    },
+    "f-tr-eglise": {
+      "pass": true,
+      "costly": null
+    },
+    "f-tr-je-suis": {
+      "pass": false,
+      "costly": "wrong_subject"
+    },
+    "f-tr-amie": {
+      "pass": true,
+      "costly": null
+    },
+    "u-dva": {
+      "pass": true,
+      "costly": null
+    },
+    "u-pershyi": {
+      "pass": true,
+      "costly": null
+    },
+    "u-vulytsia": {
+      "pass": true,
+      "costly": null
+    },
+    "u-stantsiia": {
+      "pass": true,
+      "costly": null
+    },
+    "u-vkhid": {
+      "pass": false,
+      "costly": null
+    },
+    "u-ni-druhyi": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ru-vtoraia": {
+      "pass": true,
+      "costly": null
+    },
+    "u-zhoden": {
+      "pass": true,
+      "costly": null
+    },
+    "u-povtorit": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ne-pochuv": {
+      "pass": true,
+      "costly": null
+    },
+    "u-zachekaite": {
+      "pass": true,
+      "costly": null
+    },
+    "u-khvylynku": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ne-znaiu": {
+      "pass": true,
+      "costly": null
+    },
+    "u-vidstavyty": {
+      "pass": true,
+      "costly": null
+    },
+    "u-pivnich": {
+      "pass": true,
+      "costly": null
+    },
+    "u-dva-tanky": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tak-two-choices": {
+      "pass": false,
+      "costly": "wrong_pick"
+    },
+    "u-ch-sobor": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ch-blyzhche": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ch-khrestovozdvyzhenska": {
+      "pass": true,
+      "costly": null
+    },
+    "u-ch-shkola": {
+      "pass": true,
+      "costly": null
+    },
+    "u-h-tretia": {
+      "pass": true,
+      "costly": null
+    },
+    "u-h-tsentralna": {
+      "pass": true,
+      "costly": null
+    },
+    "u-h-miska": {
+      "pass": true,
+      "costly": null
+    },
+    "u-h-zhodna": {
+      "pass": true,
+      "costly": null
+    },
+    "u-one-tak": {
+      "pass": true,
+      "costly": null
+    },
+    "u-one-tak-tochno": {
+      "pass": true,
+      "costly": null
+    },
+    "u-one-ni": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tr-parkovyi": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tr-funikuler": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tr-maidan": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tr-ya-na-maidani": {
+      "pass": false,
+      "costly": "wrong_subject"
+    },
+    "u-tr-vidbii": {
+      "pass": true,
+      "costly": null
+    },
+    "u-tr-daleko": {
+      "pass": true,
+      "costly": null
+    }
+  }
+}

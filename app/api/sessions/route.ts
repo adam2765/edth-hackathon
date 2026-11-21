@@ -3,6 +3,7 @@ import { AREAS, isAreaId } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
 import { startPointFrom } from "@/lib/reports/mission";
 import { createMission, listMissions } from "@/lib/reports/record";
+import { ROSTER_MAX, rosterOf } from "@/lib/reports/types";
 
 /** The missions on this coordinator: `GET /api/sessions`, open ones first. Phones pick one to join. */
 export async function GET() {
@@ -17,11 +18,12 @@ export async function GET() {
 const PARIS_TIME = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /**
- * Opens a mission: POST JSON `{ area, name?, start? }`, where `start` is a gazetteer place id or
- * null. Returns 201 with the mission and its new code.
+ * Opens a mission: POST JSON `{ area, name?, start?, roster? }`, where `start` is a gazetteer place
+ * id or null, and `roster` the call signs on the radio net, as a list or as text split by commas or
+ * lines [201]. Returns 201 with the mission and its new code.
  */
 export async function POST(req: Request) {
-  let body: { area?: unknown; name?: unknown; start?: unknown };
+  let body: { area?: unknown; name?: unknown; start?: unknown; roster?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -39,8 +41,13 @@ export async function POST(req: Request) {
     if (!f) return NextResponse.json({ error: "No place with that id in this area." }, { status: 400 });
     start = startPointFrom(f);
   }
+  if (body.roster != null && typeof body.roster !== "string" && !Array.isArray(body.roster)) {
+    return NextResponse.json({ error: "`roster` is a list of call signs, or text with one per line or comma." }, { status: 400 });
+  }
+  const roster = rosterOf(body.roster);
+  if (roster.length > ROSTER_MAX) return NextResponse.json({ error: `At most ${ROSTER_MAX} call signs.` }, { status: 400 });
   try {
-    const r = await createMission({ area, name, start }, now);
+    const r = await createMission({ area, name, start, roster }, now);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     return NextResponse.json({ mission: r.mission }, { status: 201 });
   } catch (err) {

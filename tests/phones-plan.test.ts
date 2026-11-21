@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { planPhones } from "../transmitter/scripts/phones-plan.mjs";
 
-// `npm run phones` (decision 199): reopen the app when only its code changed; build and install
+// `npm run phones` (decision 207): reopen the app when only its code changed; build and install
 // only after a native change, or for a phone without the app.
 
 const now = new Date("2026-11-21T18:00:00Z");

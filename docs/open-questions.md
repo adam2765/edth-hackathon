@@ -51,7 +51,7 @@ The people:
    - *It decides:* how dense the map and the feed must stay readable, and the fade time.
 
 6. **Do speakers say their call sign in each report?** Is there a standard phrasing, with pro-words such as "over"?
-   - *Today:* the call sign comes from the device, not from the words.
+   - *Today:* a phone names itself when it joins. A report with no call sign is a radio report: the sender is read from the words against the mission's roster, and the operator settles any the reader is not sure of [202, 203] ([callsigns.md](callsigns.md)). The reader expects the sender first or after "this is".
    - *It decides:* whether we read the call sign from the transcript. On a shared radio net there is no other way.
 
 The words:

@@ -85,7 +85,7 @@ Metro runs, saved changes also reach the open apps by themselves.
 The app is built and installed again only when its native side changed: a native package,
 `app.json`, `app.config.ts` and the variables it reads, or Expo itself. Expo's fingerprint of
 those is kept in `.expo/phones.json`, so the script knows. After such a change it runs
-`npx expo prebuild --platform ios --clean` once, then builds for each phone (decision 199). The
+`npx expo prebuild --platform ios --clean` once, then builds for each phone (decision 207). The
 first build takes several minutes; each further phone takes less. A phone that does not have
 the app yet gets it the same way, so a teammate's iPhone only needs to be plugged in, unlocked,
 trusted, and in Developer Mode.

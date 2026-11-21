@@ -1,5 +1,5 @@
 // The choices behind `npm run phones`, kept apart from devicectl and Expo so tests can check them.
-// The script itself is phones.mjs; why it works this way is decision 199.
+// The script itself is phones.mjs; why it works this way is decision 207.
 
 /**
  * @typedef {{ name: string, udid: string, connected: boolean, paired: boolean, developerMode?: string }} Phone

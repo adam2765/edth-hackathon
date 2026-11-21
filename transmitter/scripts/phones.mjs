@@ -4,7 +4,7 @@
 // change to App.tsx or src/ only needs the app reopened, and Metro pushes later saves by itself.
 // The app is built and installed again only when its native side changed (native packages,
 // app.json, app.config.ts and the variables it reads, Expo itself), or a phone does not have it yet.
-// README.md, "Updating the phones"; decision 199.
+// README.md, "Updating the phones"; decision 207.
 //
 //   npm run phones                      update and open the app on every connected iPhone
 //   npm run phones -- --check           say what it would do, and change nothing

@@ -172,7 +172,7 @@ defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier | grep -E 'team
 
 It is the 10-character `teamID`. With several teams, ask the person which one.
 
-Keep both values in `transmitter/.env.local`, which git ignores. Expo's commands and `npm run phones` read it, so no terminal needs them exported [199]. (person) Create it with these two lines, since agents stay out of `.env` files:
+Keep both values in `transmitter/.env.local`, which git ignores. Expo's commands and `npm run phones` read it, so no terminal needs them exported [207]. (person) Create it with these two lines, since agents stay out of `.env` files:
 
 ```
 APPLE_TEAM_ID=<team ID>
@@ -203,7 +203,7 @@ The app loads its code from Metro on the Mac. Keep Metro running in its own term
 cd transmitter && npx expo start --dev-client
 ```
 
-Then build, install and open the app on every iPhone connected to this Mac [199]:
+Then build, install and open the app on every iPhone connected to this Mac [207]:
 
 ```bash
 cd transmitter && npm run phones -- --check    # the bundle ID it will use, and what it will do on each phone
@@ -233,7 +233,7 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 ### Later updates
 
-Run `cd transmitter && npm run phones` again after a pull, or to reopen the app on every connected iPhone. It builds only when something native changed [199]. Another teammate's iPhone can get the app from this Mac the same way: plugged in, unlocked, trusted and in Developer Mode, it is signed with this Mac's Apple ID. Details: [transmitter/README.md](../transmitter/README.md#updating-the-phones).
+Run `cd transmitter && npm run phones` again after a pull, or to reopen the app on every connected iPhone. It builds only when something native changed [207]. Another teammate's iPhone can get the app from this Mac the same way: plugged in, unlocked, trusted and in Developer Mode, it is signed with this Mac's Apple ID. Details: [transmitter/README.md](../transmitter/README.md#updating-the-phones).
 
 ## 6. Transmitter on Android
 

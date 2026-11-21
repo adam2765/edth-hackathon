@@ -1,7 +1,7 @@
 /**
  * The shared record: a mission's opening, every unit that joins, every report and every answer to
- * a question, what the command post did to a track by hand, and the mission's end, as one
- * append-only log per session. The coordinator writes it; the command post reads it and rebuilds
+ * a question, what the command post did to a track by hand, radio reports held for the operator
+ * and what the operator did with them, and the mission's end, as one append-only log per session. The coordinator writes it; the command post reads it and rebuilds
  * the map from it, live or up to any moment for a replay.
  * A mission is what the code calls a session: one code, one log. Safe to import on the client.
  */
@@ -67,7 +67,89 @@ export interface ReportEntry {
   position: UnitPosition | null;
   /** Set when the report is about a track. `position` is then null: the speaker does not move. */
   track?: TrackSighting | null;
+  /** Set for a radio report: how the coordinator found who sent it [202]. Absent from a phone that joined. */
+  sender?: Sender;
   timings_ms: Timings;
+}
+
+/**
+ * How a radio report's sender was found [202]. A phone names itself; a radio report names its
+ * sender in its words, read against the mission's roster (decision 200).
+ */
+export interface Sender {
+  /** The words the call sign was read from, as speech-to-text wrote them; null when none was said. */
+  heard: string | null;
+  /**
+   * `exact` or `near`: read from the words, one roster entry. `reply`: no call sign was said, and
+   * one unit had an open question, so it is that unit's reply [204]. `operator`: the command post
+   * gave it to this unit from the Unassigned tray [203].
+   */
+  how: "exact" | "near" | "reply" | "operator";
+  /** For `operator`: the held report it came from. */
+  held?: string;
+}
+
+/** Why a radio report waits for the operator instead of going to a unit [203, 204]. */
+export type HeldReason =
+  /** Two roster entries are close ("Alpha to base"), or one is and the words may name another unit. */
+  | "which"
+  /** A call sign not on the roster ("CHARLIE 3, checking in"); `read` holds it. */
+  | "unknown"
+  /** No call sign, and no open question it could answer; or no words at all. */
+  | "none"
+  /** The words name a unit, but the report would move it farther than it could have gone [204]. */
+  | "far";
+
+/**
+ * A radio report the coordinator did not give to a unit by itself: it waits in the command post's
+ * Unassigned tray until the operator assigns it, adds the call sign heard, or dismisses it [203].
+ * A transcript never creates a unit and never moves one it is not sure of.
+ */
+export interface HeldEntry {
+  kind: "held";
+  id: string;
+  session: string;
+  ts: number;
+  clientTs: number | null;
+  area: AreaId;
+  transcript: string;
+  language: string | null;
+  reason: HeldReason;
+  /** The words the call sign was read from, as speech-to-text wrote them; null when none was said. */
+  heard: string | null;
+  /** A call sign heard that is not on the roster ("CHARLIE 3"), for "Add CHARLIE 3". */
+  read: string | null;
+  /** Roster entries it may be from, most likely first. */
+  candidates: string[];
+  /** What the operator is asked ("ALPHA 2 moved 3.2 km in 20 s. Was that ALPHA 1?"). */
+  question: string;
+  /** For `far`: where the report would have put the unit heard. */
+  position?: UnitPosition | null;
+  /** The recording's file name, served by `GET /api/sessions/<code>/audio/<file>`; null for a typed report. */
+  audio: string | null;
+}
+
+/** The operator adds a call sign to the mission's roster [201]. Only this, or the roster at opening, makes a unit. */
+export interface RosterEntry {
+  kind: "roster";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who added it: "CP". */
+  by: string;
+  callsign: string;
+  /** The held report whose call sign it was ("Add CHARLIE 3"), if it came from the tray. */
+  held?: string;
+}
+
+/** The operator dismisses a held report: noise, or not for this net [203]. It stays in the log. */
+export interface DismissEntry {
+  kind: "dismiss";
+  id: string;
+  session: string;
+  ts: number;
+  by: string;
+  held: string;
 }
 
 export interface AnswerEntry {
@@ -145,6 +227,11 @@ export interface MissionEntry {
   area: AreaId;
   name: string;
   start: StartPoint | null;
+  /**
+   * The call signs on the radio net, set by the operator when opening the mission [201]. A radio
+   * report goes only to a call sign on the roster. Absent from missions opened before it.
+   */
+  roster?: string[];
 }
 
 /** A call sign joins the mission. */
@@ -168,7 +255,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -176,6 +263,8 @@ export interface MissionSummary {
   name: string;
   area: AreaId;
   start: StartPoint | null;
+  /** The call signs a radio report can go to: the roster set at opening, those the operator added, and phones that joined [201]. */
+  roster: string[];
   opened: number;
   /** When it was ended; null while open. */
   ended: number | null;
@@ -202,6 +291,16 @@ export interface PlacesReply {
    * placed there ("120 m north-east of Château de Vincennes"). `places` is then empty.
    */
   label?: string;
+}
+
+/** `POST /api/sessions/<code>/held/<id>`: what the operator did with a held report [203]. */
+export interface HeldReply {
+  /** The report the held one became, for `assign` and `add`; null for `dismiss`. */
+  report_id: string | null;
+  /** The unit it went to. */
+  callsign: string | null;
+  /** True when someone had settled it already: the first decision stands. */
+  already: boolean;
 }
 
 /** `POST /api/sessions/<code>/tracks` and `PATCH /api/sessions/<code>/tracks/<n>` */
@@ -245,4 +344,27 @@ export function callsignOf(v: unknown): string {
   if (typeof v !== "string") return "UNKNOWN";
   const s = v.replace(/\s+/g, " ").trim().toUpperCase().slice(0, 24);
   return s || "UNKNOWN";
+}
+
+/** A report with no call sign is a radio report: the call sign comes from its words [202]. */
+export function callsignGiven(v: unknown): boolean {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+/** The most call signs a roster takes at once. */
+export const ROSTER_MAX = 30;
+
+/**
+ * A roster as stored: each call sign as `callsignOf` stores it, no blanks, no repeats, at most 30.
+ * Takes a list, or text with one call sign per line or comma ("ALPHA 1, ALPHA 2").
+ */
+export function rosterOf(v: unknown): string[] {
+  const list = typeof v === "string" ? v.split(/[,;\n]+/) : Array.isArray(v) ? v : [];
+  const out: string[] = [];
+  for (const x of list) {
+    if (typeof x !== "string" || !x.trim()) continue;
+    const c = callsignOf(x);
+    if (c !== "UNKNOWN" && !out.includes(c)) out.push(c);
+  }
+  return out.slice(0, ROSTER_MAX);
 }

@@ -16,21 +16,23 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 ```
 app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs, session, callsign, seq)
-app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, and its tracks placed by hand
+app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, its tracks placed by hand, and its held radio reports with their recordings
 app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
-lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand)
+lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand), held radio reports
 components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; MissionPanel.tsx opens and ends missions
-lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
+lib/providers/              Transcriber, IntentExtractor and ReplyReader interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
 lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report is about, whose a track is, where it is
 lib/geo/blocks.ts           "two blocks east": the count read from the words, the crossings counted along the street lines
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
+lib/geo/callsigns.ts        the sender's call sign, read from a radio report's words and matched against a roster
+lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Unassigned tray
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
-evals/                      extraction eval: cases, baselines, saved runs, the prompt journal
+evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign eval's cases
 .agents/skills/             skills for every agent: prompt-attack, prompt-tune, git-sync, pr (.claude/skills links here)
 .agents/hooks/              guard hooks for every agent: secrets, keys, deletes, worktrees (.claude/settings.json, .codex/hooks.json)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
@@ -52,6 +54,8 @@ npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
+npm run eval:replies        # score the reader of replies to a question (docs/ask-back.md); key or PROVIDER_MODE=local
+npm run eval:callsigns      # score the call-sign reader (docs/callsigns.md); no model, also in npm test
 ```
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
