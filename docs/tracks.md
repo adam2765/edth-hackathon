@@ -123,6 +123,7 @@ flowchart TD
 | "Enemy at the station." | the speaker | asks: a hostile word was said |
 | "Our drone team is at the station." | the speaker | asks: a thing and whose it is were named |
 | "I'm at the station." | the speaker | the speaker, placed as before tracks |
+| "Friendly at the station." | a track | a track [175]; read as the speaker, it would move the unit, since a friendly word alone is not checked |
 
 The question is "Is that where you are, or something you see? Say 'I am at' or 'I see'." The last check was added with the script [157]: hosted Mistral read "Our drone team is at Vincennes station" as the speaker's own position and moved the unit.
 
