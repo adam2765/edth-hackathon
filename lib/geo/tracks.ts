@@ -24,7 +24,7 @@ type Lang = "en" | "fr" | "uk";
 const CYRILLIC = /[\u0400-\u04ff]/;
 
 /** Lower case, Latin accents dropped, punctuation out. "L'ennemi" keeps "ennemi"; "об'єкт" becomes "обєкт". */
-function fold(text: string): string {
+export function fold(text: string): string {
   return text
     .toLowerCase()
     .replace(/[\u00c0-\u024f]/g, (c) => c.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))
@@ -183,6 +183,11 @@ export function trackNumberSaid(transcript: string): number | null {
     if (n && n > 0) return n;
   }
   return null;
+}
+
+/** True for a word that only names a track: "track", "number", a digit or a number word, as in "Track 2". */
+export function trackNameWord(word: string): boolean {
+  return says(DESIGNATOR, [word], "") || NUMBER_FILLER.has(word) || /^\d{1,3}$/.test(word) || NUMBER_WORDS[word] != null;
 }
 
 /**

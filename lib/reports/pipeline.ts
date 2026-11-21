@@ -11,6 +11,13 @@ import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { readVoices } from "@/lib/geo/voices";
 import { getExtractor } from "@/lib/providers/extractor";
 
+/** The resolution saved with a call that was only a request: nothing to place, and no question [234]. */
+export const REQUEST_ONLY: Resolution = {
+  status: "unresolved",
+  candidates: [],
+  evidence: { rule: "request_only", detail: "only a request for recon; nothing to place" },
+};
+
 export interface ReadInput {
   area: Area;
   /** The language speech-to-text heard, a hint for the model. */

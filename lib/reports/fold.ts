@@ -7,8 +7,8 @@
 import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
-import { describeTrack } from "../geo/trackKinds";
-import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, Sender, StartPoint, TrackSighting, UnitPosition } from "./types";
+import { describeTrack, TRACK_KIND_NAME } from "../geo/trackKinds";
+import type { HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitEntry, UnitPosition } from "./types";
 
 /** The command post's colour in the feed: a slate grey no call sign is given. */
 export const CP_COLOUR = "#334155";
@@ -54,6 +54,10 @@ export interface UnitState {
   atStart: boolean;
   /** The street it is on or moving along, when its latest placement named one (a gazetteer id). */
   street: string | null;
+  /** What it is, as a person at the command post said: a foot patrol, a drone team; null when not said [235]. */
+  kind: TrackKind | null;
+  /** For a unit whose kind is drone or drone team: the track the command post sent it to look at [235]. */
+  task: { n: number; ts: number; by: string } | null;
 }
 
 /**
@@ -94,14 +98,36 @@ export interface TrackState {
   note: string | null;
   /** When the command post marked it gone; null while it is on the map. A new report brings it back. */
   gone: number | null;
+  /** For a friendly drone or drone team: the track the command post sent it to look at, until it ends [234]. */
+  task: { n: number; ts: number; by: string } | null;
+  /**
+   * The friendly drones and drone teams sent to look at this track [234]: a track by its number
+   * (`asset`), or a unit on the net by its call sign (`unit`) [235].
+   */
+  recon: { asset: number | null; unit: string | null; ts: number }[];
+}
+
+/**
+ * A unit's request for recon, open until the command post sends a drone to that track or turns it
+ * down, or the mission ends [234].
+ */
+export interface RequestState {
+  id: string;
+  ts: number;
+  callsign: string;
+  colour: string;
+  /** The track it is about; null when none was named. */
+  n: number | null;
+  words: string;
+  report_id: string | null;
 }
 
 export interface FeedItem {
   /**
    * A report, a call sign joining, something the command post did to a track, or a note of what it
-   * did with a held radio report (added a call sign, dismissed the report).
+   * did with a held radio report (added a call sign, dismissed the report) or said a unit is [235].
    */
-  kind: "report" | "join" | "plot" | "note";
+  kind: "report" | "join" | "plot" | "note" | "request" | "task";
   /** The report's or the join's id. */
   id: string;
   ts: number;
@@ -143,6 +169,8 @@ export interface SessionState {
   roster: string[];
   /** Radio reports waiting for the operator, oldest first [203]. */
   held: HeldEntry[];
+  /** Requests for recon not yet answered, oldest first [234]. */
+  requests: RequestState[];
   /** By number. */
   tracks: TrackState[];
   /** Newest first. */
@@ -162,7 +190,7 @@ export function colourMap(entries: LogEntry[]): Map<string, string> {
   };
   for (const e of entries) {
     if (e.kind === "mission") (e.roster ?? []).forEach(give);
-    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster") give(e.callsign);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster" || e.kind === "request" || e.kind === "unit") give(e.callsign);
   }
   return m;
 }
@@ -217,6 +245,39 @@ function plotOutcome(e: PlotEntry, t: TrackState): string {
   }
 }
 
+/** A request for recon, in words for the feed [234]. */
+function requestOutcome(e: RequestEntry): string {
+  return e.n != null ? `Asked for recon on Track ${e.n}: “${e.words}”` : `Asked for recon, no track named: “${e.words}”`;
+}
+
+/** A unit's kind, in words: "drone team", "people" [235]. */
+export function unitKindWord(kind: TrackKind): string {
+  return TRACK_KIND_NAME[kind].toLowerCase();
+}
+
+/** What a person at the command post said a unit is, in words [235]. */
+function unitOutcome(e: UnitEntry): string {
+  return e.unit_kind ? `${e.callsign} is a ${unitKindWord(e.unit_kind)}.` : `${e.callsign}: what it is, cleared.`;
+}
+
+/** The drone a task is about, in words: "Track 1 (friendly drone team)", or "BRAVO 2 (drone team)" for a unit [235]. */
+function droneName(e: TaskEntry, asset: TrackState | undefined, unit: UnitState | undefined): string {
+  if (e.unit != null) return unit?.kind ? `${e.unit} (${unitKindWord(unit.kind)})` : e.unit;
+  return asset ? `Track ${asset.n} (${describeTrack(asset)})` : `Track ${e.asset}`;
+}
+
+/** What the command post did about recon, in words [234]. `was` is the track the drone looked at before. */
+function taskOutcome(e: TaskEntry, drone: string, was: number | null, req: RequestState | undefined): string {
+  switch (e.action) {
+    case "send":
+      return `Sent ${drone} to look at Track ${e.n}${was != null && was !== e.n ? `, instead of Track ${was}` : ""}.${req ? ` ${req.callsign} had asked.` : ""}`;
+    case "done":
+      return `${drone}: recon${was != null ? ` of Track ${was}` : ""} done.`;
+    case "decline":
+      return req ? `Declined ${req.callsign}’s request for recon${req.n != null ? ` on Track ${req.n}` : ""}: “${req.words}”` : "Declined a request for recon.";
+  }
+}
+
 /** What a report did to a track, in words, once the track has taken it in. */
 function trackOutcome(e: ReportEntry, s: TrackSighting, t: TrackState, opened: boolean): string {
   const what = describeTrack(t);
@@ -229,6 +290,7 @@ function trackOutcome(e: ReportEntry, s: TrackSighting, t: TrackState, opened: b
 function reportOutcome(e: ReportEntry): string {
   const r = e.resolution;
   if (e.position) return describePosition(e.position);
+  if (r.evidence.rule === "request_only") return "Nothing to place: only a request for recon.";
   if (r.status === "resolved") return r.heading_to ? `Heading to ${r.heading_to.name} (no starting position yet)` : "Nothing to place";
   if (r.status === "ambiguous") return `Asked: ${r.question ?? "which one?"}`;
   return r.question ?? "Could not place that.";
@@ -266,6 +328,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   let mission: MissionState | null = null;
   const roster: string[] = [];
   const held = new Map<string, HeldEntry>();
+  const requests = new Map<string, RequestState>();
   const enlist = (c: string) => {
     if (!roster.includes(c)) roster.push(c);
   };
@@ -273,7 +336,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
     if (!u) {
-      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null };
+      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null, kind: null, task: null };
       units.set(callsign, u);
     }
     return u;
@@ -320,6 +383,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         changed: null,
         note: null,
         gone: null,
+        task: null,
+        recon: [],
       };
       tracks.set(s.n, t);
     } else {
@@ -373,6 +438,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         changed: null,
         note: e.note ?? null,
         gone: null,
+        task: null,
+        recon: [],
       };
       tracks.set(e.n, t);
       placeTrack(t, e.position, e.ts);
@@ -399,6 +466,16 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     if (e.action === "gone") t.gone = e.ts;
     if (e.action === "restore") t.gone = null;
     return t;
+  };
+
+  /** Closes a request for recon, and says how in its feed line. */
+  const closeRequest = (id: string, how: string, expired = false) => {
+    if (!requests.delete(id)) return;
+    const item = feed.get(id);
+    if (item) {
+      item.outcome = `${item.outcome} ${how}`;
+      item.expired = expired;
+    }
   };
 
   for (const e of entries) {
@@ -458,8 +535,98 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
           item.outcome = `${item.outcome} Not answered before the mission ended.`;
         }
         u.pending = null;
+        u.task = null;
       }
-      for (const t of tracks.values()) t.pendingReport = null;
+      for (const t of tracks.values()) {
+        t.pendingReport = null;
+        // Nobody is looking any more once the mission is over.
+        t.task = null;
+      }
+      for (const id of [...requests.keys()]) closeRequest(id, "Not answered before the mission ended.", true);
+      continue;
+    }
+
+    if (e.kind === "unit") {
+      const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      u.kind = e.unit_kind;
+      feed.set(e.id, {
+        kind: "note",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: u.area,
+        transcript: "",
+        status: "resolved",
+        outcome: unitOutcome(e),
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: null,
+      });
+      continue;
+    }
+
+    if (e.kind === "request") {
+      const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      // The unit said it: it was heard, as with a report.
+      u.lastHeard = Math.max(u.lastHeard, e.ts);
+      requests.set(e.id, { id: e.id, ts: e.ts, callsign: e.callsign, colour: u.colour, n: e.n, words: e.words, report_id: e.report_id });
+      feed.set(e.id, {
+        kind: "request",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.callsign,
+        colour: u.colour,
+        area: u.area,
+        transcript: "",
+        status: "resolved",
+        outcome: requestOutcome(e),
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: e.n,
+        ...(e.sender ? { sender: e.sender } : {}),
+      });
+      continue;
+    }
+
+    if (e.kind === "task") {
+      // The drone: a friendly track, or a unit on the net whose kind is drone or drone team [235].
+      const asset = e.asset != null ? tracks.get(e.asset) : undefined;
+      const unit = e.unit != null ? units.get(e.unit) : undefined;
+      const looker = asset ?? unit;
+      const drone = droneName(e, asset, unit);
+      const req = e.request ? requests.get(e.request) : undefined;
+      const was = looker?.task?.n ?? null;
+      if (e.action === "send") {
+        if (!looker || e.n == null || !tracks.has(e.n)) continue;
+        looker.task = { n: e.n, ts: e.ts, by: e.by };
+        // A drone sent to a track answers every open request for that track.
+        const who = asset ? `Track ${asset.n}` : e.unit;
+        for (const r of [...requests.values()]) if (r.id === e.request || r.n === e.n) closeRequest(r.id, `${e.by} sent ${who}.`);
+      } else if (e.action === "done") {
+        if (!looker) continue;
+        looker.task = null;
+      } else if (e.request) closeRequest(e.request, `${e.by} declined it.`);
+      feed.set(e.id, {
+        kind: "task",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: looker?.area ?? mission?.area ?? area ?? "vincennes",
+        transcript: "",
+        status: "resolved",
+        outcome: taskOutcome(e, drone, was, req),
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: e.action === "send" ? (e.n ?? null) : e.action === "done" ? (e.asset ?? was) : (req?.n ?? null),
+      });
       continue;
     }
 
@@ -593,11 +760,22 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
   }
 
+  // Who is looking at what, from each drone's task: drone tracks, then drone units [235].
+  for (const t of tracks.values()) {
+    if (!t.task) continue;
+    tracks.get(t.task.n)?.recon.push({ asset: t.n, unit: null, ts: t.task.ts });
+  }
+  for (const u of units.values()) {
+    if (!u.task) continue;
+    tracks.get(u.task.n)?.recon.push({ asset: null, unit: u.callsign, ts: u.task.ts });
+  }
+
   return {
     mission,
     units: [...units.values()],
     roster,
     held: [...held.values()],
+    requests: [...requests.values()],
     tracks: [...tracks.values()].sort((a, b) => a.n - b.n),
     feed: [...feed.values()].sort((a, b) => b.ts - a.ts),
     first,

@@ -3,7 +3,8 @@ import { AREAS } from "@/lib/geo/areas";
 import type { Resolution } from "@/lib/geo/types";
 import { pinnedLanguage } from "@/lib/providers/extractor";
 import { missionRoster } from "@/lib/reports/mission";
-import { readTranscript } from "@/lib/reports/pipeline";
+import { readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
+import { splitRequest } from "@/lib/geo/requests";
 import { afterCallsign } from "@/lib/reports/radio";
 import { addToRoster, dismissHeld, heldReport, openMissionLog, reportContext, saveReport } from "@/lib/reports/record";
 import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldReply } from "@/lib/reports/types";
@@ -65,8 +66,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
     const t0 = performance.now();
     const area = AREAS[c.area];
     let read: Awaited<ReturnType<typeof readTranscript>> | null = null;
-    if (held.transcript.trim()) {
-      read = await readTranscript(afterCallsign(held.transcript, held.heard), {
+    // A request for recon is cut out before the model reads the words, as for any report [234].
+    const heard = splitRequest(afterCallsign(held.transcript, held.heard));
+    if (held.transcript.trim() && !heard.only) {
+      read = await readTranscript(heard.text, {
         area,
         sttLanguage: held.language,
         pinned: pinnedLanguage(held.language),
@@ -76,11 +79,12 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
         callsign,
       });
     }
-    const resolution: Resolution = read?.resolution ?? {
-      status: "unresolved",
-      candidates: [],
-      evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words; given to a unit by the operator" },
-    };
+    // A call that was only a request is kept as a report with nothing to place, so the held one is settled.
+    const resolution: Resolution =
+      read?.resolution ??
+      (heard.only && heard.request
+        ? REQUEST_ONLY
+        : { status: "unresolved", candidates: [], evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words; given to a unit by the operator" } });
     const saved = await saveReport(
       {
         session,
@@ -95,6 +99,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
         lastPosition: c.lastPosition,
         timings_ms: { stt: 0, extract: read?.extract_ms ?? 0, resolve: read?.resolve_ms ?? 0, total: Math.round(performance.now() - t0) },
         sender: { heard: held.heard, how: "operator", held: id },
+        ...(heard.request ? { request: heard.request, read: heard.text } : {}),
       },
       now,
     );

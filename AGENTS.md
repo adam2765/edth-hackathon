@@ -16,10 +16,10 @@ EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map up
 
 ```
 app/api/report/route.ts     the coordinator: POST multipart (audio | text, area, lastPosition, clientTs, session, callsign, seq)
-app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, its tracks placed by hand, and its held radio reports with their recordings
+app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, its tracks placed by hand, its held radio reports with their recordings, its recon tasks (a drone sent to look at a track), and what each unit is
 app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
-lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand), held radio reports
-components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; MissionPanel.tsx opens and ends missions
+lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand), held radio reports, tasks (recon sent by the command post)
+components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; ReconTools.tsx sends a drone to look and answers recon requests; MissionPanel.tsx opens and ends missions
 lib/providers/              Transcriber, IntentExtractor and ReplyReader interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
@@ -27,12 +27,13 @@ lib/geo/tracks.ts           tracks, things a unit sees and reports: who a report
 lib/geo/blocks.ts           "two blocks east": the count read from the words, the crossings counted along the street lines
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
 lib/geo/callsigns.ts        the sender's call sign, read from a radio report's words and matched against a roster
+lib/geo/requests.ts         a request for recon ("send the drone"), read from the words and cut out before the model reads them
 lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Unassigned tray
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
-evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign eval's cases
+evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign and request evals' cases
 .agents/skills/             skills for every agent: prompt-attack, prompt-tune, git-sync, pr (.claude/skills links here)
 .agents/hooks/              guard hooks for every agent: secrets, keys, deletes, worktrees (.claude/settings.json, .codex/hooks.json)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
@@ -59,6 +60,7 @@ npm run eval:extract        # score intent extraction (evals/README.md); needs a
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
 npm run eval:replies        # score the reader of replies to a question (docs/ask-back.md); key or PROVIDER_MODE=local
 npm run eval:callsigns      # score the call-sign reader (docs/callsigns.md); no model, also in npm test
+npm run eval:requests       # score the recon-request reader (docs/tracks.md); no model, also in npm test
 ```
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`. CI runs the same checks after a push (`CONTRIBUTING.md`, CI); it does not replace running them first.
@@ -70,7 +72,7 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - The language model never produces coordinates. It extracts intent; `lib/geo/resolver.ts` places it against the gazetteer. Do not add a path where a model output becomes a position.
 - The app never reads the phone's GPS.
 - When a report is ambiguous, ask back. Do not add silent guesses.
-- Tracks are for reconnaissance only (decision 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between a unit and a track: no range check, no pairing, no "target" wording.
+- Tracks are for reconnaissance only (decision 234, which replaces 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between things on the map: no range check, no "nearest", no ranking, no "target" wording. Only a person sends a friendly drone or drone team to look at a track, and only a person ends that. A unit is a drone team only when a person at the command post says so, never from its call sign (decision 235).
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).
 - Work on a branch, never on `main`: one session, one worktree in `.claude/worktrees/`, one branch, one pull request (decision 173). Catch up by merging `origin/main`; never rebase a pushed branch or force-push. The steps are in `CONTRIBUTING.md` (Git workflow); `git-sync` and `pr` are the skills.
 - Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. When yours replaces or changes an earlier line, name that line in yours ("changes decision 49") and start it with **Changed by <yours>.**, or **Replaced by <yours>.** when none of it holds any more; that marker is the only edit an old line gets. `tests/decisions.test.ts` checks the numbers and both ends of each change.

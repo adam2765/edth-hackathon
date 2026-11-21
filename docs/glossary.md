@@ -21,13 +21,17 @@
 | Join | A phone entering a mission with a call sign and its own device id. The transmitter no longer joins: it picks a mission and sends its code, like a radio tuned to a net [208] |
 | Local mode | Running the whole pipeline on a laptop with no internet ([plan.md](plan.md#local-mode)) |
 | Mission | A run of the demo or an exercise: a code (`vincennes-1`), a name, an area, an optional start point, open or ended. One log. The code calls it a session |
+| Recon done | The command post ends a drone's task: the line goes, and the drone is free to send again. Only a person ends a task [234] |
 | Plot | A change to a track made by hand at the command post: place, change, move, gone or back. One `plot` line in the log; no model is involved |
+| Request (for recon) | A unit asking by radio for a drone to look at a track: "send the drone", "request eyes on", «envoyez le drone», «потрібна пташка». Read from the words in code and cut out before the model reads the rest. It waits in the command post's Recon requests tray until a person sends a drone or declines [234] |
 | Session | The code's word for a mission: one code, one append-only log |
 | Sighting | One report about a track: what, where, by whom, from where, and when |
 | Start point | A gazetteer place, picked at the base, where units are assumed to be until their first report names a place; shown with ≈ |
 | Suspect | A track thought to be hostile and still to be looked into. Drawn as a dashed hostile frame |
+| Task | A friendly drone or drone team sent by a person at the command post to look at a track: a track on the map, or a unit the command post marked as a drone team [235]. Drawn as a solid blue line from the drone to the track. It lasts until the command post says Recon done, sends the drone elsewhere, or the mission ends [234] |
 | Town | The admin area inside which street names are unique (the commune in France, the city for Kyiv); it tells two same-name streets apart |
-| Track | Something on the map that is not a reporting unit: seen or known of by a unit, reported by voice, numbered by the coordinator ("Track 3"), or placed by hand at the command post. For reconnaissance only. Drawn with its APP-6 symbol |
+| Track | Something on the map that is not a reporting unit: seen or known of by a unit, reported by voice, numbered by the coordinator ("Track 3"), or placed by hand at the command post. For reconnaissance only [234]. Drawn with its APP-6 symbol |
 | Transmitter | Anything that sends a spoken report: the web page, the native app, a scenario clip |
+| Unit kind | What a unit on the net is, as a person at the command post said: a foot patrol, a drone team. The same kinds as a track's. Never read from the call sign. A unit marked drone or drone team can be sent to look at a track [235] |
 | Wrong-pin rate | Share of reports placed confidently in the wrong place; the headline quality figure |
 | Voice turn | A stretch of a transcript spoken by one voice. Whisper on the phone marks where the voice changes with a dash [154] |
