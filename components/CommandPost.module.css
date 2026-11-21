@@ -1563,6 +1563,87 @@ input:focus-visible {
   box-shadow: 0 0 0 3px rgba(44, 156, 255, 0.5);
 }
 
+/* ---------- the Unassigned tray: radio reports waiting for the operator [203] ---------- */
+.held {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.heldItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 11px;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  background: rgba(255, 201, 64, 0.08);
+}
+
+.heldQuestion {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.heldAudio {
+  width: 100%;
+  height: 32px;
+}
+
+.heldActions,
+.giveForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.giveBtn {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1.5px solid var(--accent-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.giveBtn:hover {
+  background: rgba(44, 156, 255, 0.16);
+}
+
+.giveSelect,
+.giveInput {
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.giveInput {
+  width: 9.5em;
+  text-transform: uppercase;
+}
+
+/* How a radio report's sender was found, under its outcome [202]. */
+.heardLine {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 /* ---------- big screens: a projector or a wall screen, read from across the room ---------- */
 /* The same pixels are a smaller share of a bigger picture, so the header, the side panel and the
    replay bar are drawn larger. The map itself is not scaled; CommandPost.tsx enlarges its labels. */

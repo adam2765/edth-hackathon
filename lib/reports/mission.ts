@@ -17,6 +17,23 @@ export function endOf(entries: LogEntry[]): EndEntry | null {
   return entries.find((e): e is EndEntry => e.kind === "end") ?? null;
 }
 
+/**
+ * The call signs a radio report can go to [201]: the roster set when the mission was opened, the
+ * ones the operator added, and any that joined from a phone, in that order. Only these: a
+ * transcript never adds one.
+ */
+export function missionRoster(entries: LogEntry[]): string[] {
+  const out: string[] = [];
+  const add = (c: string) => {
+    if (!out.includes(c)) out.push(c);
+  };
+  for (const e of entries) {
+    if (e.kind === "mission") (e.roster ?? []).forEach(add);
+    else if (e.kind === "roster" || e.kind === "join") add(e.callsign);
+  }
+  return out;
+}
+
 /** Null when the log has no mission line (a session from before missions). */
 export function summarizeMission(code: string, entries: LogEntry[]): MissionSummary | null {
   const m = missionOf(entries);
@@ -32,6 +49,7 @@ export function summarizeMission(code: string, entries: LogEntry[]): MissionSumm
     name: m.name,
     area: m.area,
     start: m.start,
+    roster: missionRoster(entries),
     opened: m.ts,
     ended: endOf(entries)?.ts ?? null,
     units: callsigns.size,

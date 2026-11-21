@@ -8,7 +8,7 @@ const day = new Date(2026, 10, 21, 10, 0, 0).getTime();
 const at = (min: number) => day + min * MIN;
 
 function mission(code: string, opened: number, ended: number | null, area: MissionSummary["area"] = "vincennes"): MissionSummary {
-  return { code, name: code, area, start: null, opened, ended, units: 0, reports: 0, last: ended ?? opened };
+  return { code, name: code, area, start: null, roster: [], opened, ended, units: 0, reports: 0, last: ended ?? opened };
 }
 
 describe("dayStretches", () => {

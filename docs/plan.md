@@ -14,7 +14,7 @@ In scope:
 - **Command post page:** one coloured marker per call sign, with its name and last-update time, confidence circle, trail and movement arrow.
 - **Live feed:** a side list of reports (time, call sign, transcript, outcome); clicking one flies the map to it.
 - **Pending questions:** an open ask-back shows on the command post, with its candidates numbered on the map.
-- **Replay:** a time slider and play button that rebuild the map from the log up to any moment. The slider holds the day's missions in the area, gray where none was running, with a detent at every start and end [200].
+- **Replay:** a time slider and play button that rebuild the map from the log up to any moment. The slider holds the day's missions in the area, gray where none was running, with a detent at every start and end [206].
 - **Fading:** a marker dims when its speaker has been silent for a few minutes.
 - **Speaker side:** pick a call sign once and join a session by link; nothing else changes.
 

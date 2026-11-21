@@ -13,10 +13,10 @@ import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
-import { CP_COLOUR, colourMap, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
+import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
-import { COMMAND_POST, sessionCode, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
+import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
@@ -235,12 +235,26 @@ type Tool =
 /** An answer the command post is about to give for a unit: asked once more before it is saved. */
 type Answering = { reportId: string; choice: string | null; name: string; callsign: string };
 
+/** What the operator is about to do with a held radio report: asked once more first [203]. */
+type Settling = { held: string; action: "assign" | "add" | "dismiss"; callsign: string | null };
+
+/** Why a radio report waits, as one word on its pill. */
+const HELD_TAG: Record<HeldReason, string> = { which: "Which unit?", unknown: "Not on roster", none: "No call sign", far: "Too far" };
+
+function settleText(s: Settling, h: HeldEntry): string {
+  if (s.action === "dismiss") return "Dismiss this report? Nothing moves.";
+  if (s.action === "add") return `Add ${s.callsign} to the roster and give it this report?`;
+  return `Give this report to ${s.callsign}? Its words are read again from where ${s.callsign} was at ${fmtTime(h.ts)}.`;
+}
+
 /**
  * A unit's state as one word (so it is never told by colour alone) and one line of detail.
  * An open question comes first, even for a silent unit: it is the one that needs the operator.
  */
 function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): { tag: string; text: string; tone: UnitTone } {
   if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
+  // On the roster, and no report from it yet [201].
+  if (u.lastHeard === 0) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const p = u.position;
   const where = p ? `${p.label} · ±${p.radius_m} m` : "";
   if (silent) {
@@ -298,6 +312,9 @@ export default function CommandPost() {
   /** A short line over the map after a change was saved ("Track 7 placed"). */
   const [notice, setNotice] = useState<string | null>(null);
   const [answering, setAnswering] = useState<Answering | null>(null);
+  const [settling, setSettling] = useState<Settling | null>(null);
+  /** A call sign the operator types for a held report, when the words gave none [203]. */
+  const [newSign, setNewSign] = useState<{ held: string; text: string }>({ held: "", text: "" });
 
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -1055,6 +1072,7 @@ export default function CommandPost() {
   /** In a replay or an ended mission the tools close by themselves. */
   const activeTool = canEdit ? tool : null;
   const activeAnswer = canEdit ? answering : null;
+  const activeSettle = canEdit ? settling : null;
   const pickedTrack = picked != null ? (view.tracks.find((t) => t.n === picked) ?? null) : null;
   /** The number a new track will most likely get; the coordinator gives the real one. */
   const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
@@ -1268,6 +1286,41 @@ export default function CommandPost() {
       } finally {
         setBusy(false);
         setAnswering(null);
+      }
+    },
+    [session],
+  );
+
+  /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. */
+  const sendHeld = useCallback(
+    async (st: Settling) => {
+      if (!session) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(session)}/held/${encodeURIComponent(st.held)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: st.action, callsign: st.callsign }),
+        });
+        const data = (await res.json().catch(() => ({}))) as Partial<HeldReply> & { error?: string };
+        if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
+        setNotice(
+          data.already
+            ? "Someone had settled this report already"
+            : st.action === "dismiss"
+              ? "Dismissed the report"
+              : st.action === "add"
+                ? `Added ${st.callsign} and gave it the report`
+                : `Gave the report to ${st.callsign}`,
+        );
+        setNewSign({ held: "", text: "" });
+        pollNow.current();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Settling the report failed.");
+      } finally {
+        setBusy(false);
+        setSettling(null);
       }
     },
     [session],
@@ -1672,6 +1725,110 @@ export default function CommandPost() {
       </main>
 
       <aside className={styles.side} data-tracks={view.tracks.length ? "" : undefined}>
+        {/* Radio reports the coordinator was not sure of: they wait here for the operator, and
+            nothing moves until the operator gives one to a unit [203]. */}
+        {view.held.length ? (
+          <section className={styles.section} aria-labelledby="held-h">
+            <h2 id="held-h" className={styles.h2}>
+              Unassigned <span className={styles.count}>{view.held.length}</span>
+            </h2>
+            <ol className={styles.held}>
+              {view.held.map((h) => {
+                const st = activeSettle?.held === h.id ? activeSettle : null;
+                const onRoster = (c: string) => view.roster.includes(c);
+                const give = [...new Set([...h.candidates, ...(h.read ? [h.read] : [])])].filter(onRoster);
+                const addable = h.read && !onRoster(h.read) ? h.read : null;
+                const others = view.roster.filter((c) => !give.includes(c));
+                const typed = newSign.held === h.id ? newSign.text : "";
+                const typedSign = callsignGiven(typed) ? callsignOf(typed) : null;
+                return (
+                  <li key={h.id} className={styles.heldItem}>
+                    <span className={styles.itemHead}>
+                      <span className={styles.itemTime}>{fmtTime(h.ts)}</span>
+                      <span className={styles.itemCall}>{h.heard ? `“${h.heard}”` : "Radio"}</span>
+                      <span className={styles.pill} data-status="ask">
+                        {HELD_TAG[h.reason]}
+                      </span>
+                    </span>
+                    <span className={styles.said}>{h.transcript ? `“${h.transcript}”` : "(no words heard)"}</span>
+                    <span className={styles.heldQuestion}>{h.question}</span>
+                    {h.audio && session ? (
+                      <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(session)}/audio/${encodeURIComponent(h.audio)}`}>
+                        The recording.
+                      </audio>
+                    ) : null}
+                    {!canEdit ? null : st ? (
+                      <div className={styles.confirm} role="group" aria-label="Confirm">
+                        <span className={styles.confirmText}>{settleText(st, h)}</span>
+                        <button type="button" className={st.action === "dismiss" ? styles.dangerBtn : styles.primaryBtn} onClick={() => sendHeld(st)} disabled={busy}>
+                          {st.action === "dismiss" ? "Dismiss" : st.action === "add" ? "Add and give" : "Give"}
+                        </button>
+                        <button type="button" className={styles.linkBtn} onClick={() => setSettling(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.heldActions}>
+                        {give.map((c) => (
+                          <button key={c} type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "assign", callsign: c })}>
+                            Give to {c}
+                          </button>
+                        ))}
+                        {addable ? (
+                          <button type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "add", callsign: addable })}>
+                            Add {addable}
+                          </button>
+                        ) : null}
+                        {others.length ? (
+                          <select
+                            className={styles.giveSelect}
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) setSettling({ held: h.id, action: "assign", callsign: e.target.value });
+                            }}
+                            aria-label="Give this report to a unit"
+                          >
+                            <option value="">{give.length ? "Another unit…" : "Give to…"}</option>
+                            {others.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        <form
+                          className={styles.giveForm}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (typedSign) setSettling({ held: h.id, action: onRoster(typedSign) ? "assign" : "add", callsign: typedSign });
+                          }}
+                        >
+                          <input
+                            className={styles.giveInput}
+                            value={typed}
+                            onChange={(e) => setNewSign({ held: h.id, text: e.target.value })}
+                            placeholder="New call sign"
+                            maxLength={24}
+                            autoCapitalize="characters"
+                            spellCheck={false}
+                            aria-label="A call sign to add to the roster"
+                          />
+                          <button type="submit" className={styles.linkBtn} disabled={!typedSign}>
+                            Add
+                          </button>
+                        </form>
+                        <button type="button" className={styles.linkBtn} onClick={() => setSettling({ held: h.id, action: "dismiss", callsign: null })}>
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ) : null}
+
         <section className={styles.section} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
@@ -1796,8 +1953,8 @@ export default function CommandPost() {
           {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
             {view.feed.map((f) => {
-              if (f.kind === "plot") {
-                // Something the command post did to a track: one line, like a join.
+              if (f.kind === "plot" || f.kind === "note") {
+                // Something the command post did to a track or a held report: one line, like a join.
                 return (
                   <li key={f.id}>
                     <button
@@ -1866,6 +2023,7 @@ export default function CommandPost() {
                     </span>
                     <span className={styles.said}>{f.transcript ? `“${f.transcript}”` : "(no words heard)"}</span>
                     <span className={styles.outcome}>{f.outcome}</span>
+                    {f.sender ? <span className={styles.heardLine}>{describeSender(f.sender)}</span> : null}
                     {open && f.candidates.length ? (
                       <ol className={styles.choices}>
                         {f.candidates.map((c, i) => (
