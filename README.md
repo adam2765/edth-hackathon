@@ -64,7 +64,8 @@ A track is something on the map that is not a reporting unit. `lib/geo/tracks.ts
 |---|---|
 | "Enemy vehicle in front of the town hall" | a track at that place, found as for a position report, measured from the observer |
 | "I see a drone about 300 metres north of me" | a track by dead reckoning from the observer, shown as an estimate; the circle is the observer's own plus 0.4 × the distance |
-| "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far, or for a place near it |
+| "Enemy vehicle to the east", "heading towards the bridge" | no point can be given: the app asks how far ("How far east is it?"), or for a place near it |
+| "Unknown contact, two blocks east" | a track whatever the model reads: "contact" opening the report, or next to whose it is, unknown, new or a count, is something seen [180]. "Two blocks" is no distance [51], so the app asks how far east. "Lost contact with BRAVO 2" stays about the speaker |
 | No word for whose it is ("a vehicle near the church") | unknown. Hostile only when a hostile word was said; "suspicious" or "possible enemy" is a suspect; "our" and "friendly" are friendly; "civilian" is neutral |
 | "Track 3 moved to the station" | a new sighting of Track 3, with a trail from the last one |
 | "Track 3 is hostile" | only what it is changes |
@@ -134,7 +135,7 @@ Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets
 | 8 | BRAVO 2 | "Track 2 is hostile." | "Track 2, hostile." The symbol turns red; the place stays |
 | 9 | BRAVO 2 | «Voiture civile devant la mairie.» | «Piste 5, véhicule civil, Mairie de Vincennes.» Neutral |
 | 10 | ALPHA 1 | "Friendly drone team at Vincennes station." | "Track 6, friendly drone team, Vincennes." A track, not ALPHA 1's position |
-| 11 | BRAVO 2 | "Enemy vehicle to the east." | No track: "How far is it, and which way? Or name a place near it." |
+| 11 | BRAVO 2 | "Enemy vehicle to the east." | No track: "How far east is it? Or name a place near it." |
 
 At the end the map has six tracks and both units are still where they checked in. Step 7 names a street, not the castle: "moved to the castle" makes the local model ask castle or station.
 

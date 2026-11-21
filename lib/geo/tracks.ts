@@ -129,6 +129,27 @@ const NUMBER_WORDS: Record<string, number> = {
   четыре: 4, шесть: 6, семь: 7, восемь: 8,
 };
 
+/** "Contact": the radio word for something seen ("Contact, two blocks east", "contact ennemi", "невідомий контакт"). */
+const CONTACT: Lexicon = { words: ["contact", "contacts"], stems: ["контакт"] };
+/** Words that make "contact" a sighting when they stand next to it, besides whose it is and doubt. */
+const CONTACT_QUALIFIER: Lexicon = {
+  words: ["unknown", "unidentified", "new", "visual", "inconnu", "inconnue", "inconnus", "inconnues", "nouveau", "nouvel", "nouvelle", "nouveaux", "visuel"],
+  stems: ["невідом", "неизвестн", "нов", "візуальн", "визуальн"],
+};
+
+/**
+ * True when the speaker reports a contact: something seen. "Contact" counts as the first word, or
+ * next to a word for whose it is, for doubt, unknown, new or visual, or a count ("two contacts").
+ * "Lost contact with BRAVO", "in contact" and "pas de contact" do not count.
+ */
+export function contactSaid(transcript: string): boolean {
+  const toks = fold(transcript).split(" ");
+  const is = (lex: Lexicon, t: string | undefined) => t != null && says(lex, [t], "");
+  const qualifies = (t: string | undefined) =>
+    t != null && ([CONTACT_QUALIFIER, HOSTILE, SUSPECT, DOUBT, FRIENDLY, NEUTRAL].some((lex) => is(lex, t)) || /^\d{1,3}$/.test(t) || NUMBER_WORDS[t] != null);
+  return toks.some((t, i) => is(CONTACT, t) && (i === 0 || qualifies(toks[i - 1]) || qualifies(toks[i + 1])));
+}
+
 /** "Track 3", "piste numéro trois", "об'єкт три": the number, read from the words. Null when no track is named. */
 export function trackNumberSaid(transcript: string): number | null {
   const toks = fold(transcript).split(" ");
@@ -177,6 +198,9 @@ export interface Reading {
 /**
  * Who the report is about. The model says "self" or "track"; the words have to agree.
  *   - A track named by its number ("Track 3 moved to the station") is a track, whatever the model said.
+ *   - A contact ("Unknown contact, two blocks east") is a track, whatever the model said. Hosted
+ *     Mistral read that one as the speaker moving east. A track never moves the speaker, so this
+ *     reading is the safe one when it is wrong.
  *   - The model says track, and the words name a kind of thing or whose it is: a track.
  *   - The model says track, and the words name neither: unclear.
  *   - The model says self, and a hostile or suspect word was said: unclear. Moving a friendly
@@ -196,6 +220,7 @@ export function readSubject(intent: Intent, transcript: string): Reading {
   const ref = numbered ?? (modelTrack && Number.isInteger(intent.track_ref) && intent.track_ref! > 0 ? intent.track_ref! : null);
   const base = { ref, affiliation, kind };
   if (numbered != null) return { ...base, subject: "track", why: `the speaker named track ${numbered}` };
+  if (contactSaid(transcript)) return { ...base, subject: "track", why: modelTrack ? "read as a track; the words report a contact" : "the words report a contact" };
   if (modelTrack) {
     if (affiliation || wordKind) return { ...base, subject: "track", why: `read as a track; the words say ${[affiliation, wordKind].filter(Boolean).join(" ")}` };
     return { ...base, subject: "unclear", why: "read as a track, but no word names a kind of thing or whose it is" };
@@ -298,7 +323,13 @@ export function withTrackNumber(res: Resolution, n: number | null, intent: Inten
 
 type TrackPrompt = "subject" | "where" | "how_far" | "no_observer";
 
-function prompt(lang: Lang, which: TrackPrompt): string {
+/** `dir`: the way the speaker already gave, so "how far" asks only for the distance. */
+function prompt(lang: Lang, which: TrackPrompt, dir: Direction | null = null): string {
+  if (which === "how_far" && dir) {
+    if (lang === "fr") return `À quelle distance ${DIR_WORDS.fr[dir]} ? Ou donnez un lieu proche.`;
+    if (lang === "uk") return `Як далеко ${DIR_WORDS.uk[dir]}? Або назвіть орієнтир поруч.`;
+    return `How far ${DIR_WORDS.en[dir]} is it? Or name a place near it.`;
+  }
   if (which === "subject") {
     if (lang === "fr") return "C'est votre position, ou quelque chose que vous voyez ? Dites « je suis à » ou « je vois ».";
     if (lang === "uk") return "Це ваше місце чи те, що ви бачите? Скажіть «я біля» або «бачу».";
@@ -374,7 +405,7 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   const ask = (rule: string, detail: string, which: TrackPrompt): Resolution => ({
     status: "unresolved",
     candidates: [],
-    question: prompt(lang, which),
+    question: prompt(lang, which, bearingSaid(intent)),
     evidence: { rule, detail: `${reading.why}; ${detail}` },
     track,
   });

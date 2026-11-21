@@ -2,7 +2,7 @@
 
 A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
-Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180]. This page shows what it looks like and how a report becomes a track.
+Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 181]. This page shows what it looks like and how a report becomes a track.
 
 ## The pictures
 
@@ -104,7 +104,9 @@ The model reads every report as about the speaker or about a track. Code then ch
 flowchart TD
     S(["Report"]) --> N{"Number<br/>said?"}
     N -- yes --> T["A track"]
-    N -- no --> MT{"Model<br/>says track?"}
+    N -- no --> C{"Contact<br/>said?"}
+    C -- yes --> T
+    C -- no --> MT{"Model<br/>says track?"}
     MT -- yes --> W1{"A kind or<br/>whose, in<br/>the words?"}
     W1 -- yes --> T
     W1 -- no --> Q["Ask"]
@@ -118,6 +120,7 @@ flowchart TD
 | Said | Model reads | Result |
 |---|---|---|
 | "Track 3 moved to the station." | anything | a track |
+| "Unknown contact, two blocks east." | anything | a track [180]; "two blocks" is no distance [51], so it asks "How far east is it?" |
 | "Enemy vehicle in front of the town hall." | a track | a track |
 | "I can see the church." | a track | asks: no word names a thing |
 | "Enemy at the station." | the speaker | asks: a hostile word was said |
@@ -126,6 +129,8 @@ flowchart TD
 | "Friendly at the station." | a track | a track [179]; read as the speaker, it would move the unit, since a friendly word alone is not checked |
 
 The question is "Is that where you are, or something you see? Say 'I am at' or 'I see'." The last check was added with the script [157]: hosted Mistral read "Our drone team is at Vincennes station" as the speaker's own position and moved the unit.
+
+**A contact** [180]. "Contact" is the radio word for something seen. It counts when it opens the report or stands next to a word for whose it is, a doubt word, unknown, new, visual or a count: "Contact, two blocks east", "enemy contact behind the castle", "contact ennemi", "невідомий контакт". "Lost contact with BRAVO 2", "in contact with the base" and "the contact point" do not count. Hosted Mistral read "Unknown Contact, two blocks east" as the speaker moving east; code now makes it a track whatever the model says. A track never moves the speaker, so this is the safe reading when it is wrong. With no distance the app asks how far, in the way the speaker gave: "How far east is it? Or name a place near it."
 
 ## Where the track goes
 
@@ -157,7 +162,7 @@ flowchart TD
 | "Enemy patrol near the cemetery." | Ask which | "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?" |
 | "I see a drone about 300 metres north of me." | Placed, ≈ | "Track 2, unknown drone, 300 metres north of you." |
 | The same, from a unit with no position yet | Ask for a place | "I don't know where you are. Name a place near what you see." |
-| "Enemy vehicle to the east." | Ask how far | "How far is it, and which way? Or name a place near it." |
+| "Enemy vehicle to the east." | Ask how far | "How far east is it? Or name a place near it." [180] |
 
 A track on a street or along a river gets a circle of at least 150 m. "Track 1 moved to Avenue de Nogent" is read as "at Avenue de Nogent": the model often reads "moved to" as "towards", so only a word such as "heading" or "on its way" makes it a direction [149]. A compass word said with a place, as in "moving east", is the way the track was moving, not where it is.
 
