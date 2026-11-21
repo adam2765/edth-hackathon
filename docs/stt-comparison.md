@@ -1,8 +1,8 @@
 # Speech-to-text comparison
 
-Which speech-to-text gets place names and languages right? Measured on 21 Nov 2026, 14:50 to 15:20 Paris time, so the team can decide whether to replace Whisper base on the phone. That part measures only, and adds no decision line: the phone's speech-to-text is Brian's call [172].
+Which speech-to-text gets place names and languages right? Measured on 21 Nov 2026, 14:50 to 15:20 Paris time, so the team can decide whether to replace Whisper base on the phone. That part measures only, and adds no decision line: the phone's speech-to-text was Brian's call then [172]; it is switchable again since [194].
 
-A second round, 15:30 to 16:30, measured Whisper large-v3-turbo for speech-to-text on the coordinator in offline mode, and led to decision 194: see [Offline on the coordinator](#offline-on-the-coordinator).
+A second round, 15:30 to 16:30, measured Whisper large-v3-turbo for speech-to-text on the coordinator in offline mode, and led to decision 195: see [Offline on the coordinator](#offline-on-the-coordinator).
 
 ## In short
 
@@ -109,7 +109,7 @@ The whisper.rn 0.7.4 README says the package can also run Parakeet (`initParakee
 
 ## Offline on the coordinator
 
-In the field, reports come over a radio, not from a phone, so the coordinator does the speech-to-text, and it can run a larger model than a phone (Alex, 21 Nov). Offline mode had none [83]. Whisper large-v3-turbo (q5_0, 574 MB) was measured beside Parakeet, the best local option above, and now runs there [194].
+In the field, reports come over a radio, not from a phone, so the coordinator does the speech-to-text, and it can run a larger model than a phone (Alex, 21 Nov). Offline mode had none [83]. Whisper large-v3-turbo (q5_0, 574 MB) was measured beside Parakeet, the best local option above, and now runs there [195].
 
 Same 29 clips and the same scoring as above, three hosted scoring runs, 15:30 to 16:00. Base was run again with the report words of decision 189 in its hints. Character error rate is computed the same way for every row of this table; it comes out about a point under the table above.
 
@@ -128,7 +128,7 @@ Same 29 clips and the same scoring as above, three hosted scoring runs, 15:30 to
 - **Turbo over Parakeet,** although Parakeet is seven times faster. Turbo is as accurate and steadier (25 or 26 each run, against 23 to 26). It takes the device's language, so it writes Ukrainian in Ukrainian; Parakeet takes none and wrote two Ukrainian clips in Russian. And it runs as a server from Homebrew (`brew install whisper-cpp`): Homebrew's Parakeet crashes on load, and there is no Parakeet server.
 - **Without the device's language, turbo writes Ukrainian as Russian too:** «Я на центральной площади», tagged `ru`, for «Я на Центральній площі». It was still placed. The web page and the transmitter always send the language [106].
 - **Silence came back as "Thank you."**, Whisper's best-known invention. `npm run stt` starts whisper-server with Silero VAD, which finds the speech first, so silence now comes back as no words and the speaker is asked to repeat. With VAD on, 3 of the 29 transcripts changed by an ending or a full stop, two of them now exactly as said, and one scoring run placed 26 of 29.
-- **Time, with nothing else on the GPU.** Through whisper-server, with VAD and the format converted by ffmpeg, turbo takes 1.1 s per clip (median of 29), and about 1.2 s inside `POST /api/report`. A whole spoken report takes 3.2 to 5.1 s offline (4.1 s in the middle, 12 reports), close to the 4 s target ([plan.md](plan.md#local-mode)); Ollama's extraction is most of it, 2 to 3.8 s. Silence takes under 0.1 s, because VAD finds no speech. The native transmitter, which sends text, is not slowed.
+- **Time, with nothing else on the GPU.** Through whisper-server, with VAD and the format converted by ffmpeg, turbo takes 1.1 s per clip (median of 29), and about 1.2 s inside `POST /api/report`. A whole spoken report takes 3.2 to 5.1 s offline (4.1 s in the middle, 12 reports), close to the 4 s target ([plan.md](plan.md#local-mode)); Ollama's extraction is most of it, 2 to 3.8 s. Silence takes under 0.1 s, because VAD finds no speech. The transmitter's phone modes, which send text, are not slowed.
 - **Ask for `verbose_json` only to learn the language.** It is the one answer that names the language, but whisper-server then runs a second pass that scores every language: 2.0 s per clip against 1.1 s for plain `json`, with the same words on all 29 clips. So the coordinator asks for plain `json` when the device names the language, as the web page and the transmitter always do. Without one, a clip takes 2.9 s.
 - **A window sized to the clip was tried and dropped.** Whisper's encoder always reads 30 s, padding a short clip with silence; whisper-server's `audio_ctx` makes the window shorter. At 20 s it saved 0.35 s per clip (0.71 s against 1.07 s). But on six clips of 7 to 15 s, two to five scenario steps of one voice joined with 0.6 s between, turbo began to repeat sentences: at 20 s the 15 s clip ended with "Track 2 is hostile." twice, and at 15 s three of five had a sentence twice. At 10 s and less, short clips repeated too. A repeated sentence could become a second report, so the window stays at 30 s. At 30 s all six joined clips came back whole.
 - **Slower numbers from earlier runs.** 4.4 to 4.8 s per clip, and 7.7 to 10.2 s per report, were measured while Ollama served another session on the same GPU. whisper-cli took 2.8 s per clip, leaving out loading.

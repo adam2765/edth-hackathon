@@ -41,7 +41,7 @@ The main screen is only for reporting. Top to bottom:
   from this phone with the coordinator's answer and timings).
 
 **Setup** is a sheet: call sign, area and language, which coordinator, where speech becomes text
-sound, and scenario timing. Speech is always transcribed on the phone. The language is the one you speak, English by
+and the model download, sound, and scenario timing. The language is the one you speak, English by
 default: it goes with every report, Whisper on the phone listens for it, and questions come back
 in it. Scenarios use each report's own language instead ([decision 106](../DECISIONS.md)).
 
@@ -55,9 +55,8 @@ Setup sheet. `src/mission.ts` lists and joins missions and keeps what the phone 
 
 ```bash
 npm install
-npm run setup                       # prepares the fixed speech model on this Mac
 LANG=en_US.UTF-8 npx expo run:ios      # first build takes a few minutes; needs Xcode
-npm run start -- --dev-client            # the dev server the app loads its code from
+npx expo start --dev-client            # the dev server the app loads its code from
 ```
 
 `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
@@ -93,36 +92,34 @@ shared Wi-Fi. A numeric address does not: over the cable the Mac's address chang
 the link re-forms, and the app then reports "no answer from the coordinator". iOS must be
 allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
 network is allowed. In hosted mode the coordinator calls Mistral, so the computer needs the
-internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither. The native app
-always sends text; audio sent to the coordinator goes through whisper-server on the computer
-when it runs ([../docs/setup.md](../docs/setup.md), part 3).
+internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither. In Server mode the
+coordinator then transcribes with whisper-server, which must be running (`npm run stt`,
+[../docs/setup.md](../docs/setup.md), part 3); the phone modes send text and do not need it.
 
 Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
 ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
 speech-to-text. Results: `../scenarios/results/iphone13mini-via-mac-coordinator-2026-11-20.jsonl`.
 The Android microphone check is recorded below.
 
-## Speech-to-text on the phone
+## Speech-to-text: on the server or on the phone
 
-Microphone and scenario reports always use Whisper base (`ggml-base-q5_1`), on Android
-and iOS. There is no mode selector or download button, and no native server-transcription
-fallback. The coordinator receives text; optional test clips still use the separate `clip` field.
+Setup chooses where speech becomes text (`src/stt.ts`).
 
-Run `npm run setup` in this folder during installation. It fetches the model on the Mac,
-checks its size and SHA-256, and keeps it in ignored `assets/models/`. `npm run start`,
-`npm run android` and `npm run ios` also prepare it automatically. Use those npm commands
-rather than calling Expo directly, or run setup first. A fresh clone needs the one-time
-57 MB download; the model is not committed to Git.
+| Mode | What happens | Needs |
+|---|---|---|
+| Server | The clip is uploaded and the coordinator transcribes it: Mistral, or whisper-server in offline mode [195]. | A connection good enough for audio |
+| Phone: base | Whisper `ggml-base-q5_1` runs on the phone; only the words are sent. | A one-time 56 MB download |
+| Phone: small | Whisper `ggml-small-q5_1`, slower and more accurate. | A one-time 181 MB download |
 
-Metro bundles the model as an asset. At first launch the app automatically copies it into
-its documents; development builds receive it from Metro over the existing USB/network link.
-The phone needs no Hugging Face access. Existing complete base models are reused.
-Native builds and exports must run setup before bundling, on either platform.
+Phone models come from `ggerganov/whisper.cpp` on Hugging Face and are kept in the app's documents.
+"Place-name hints" gives Whisper the area's place names and report words (`src/hints.generated.json`),
+fitted to its prompt budget (below). `npm run setup` fetches the base model to `assets/models/` on
+the Mac and checks its SHA-256, for `../scripts/build-transmitter-hints.ts` to count tokens with; the
+app does not use that copy.
 
-### Historical model comparison
+### Model comparison (20 Nov)
 
-The following measurements predate the fixed-model app; the compared modes are no longer
-user-selectable. A newer comparison, on 21 Nov, with the language pinned and against Parakeet and
+A newer comparison, on 21 Nov, with the language pinned and against Parakeet and
 Voxtral, is in [../docs/stt-comparison.md](../docs/stt-comparison.md).
 
 Measured on 20 Nov in the iPhone simulator, on the 9 scenario steps (synthetic voices, clean audio).
@@ -169,7 +166,7 @@ language on auto. Clips: the scenario steps and 61 synthetic reports in macOS vo
 - Putting the most useful names last did worse: "devant la mairie" became "devant la mérie".
 - The raw results are in `../scenarios/results/whisper-prompt-2026-11-21.jsonl`.
 
-Whisper base transcribes both scenario clips and the microphone on Android and iOS. Android uses
+Phone modes transcribe both scenario clips and the microphone on Android and iOS. Android uses
 the local Expo module in `modules/pcm-recorder` to write 16 kHz mono 16-bit PCM WAV with
 `AudioRecord`; iOS uses expo-audio. Both call the same Whisper function and send text through
 the existing report path. Rebuild the Android development app after adding the native module.
@@ -178,7 +175,7 @@ Checked on 21 Nov on a Samsung Galaxy S10 (SM-G973U): microphone audio reaches t
 coordinator as text (`timings_ms.stt: 0`). Two live reports, "I am at the town hall in Vincennes",
 placed the unit at Mairie de Vincennes (±31 m) on the command post. This verifies build and connections;
 recognition accuracy, old question cards and transcription speed remain separate runtime work.
-The iOS path was not tested in this Android change.
+Small and the iOS path were not tested in this Android change.
 
 ## What you hear
 

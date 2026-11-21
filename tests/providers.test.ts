@@ -209,7 +209,7 @@ describe("a busy Mistral is tried again [191]", () => {
   });
 });
 
-describe("Whisper on this computer in offline mode (decision 194)", () => {
+describe("Whisper on this computer in offline mode (decision 195)", () => {
   beforeEach(() => {
     vi.stubEnv("PROVIDER_MODE", "local");
     vi.stubEnv("WHISPER_URL", "");

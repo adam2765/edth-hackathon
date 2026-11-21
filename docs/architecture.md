@@ -54,7 +54,7 @@ flowchart TB
     API <-- "plot a track, answer, name a point" --> TOOLS
 ```
 
-The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 194]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
+The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 195]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
 
 ### A report through the coordinator
 

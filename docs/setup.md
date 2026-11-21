@@ -25,7 +25,7 @@ Step-by-step setup for a teammate's computer, written so a coding agent (Claude 
 | 6. Transmitter on Android | Android phones | |
 | 7. Daily start | everyone | |
 
-The coordinator runs in one of two modes. **Offline mode** runs speech-to-text (Whisper, in whisper-server) and intent extraction (Ollama) on this computer and calls nothing outside it [83, 194]. **Hosted mode** calls Mistral for both, and needs a key. Both place reports the same way.
+The coordinator runs in one of two modes. **Offline mode** runs speech-to-text (Whisper, in whisper-server) and intent extraction (Ollama) on this computer and calls nothing outside it [83, 195]. **Hosted mode** calls Mistral for both, and needs a key. Both place reports the same way.
 
 ## 1. Tools
 
@@ -50,7 +50,7 @@ Check: every test passes. The tests need no key and no network. No `.env.local` 
 
 ## 3. Offline mode
 
-No key needed. Two servers run beside the coordinator: Ollama for extraction, and whisper-server for speech-to-text, so the browser's microphone works offline too. The native transmitter transcribes on the phone and sends text either way. The two models need about 5 GB of free memory.
+No key needed. Two servers run beside the coordinator: Ollama for extraction, and whisper-server for speech-to-text, so the transmitter's Server mode and the browser's microphone work offline too. The transmitter's phone modes send text and need only Ollama. The two models need about 5 GB of free memory.
 
 Install Ollama 0.40 or newer. Version 0.8 cannot run Ministral 3.
 
@@ -123,7 +123,7 @@ Expect `"transcript":"Je suis à la mairie de Vincennes."`, `"status":"resolved"
 
 ## 4. Hosted mode
 
-Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted mode adds speech-to-text on the server, so the browser's microphone works; the native transmitter always transcribes on the phone. It needs the internet.
+Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted mode adds speech-to-text on the server, so the browser's microphone and the transmitter's Server mode work. It needs the internet.
 
 (person) Create `.env.local` and paste the key after `MISTRAL_API_KEY=`.
 
@@ -156,7 +156,7 @@ brew install cocoapods     # if `pod --version` fails; a warning about UTF-8 is 
 
 If `xcode-select -p` shows `/Library/Developer/CommandLineTools`, (person) run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
 
-Optional check without a phone: `cd transmitter && npm install && npm run setup && LANG=en_US.UTF-8 npx expo run:ios` builds for the simulator and needs no signing.
+Optional check without a phone: `cd transmitter && npm install && LANG=en_US.UTF-8 npx expo run:ios` builds for the simulator and needs no signing.
 
 ### Signing
 
@@ -186,7 +186,6 @@ Check: `xcrun devicectl list devices` lists the phone, and its state is not `una
 ```bash
 cd transmitter
 npm install
-npm run setup
 export APPLE_TEAM_ID=<team ID>
 export TRANSMITTER_BUNDLE_ID=dev.voicetomap.transmitter.<first name>
 LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
@@ -203,7 +202,7 @@ LANG=en_US.UTF-8 npx expo run:ios --device "<phone name from devicectl>"
 The app loads its code from Metro on the Mac. Keep Metro running in its own terminal:
 
 ```bash
-cd transmitter && npm run start -- --dev-client
+cd transmitter && npx expo start --dev-client
 ```
 
 Open the app with the Mac's network name. That works over the cable alone, and it survives address changes:
@@ -222,13 +221,13 @@ Check: the app opens, and the dot beside the call sign turns green. The app send
 
 Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
 
-(person) Play the Vincennes scenario. The app always uses Whisper base on the phone, in either coordinator mode. `npm run setup` prepares the model on the Mac; it is delivered as an app asset and installed automatically at launch. There is no transcription-mode or model-download control.
+(person) Choose "Phone: base" or "Phone: small" and play the Vincennes scenario. That works in either mode. The first time, the app downloads its Whisper model (56 or 181 MB), so the phone needs the internet once. The "Server" mode works only with hosted mode (part 4).
 
 ## 6. Transmitter on Android
 
 Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
 
-For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so all native reports work with the offline coordinator without a Mistral key. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
+For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
 
 ## 7. Daily start
 
@@ -238,7 +237,7 @@ Each in its own terminal, from the repo root:
 OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 ollama serve     # offline mode
 npm run stt                                             # offline mode: speech-to-text on this computer
 PROVIDER_MODE=local npm run dev -- -p 3117              # offline mode; with a key, `npm run dev -- -p 3117` is hosted mode
-cd transmitter && npm run start -- --dev-client            # phone testing only
+cd transmitter && npx expo start --dev-client            # phone testing only
 ```
 
 ## When something fails
