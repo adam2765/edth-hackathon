@@ -18,7 +18,7 @@ Whisper on the phone writes a dash where it hears the voice change. `lib/geo/voi
 | Several, at most one looks like a report | Read once, as before; the log notes how many voices were heard |
 | Two or more look like reports | Each is read on its own, at the same time |
 | ... and they place the same thing | Placed, no question |
-| ... and they name different places, one of them out of reach of the last position | Placed from the voice left, no question (`voices_context`) [175] |
+| ... and they name different places, one of them out of reach of the last position | Placed from the voice left, no question (`voices_context`) [187] |
 | ... and they name different places | "I heard more than one voice. Which place is yours: A or B?" Each choice is one voice's place |
 | ... and one is about a track, or none can be offered | "Say your position again" |
 | More than four look like reports | "Say your position again", without reading each |
@@ -30,7 +30,7 @@ Measured 21 November, offline (`ministral-3:3b` on the MacBook), typed reports t
 Limits:
 
 - The app cannot tell whose voice is whose. It only notices when two voices name places, and then asks, unless all but one put the speaker out of reach.
-- Out of reach means farther from the last position than 15 m/s for the time since it, plus its uncertainty and 100 m [175]. Only a position at a known place is checked: a movement, an open question or an unplaced voice is always kept, so the speaker's own voice is never dropped by this check.
+- Out of reach means farther from the last position than 15 m/s for the time since it, plus its uncertainty and 100 m [187]. Only a position at a known place is checked: a movement, an open question or an unplaced voice is always kept, so the speaker's own voice is never dropped by this check.
 - It finds turns only where Whisper marks them. A missed mark reads the clip as one voice, as before.
 - Mistral's speech-to-text is asked to tell speakers apart (`diarize`, with segment timestamps) [175]. Where the speaker label changes, the transcript gets ">>", which splits voice turns like Whisper's dash. If Mistral refuses the option (400 or 422), the clip is transcribed again without it, so a report is never lost to it; `MISTRAL_STT_DIARIZE=0` turns it off. Not yet checked on real two-person clips: how reliably it labels a short report, and what it adds to the time.
 
@@ -66,3 +66,35 @@ Six clips are enough to start: a normal voice alone; a whisper alone; a whisper 
 On the synthetic signals in `tests/clips.test.ts`, a close "whisper" measured −18.5 dB and 0 % voiced, and a distant voice −42.6 dB and 100 % voiced. Real recordings will be closer than that; that is what the clips are for.
 
 Clips are recordings of people's voices. They stay on the computer, git ignores them, and they should be deleted when the test is done: `rm -r .data/clips`.
+
+## Noise [185]
+
+21 November, hosted mode, through the coordinator: the scenario clips (synthetic voices; 8 reports in English, French and Ukrainian, Vincennes, Kyiv and Izium) mixed with real field noise from ESC-50 (CC BY-NC, not kept in the repo) at a signal-to-noise ratio of 5 and 0 dB, 128 clips in all.
+
+| Noise | Placed as expected |
+|---|---|
+| Wind, engine, siren, footsteps, crackling fire | 64 of 64 |
+| Helicopter | 15 of 16 |
+| Rain | 10 of 16 |
+| Fireworks (bangs) | 8 of 16 |
+
+Steady noise barely hurts, even as loud as the voice: the place names sent as hints carry badly heard words ("Явиля Центральна районна лікарня" still placed). Rain and bangs mask syllables, and some clips came back empty. 13 of the 14 misses asked or placed nothing. One pinned a wrong place: "I'm at Izium station" under rain at 0 dB came back as "А на Ізюмській станції" and pinned the weather station 3.3 km away; since [185] that asks between the station and the weather station. An earlier run with artificial noise (63 clips: pink noise, radio band, clipping, a very quiet voice) placed every clip down to 5 dB.
+
+Not covered: real voices, wind on the microphone itself, and noise that starts or stops mid-sentence.
+
+## Mixed languages
+
+21 November, hosted mode, through the coordinator: two scenario clips in different languages (synthetic voices, 0.4 s apart) joined into one, 3 clips for each of the 6 orders of English, French and Ukrainian, sent with the first clip's area and language. A half counts as kept when most of its words are in the transcript.
+
+| Order | Both halves kept |
+|---|---|
+| Ukrainian then English | 3 of 3 |
+| French then English, English then French, French then Ukrainian | 9 of 9 |
+| English then Ukrainian | 2 of 3 |
+| Ukrainian then French | 0 of 3 |
+
+- After Ukrainian, French is not transcribed as French: it comes back spelled in Cyrillic ("Ватюр-цивіль, де вон ла мері" for "Voiture civile devant la mairie") or as made-up Ukrainian ("Я сидів на мурі", "I sat on the wall", for "Je suis devant la mairie"; "Я живу в місті Вінниця" for "Je suis à la mairie de Vincennes").
+- One English half before Ukrainian was dropped, with nothing in the transcript to show it.
+- The area's place names, sent to Mistral as hints, pull the clip towards the area's language: the Ukrainian-then-French clip sent in the Vincennes area came back with its French intact. So a speaker who does not speak the area's language is the one at risk.
+- The two halves are two synthetic voices, so diarization usually marks them as two speakers (">>"). A real speaker switching language is one voice; not tested.
+

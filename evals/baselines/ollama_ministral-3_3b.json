@@ -1,17 +1,17 @@
 {
   "extractor": "ollama:ministral-3:3b",
-  "prompt_id": "5f066fb66b",
-  "at": "2026-11-21T09:57:34.418Z",
+  "prompt_id": "4c9ef72e73",
+  "at": "2026-11-21T11:36:33.526Z",
   "repeat": 3,
   "resolve": true,
   "summary": {
     "cases": {
-      "passed": 156,
-      "total": 225
+      "passed": 174,
+      "total": 255
     },
     "heldOut": {
-      "passed": 147,
-      "total": 216
+      "passed": 165,
+      "total": 246
     },
     "inPrompt": {
       "passed": 9,
@@ -19,32 +19,32 @@
     },
     "fields": {
       "kind": {
-        "passed": 186,
-        "total": 192
+        "passed": 213,
+        "total": 222
       },
       "landmark_name": {
-        "passed": 78,
-        "total": 117
+        "passed": 96,
+        "total": 147
       },
       "landmark_name_lemma": {
-        "passed": 42,
+        "passed": 45,
         "total": 51
       },
       "landmark_category": {
-        "passed": 150,
-        "total": 156
+        "passed": 168,
+        "total": 186
       },
       "relation": {
-        "passed": 165,
-        "total": 177
+        "passed": 195,
+        "total": 207
       },
       "language": {
         "passed": 123,
         "total": 126
       },
       "subject": {
-        "passed": 225,
-        "total": 225
+        "passed": 246,
+        "total": 255
       },
       "direction": {
         "passed": 33,
@@ -63,30 +63,30 @@
         "total": 18
       },
       "track_ref": {
-        "passed": 6,
-        "total": 6
+        "passed": 33,
+        "total": 33
       },
       "track_count": {
         "passed": 3,
         "total": 3
       },
       "track_heading": {
-        "passed": 0,
+        "passed": 3,
         "total": 3
       }
     },
     "tags": {
       "scenario": {
-        "passed": 39,
+        "passed": 42,
         "total": 54
       },
       "fr": {
-        "passed": 27,
-        "total": 33
+        "passed": 30,
+        "total": 39
       },
       "uk": {
-        "passed": 57,
-        "total": 69
+        "passed": 60,
+        "total": 75
       },
       "distance": {
         "passed": 21,
@@ -101,7 +101,7 @@
         "total": 39
       },
       "trap": {
-        "passed": 6,
+        "passed": 9,
         "total": 18
       },
       "filler": {
@@ -113,7 +113,7 @@
         "total": 12
       },
       "stt_error": {
-        "passed": 6,
+        "passed": 3,
         "total": 6
       },
       "other": {
@@ -121,26 +121,30 @@
         "total": 15
       },
       "track": {
-        "passed": 18,
-        "total": 21
+        "passed": 36,
+        "total": 51
       },
       "adversarial": {
-        "passed": 9,
-        "total": 30
+        "passed": 24,
+        "total": 60
       },
       "two-places": {
         "passed": 9,
         "total": 30
+      },
+      "side-word": {
+        "passed": 15,
+        "total": 30
       }
     },
     "outcomes": {
-      "passed": 207,
-      "total": 225
+      "passed": 240,
+      "total": 255
     },
-    "wrongPins": 9,
+    "wrongPins": 12,
     "flaky": 0,
-    "medianMs": 2629,
-    "p90Ms": 3279
+    "medianMs": 2283,
+    "p90Ms": 2893
   },
   "cases": {
     "s-v1": {
@@ -192,8 +196,8 @@
       "wrong_pins": 0
     },
     "s-k5": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -312,10 +316,10 @@
       "wrong_pins": 0
     },
     "p-blocks": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
-      "wrong_pins": 3
+      "wrong_pins": 0
     },
     "p-left": {
       "pass": false,
@@ -324,8 +328,8 @@
       "wrong_pins": 0
     },
     "p-two-places": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -450,8 +454,8 @@
       "wrong_pins": 0
     },
     "e-berault": {
-      "pass": true,
-      "passes": 3,
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -498,8 +502,8 @@
       "wrong_pins": 0
     },
     "t-trucks": {
-      "pass": false,
-      "passes": 0,
+      "pass": true,
+      "passes": 3,
       "rounds": 3,
       "wrong_pins": 0
     },
@@ -543,7 +547,7 @@
       "pass": false,
       "passes": 0,
       "rounds": 3,
-      "wrong_pins": 0
+      "wrong_pins": 3
     },
     "a-two-places-3": {
       "pass": false,
@@ -590,6 +594,66 @@
     "a-two-places-10": {
       "pass": true,
       "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-friendly-metro": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-friendly-townhall": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-friendlies-castle": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 3
+    },
+    "t-side-hostile-metro": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-enemy-church": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-ami-mairie": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-ennemis-cimetiere": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-vorog-tserkva": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-svoi-park": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-side-self-control": {
+      "pass": false,
+      "passes": 0,
       "rounds": 3,
       "wrong_pins": 0
     }

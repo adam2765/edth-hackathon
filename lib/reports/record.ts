@@ -1,9 +1,11 @@
-/** Saving to the shared record: missions, joins, reports, answers and ends. Server only. */
+/** Saving to the shared record: missions, joins, reports, answers, the command post's plots and ends. Server only. */
 import type { AreaId } from "@/lib/geo/areas";
+import { loadGazetteer } from "@/lib/geo/gazetteer";
 import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
+import { nextTrackNumber, plotPosition, type PlotInput } from "./plot";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { getStore, newEntryId, withSessionLock } from "./store";
 import type {
@@ -15,6 +17,7 @@ import type {
   MissionEntry,
   MissionListReply,
   MissionSummary,
+  PlotEntry,
   ReportEntry,
   StartPoint,
   Timings,
@@ -131,7 +134,7 @@ export type ReportContext = { ok: true; area: AreaId; lastPosition: LastPosition
 /**
  * For a report to a mission: refuses an unknown or ended mission, and gives the area and the
  * speaker's last position from the log (their latest fix, else the start point). The phone's own
- * `lastPosition` is then ignored, so the receiver and the resolver agree on where a unit is.
+ * `lastPosition` is then ignored, so the command post and the resolver agree on where a unit is.
  * With no record kept, the phone's area and position are used as before.
  * It also lists the mission's tracks, so a number the speaker says ("Track 3") can be checked.
  */
@@ -217,8 +220,9 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     const t = resolution.track;
     // A report that could not be placed opens no track: there is nothing to number yet.
     if (t && resolution.status !== "unresolved") {
-      const n = t.n ?? Math.max(0, ...entries.map((e) => (e.kind === "report" && e.track ? e.track.n : 0))) + 1;
-      resolution = input.intent ? withTrackNumber(resolution, n, input.intent) : { ...resolution, track: { ...t, n } };
+      // The same count as tracks placed at the command post.
+      const n = t.n ?? nextTrackNumber(entries);
+      resolution = input.intent ? withTrackNumber(resolution, n, input.intent, input.transcript) : { ...resolution, track: { ...t, n } };
       const from = input.lastPosition;
       track = {
         n,
@@ -250,8 +254,12 @@ function joinedAlready(entries: LogEntry[], callsign: string): boolean {
 
 export type AnswerResult = { ok: true; entry: AnswerEntry } | Refusal;
 
-/** Saves the speaker's answer to a question: a candidate id, or null for "none of these". */
-export async function recordAnswer(session: string, reportId: string, choice: string | null, now = Date.now()): Promise<AnswerResult> {
+/**
+ * Saves the answer to a question: a candidate id, or null for "none of these". `by` is "CP" when
+ * the command post chose for the unit; otherwise the speaker answered on the phone. The first
+ * answer stands, whoever gave it.
+ */
+export async function recordAnswer(session: string, reportId: string, choice: string | null, now = Date.now(), by: string | null = null): Promise<AnswerResult> {
   const store = getStore();
   if (store.kind === "none") return { ok: false, status: 501, error: "This coordinator keeps no record of reports." };
   return withSessionLock(session, async () => {
@@ -271,7 +279,59 @@ export async function recordAnswer(session: string, reportId: string, choice: st
       if (track) track = { n: track.n, position: c.track_placement ? positionFromPlacement(c.track_placement, c.name) : null };
       else position = positionFromPlacement(c.placement, c.name);
     }
-    const entry: AnswerEntry = { kind: "answer", id: newEntryId(now), session, callsign: report.callsign, ts: now, report_id: reportId, choice, position, ...(track ? { track } : {}) };
+    const entry: AnswerEntry = {
+      kind: "answer",
+      id: newEntryId(now),
+      session,
+      callsign: report.callsign,
+      ts: now,
+      report_id: reportId,
+      choice,
+      position,
+      ...(track ? { track } : {}),
+      ...(by ? { by } : {}),
+    };
+    await store.append(entry);
+    return { ok: true, entry };
+  });
+}
+
+// ---- the command post's own changes to tracks ----
+
+export type PlotResult = { ok: true; entry: PlotEntry } | Refusal;
+
+/**
+ * Saves what a person at the command post did to a track: placed one, changed whose or what it
+ * is, moved it, marked it gone or brought it back. A new track gets its number here, inside the
+ * lock, from the same count as reported tracks. The position comes from the person (a click, or a
+ * place picked by name), is checked against the mission's area, and is named from the gazetteer.
+ */
+export async function recordPlot(session: string, input: PlotInput, by: string, now = Date.now()): Promise<PlotResult> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    const mission = missionOf(entries);
+    if (!mission) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    const base = { kind: "plot" as const, id: newEntryId(now), session, ts: now, by };
+    let entry: PlotEntry;
+    if (input.action === "place") {
+      const position = plotPosition(input.where, input.radius_m, mission.area, loadGazetteer(mission.area));
+      if (typeof position === "string") return { ok: false, status: 400, error: position };
+      entry = { ...base, action: "place", n: nextTrackNumber(entries), affiliation: input.affiliation, track_kind: input.track_kind, count: input.count, position, note: input.note };
+    } else {
+      if (!foldLog(entries).tracks.some((t) => t.n === input.n)) return { ok: false, status: 404, error: `There is no Track ${input.n} in this mission.` };
+      if (input.action === "edit") {
+        entry = { ...base, action: "edit", n: input.n, affiliation: input.affiliation, track_kind: input.track_kind, count: input.count, note: input.note };
+      } else if (input.action === "move") {
+        const position = plotPosition(input.where, input.radius_m, mission.area, loadGazetteer(mission.area));
+        if (typeof position === "string") return { ok: false, status: 400, error: position };
+        entry = { ...base, action: "move", n: input.n, position, note: input.note };
+      } else {
+        entry = { ...base, action: input.action, n: input.n };
+      }
+    }
     await store.append(entry);
     return { ok: true, entry };
   });

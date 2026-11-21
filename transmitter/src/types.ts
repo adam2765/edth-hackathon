@@ -76,7 +76,7 @@ export interface ReportReply {
   intent: Intent | null;
   resolution: Resolution;
   timings_ms: { stt: number; extract: number; resolve: number; total: number };
-  /** Set when the coordinator saved the report for the receiver; send it back with the answer to a question. */
+  /** Set when the coordinator saved the report for the command post; send it back with the answer to a question. */
   report_id?: string;
   /** The file name, when the coordinator kept the clip for tests (KEEP_CLIPS=1). */
   clip?: string;

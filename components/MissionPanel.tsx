@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * The receiver's missions menu: open a new mission (area, name, optional start point), switch to an
- * open one, replay or delete an ended one. The start point is picked by name from the gazetteer,
- * so nobody types coordinates and no model makes them.
+ * The command post's missions menu: open a new mission (area, name, optional start point), switch
+ * to an open one, replay or delete an ended one. The start point is picked by name from the
+ * gazetteer, so nobody types coordinates and no model makes them.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AREAS, type AreaId } from "@/lib/geo/areas";
 import type { MissionListReply, MissionSummary, PlacesReply, StartPoint } from "@/lib/reports/types";
-import styles from "./Receiver.module.css";
+import styles from "./CommandPost.module.css";
 
 const LIST_POLL_MS = 5000;
 

@@ -1,4 +1,4 @@
-/* The receiver: laid out for a laptop or projector first, map left, units and reports right. */
+/* The command post: laid out for a laptop or projector first, map left, units and reports right. */
 
 .root {
   position: fixed;
@@ -147,10 +147,26 @@
   inset: 0;
 }
 
-.followBtn {
+/* Top left of the map: "Follow units", then the palette or a track's card, one under the other.
+   It stops above the replay bar and scrolls if the screen is short. */
+.dock {
   position: absolute;
   top: 12px;
   left: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-height: calc((100% - var(--sheet-h) - 36px) / var(--z));
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+.followBtn {
   border: none;
   border-radius: 999px;
   padding: 8px 14px;
@@ -816,6 +832,13 @@ button:focus-visible {
   }
 }
 
+/* On a phone the replay bar takes three rows; the dock stops above it. */
+@media (max-width: 520px) {
+  .root {
+    --sheet-h: 144px;
+  }
+}
+
 /* ---------- missions ---------- */
 .header {
   position: relative;
@@ -1166,13 +1189,292 @@ input:focus-visible {
   outline: 2px solid var(--accent-2);
 }
 
+/* ---------- the command post's own changes: placing and changing tracks ---------- */
+/* The palette and a track's card: a panel over the map's top left, under "Follow units". */
+.tool {
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.toolHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolHead .pill {
+  margin-left: 0;
+}
+
+.toolHead .linkBtn {
+  margin-left: auto;
+  min-height: 30px;
+}
+
+.toolTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.toolRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 18px;
+}
+
+/* Whose it is: five words, each in its own colour once picked, as its pill is in the lists. */
+.affs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.affs button,
+.kinds button,
+.stepper button {
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.affs button {
+  min-height: 34px;
+  padding: 4px 2px;
+}
+
+.affs button[aria-pressed="true"][data-aff="hostile"] {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #1b1b1b;
+}
+
+.affs button[aria-pressed="true"][data-aff="suspect"] {
+  border: 1.5px dashed var(--bad);
+  background: rgba(255, 90, 90, 0.14);
+  color: #ff9a9a;
+}
+
+.affs button[aria-pressed="true"][data-aff="unknown"] {
+  border-color: var(--warn);
+  background: rgba(255, 201, 64, 0.14);
+  color: var(--warn);
+}
+
+.affs button[aria-pressed="true"][data-aff="neutral"] {
+  border-color: var(--ok);
+  background: rgba(60, 207, 122, 0.14);
+  color: var(--ok);
+}
+
+.affs button[aria-pressed="true"][data-aff="friendly"] {
+  border-color: #8cc8ff;
+  background: rgba(44, 156, 255, 0.18);
+  color: #8cc8ff;
+}
+
+/* What it is: the standard symbol for each kind, with the key that picks it. */
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.kinds button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px 5px;
+}
+
+.kinds button .trackSym {
+  width: 34px;
+  height: 30px;
+}
+
+.kinds button[aria-pressed="true"],
+.affs button:focus-visible,
+.kinds button:focus-visible {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 1px var(--accent-2);
+}
+
+.kindKey {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper button {
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+}
+
+.stepper > span {
+  min-width: 28px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Where the track will go, before it is saved, at the foot of the palette. */
+/* Pinned to the bottom of the palette, so Place stays in view when the palette has to scroll. */
+.draft {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -14px -14px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--panel);
+}
+
+.draftHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.draftText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.draftText strong {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.draftButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.draftButtons .ghostBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cardLine {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+/* The symbol being placed or moved: it can be dragged. */
+.draftMarker {
+  cursor: grab;
+  opacity: 0.92;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.draftMarker:active {
+  cursor: grabbing;
+}
+
+.draftMarker svg {
+  display: block;
+}
+
+/* The track picked on the map: the same blue as a picked report. */
+.unit[data-selected] {
+  outline: 2px solid var(--accent-2);
+  outline-offset: -2px;
+}
+
+/* Something the command post did, in the feed: a solid edge, not a join's dashed one. */
+.joinItem[data-plot] {
+  border-style: solid;
+  border-color: #3a4d61;
+}
+
+/* Answering for a unit, under its open question: one button per choice, as numbered on the map. */
+.item[data-open]:has(+ .answerBar) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.answerBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 11px 9px;
+  border: 1px solid var(--warn);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: rgba(255, 201, 64, 0.04);
+}
+
+.answerLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.answerBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--muted);
+  background: #fff;
+  color: #16212c;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.answerBtn:hover {
+  box-shadow: 0 0 0 3px rgba(44, 156, 255, 0.5);
+}
+
 /* ---------- big screens: a projector or a wall screen, read from across the room ---------- */
 /* The same pixels are a smaller share of a bigger picture, so the header, the side panel and the
-   replay bar are drawn larger. The map itself is not scaled; Receiver.tsx enlarges its labels. */
+   replay bar are drawn larger. The map itself is not scaled; CommandPost.tsx enlarges its labels. */
 .header,
 .side,
 .replayBar,
-.followBtn,
+.dock,
 .mapNotes {
   zoom: var(--z);
 }

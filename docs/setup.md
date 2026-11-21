@@ -195,9 +195,9 @@ xcrun devicectl device process launch --device "<phone>" --terminate-existing \
 
 Check: the app opens, and the dot beside the call sign turns green. The app sends reports to the coordinator on this Mac, port 3117 [78].
 
-(person) Open `http://localhost:3117/receiver` on the Mac and open a mission from its Missions menu (Vincennes, any name; a start point is optional). In the app, the mission appears under "Join a mission"; tap Join.
+(person) Open `http://localhost:3117/cp` on the Mac and open a mission from its Missions menu (Vincennes, any name; a start point is optional). In the app, the mission appears under "Join a mission"; tap Join.
 
-Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the receiver lists the call sign. Reports need a mission on this coordinator [114].
+Check: the app shows the mission's name with Leave, the talk button says "Hold to talk", and the command post lists the call sign. Reports need a mission on this coordinator [114].
 
 (person) Play the Vincennes scenario. The app always uses Whisper base on the phone, in either coordinator mode. `npm run setup` prepares the model on the Mac; it is delivered as an app asset and installed automatically at launch. There is no transcription-mode or model-download control.
 
@@ -205,7 +205,7 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
 
-For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the receiver stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so all native reports work with the offline coordinator without a Mistral key. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the receiver. Recognition can ask back if it mishears a name.
+For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the command post stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so all native reports work with the offline coordinator without a Mistral key. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the command post. Recognition can ask back if it mishears a name.
 
 ## 7. Daily start
 

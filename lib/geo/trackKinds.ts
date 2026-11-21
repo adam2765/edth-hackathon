@@ -1,15 +1,17 @@
 /**
- * How a track is named and drawn: the fixed lists, the receiver's words, and the standard symbol
- * for each kind. No imports beyond types, so the receiver can use it without the resolver.
+ * How a track is named and drawn: the fixed lists, the command post's words, and the standard
+ * symbol for each kind. No imports beyond types, so the command post can use it without the resolver.
  */
 import type { Affiliation, Direction, TrackKind } from "./types";
 
 export const AFFILIATIONS: Affiliation[] = ["hostile", "suspect", "unknown", "neutral", "friendly"];
 export const TRACK_KINDS: TrackKind[] = ["people", "vehicle", "armour", "drone", "drone_team", "mortar", "artillery", "jammer", "other"];
 
-/** The receiver's words for whose a track is. */
+/** The command post's words for whose a track is. */
 export const AFFILIATION_LABEL: Record<Affiliation, string> = { hostile: "Hostile", suspect: "Suspect", unknown: "Unknown", neutral: "Civilian", friendly: "Friendly" };
 const KIND_LABEL: Record<TrackKind, string> = { people: "people", vehicle: "vehicle", armour: "armour", drone: "drone", drone_team: "drone team", mortar: "mortar", artillery: "artillery", jammer: "jammer", other: "" };
+/** Each kind's name on a button, where "other" has to be written out. */
+export const TRACK_KIND_NAME: Record<TrackKind, string> = { people: "People", vehicle: "Vehicle", armour: "Armour", drone: "Drone", drone_team: "Drone team", mortar: "Mortar", artillery: "Artillery", jammer: "Jammer", other: "Other" };
 
 /** "hostile vehicle ×2", for the map and the lists. The kind is written out: its small icon is hard to read from across a room. */
 export function describeTrack(t: { affiliation: Affiliation; kind: TrackKind; count: number | null }): string {
@@ -35,7 +37,7 @@ const SYMBOL: Record<TrackKind, [dimension: string, fn: string]> = {
 };
 
 /**
- * The standard symbol code for a track (APP-6, letter form), drawn by milsymbol on the receiver.
+ * The standard symbol code for a track (APP-6, letter form), drawn by milsymbol on the command post.
  * The frame says whose it is, the icon what it is. A civilian thing gets a civilian vehicle or an
  * empty frame, never a military icon. The table is the only place a symbol is chosen: the model
  * names a kind from the fixed list and never a code.

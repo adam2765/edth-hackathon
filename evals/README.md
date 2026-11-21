@@ -38,7 +38,7 @@ The script calls the same `getExtractor()` and `systemPrompt()` as the coordinat
 - **`outcome_from: "resolver"`**: the outcome was worked out by `eval:outcomes` from the case's own `expect`, so `--refresh` may rewrite it after a resolver change. Scenario cases carry the outcome from their scenario file instead.
 - **`from`**: where the speaker was before, as the coordinator would know it: a gazetteer id or a crossing id, and optionally `street` and `heading_deg`. Without it the speaker has no last position.
 - **`area`** picks the place given to the prompt ("Vincennes, France") and the gazetteer.
-- **Tags:** `scenario` (the scenario scripts' sentences), `paraphrase`, `filler`, `fr`, `uk`, `mixed`, `stt_error`, `distance`, `other`, `track`, `trap` (built to catch one rule), `adversarial` (added by an attack, below).
+- **Tags:** `scenario` (the scenario scripts' sentences), `paraphrase`, `filler`, `fr`, `uk`, `mixed`, `stt_error`, `distance`, `other`, `track`, `trap` (built to catch one rule), `adversarial` (added by an attack, below), `compass` (a track's place and heading as two compass words).
 
 A case whose words are already one of the prompt's examples is marked `[in prompt]`. Its score is shown apart, because a pass there proves little.
 
@@ -84,18 +84,21 @@ Full corpus, `--resolve --repeat 3`, on the MacBook (M1 Pro). The baselines hold
 | 21 Nov | `a6871d1ee3` | 75 | Ministral 3 3B (local) | 156 of 225 (69%) | 15 | 0 | 2.7 s |
 | 21 Nov | `5f066fb66b` | 75 | Mistral Small (hosted) | **209 of 225 (93%)** | **0** | 1 | 0.7 s |
 | 21 Nov | `5f066fb66b` | 75 | Ministral 3 3B (local) | 156 of 225 (69%) | **9** | 0 | 2.6 s |
+| 21 Nov | `4c9ef72e73` | 85 | Mistral Small (hosted) | **237 of 255 (93%)** | **0** | 3 | 0.7 s |
+| 21 Nov | `4c9ef72e73` | 85 | Ministral 3 3B (local) | 174 of 255 (68%) | 12 | 0 | 2.3 s |
 
-The 75-case rows add the two-places attack; `5f066fb66b` is the two-places tune. Both are in the journal.
+The 75-case rows add the two-places attack; `5f066fb66b` is the two-places tune. The 85-case rows add 10 side-word cases ("Friendly at the town hall."); `4c9ef72e73` is the side-word tune. All are in the journal. Of the 12 local wrong pins, 9 are on the 75 older cases, as before.
 
-Hosted misses now, every round: "outside" read as near (`p-outside`); "Copy that, moving out" as a movement (`o-moving-out`); generic words written as names ("pharmacy", "park", "cimetière" in `a-two-places-3`, `-4`, `-5`), which asks back but is against the name rule.
+Hosted misses now, every round: "outside" read as near (`p-outside`); "Copy that, moving out" as a movement (`o-moving-out`); generic words written as names ("pharmacy", "park", "cimetière" in `a-two-places-3`, `-4`, `-5`, and `t-side-ennemis-cimetiere` once), which asks back but is against the name rule.
 
-The 3B model gives the same answer in every round, so its misses are not noise. It still fails names in the wrong script ("Golden Gate", "Khreshchatyk" in Cyrillic), some Ukrainian lemmas, «за» as near, "I'm on rue de Fontenay" as a movement, and generic words as names. Its 9 wrong pins: `a-two-places-4` (the street it is on, not the pharmacy), and `p-blocks` and `fr-hdv`, where it writes "Bérault", a name from the prompt's examples that was not said.
+The 3B model gives the same answer in every round, so its misses are not noise. It still fails names in the wrong script ("Golden Gate", "Khreshchatyk" in Cyrillic), some Ukrainian lemmas, «за» as near, "I'm on rue de Fontenay" as a movement, and generic words as names. Its 12 wrong pins: `a-two-places-4` (the street it is on, not the pharmacy); `fr-hdv`, where it writes "Bérault", a name from the prompt's examples that was not said; `a-two-places-2`, where it goes to Bérault, the place being left, as in the example "Moving towards Bérault"; and `t-side-friendlies-castle`, where it writes "castle de Vincennes" and pins the track at the metro station of that name. It also reads the control "This is a friendly unit, we're at the town hall." as a track.
 
 ## Open
 
+- **The eval does not see whose marker moved.** A wrong pin compares places only. "Friendly at Vincennes Metro." read as the speaker moves the unit to the right station, so only the `subject` field catches it, and only in cases that score `subject`.
 - **The 3B model copies example names.** "Bérault" is in two of the prompt's examples and turned up in two reports that never said it, once the two-places tune changed the prompt. The next tune: swap the Vincennes names in the examples for names in no gazetteer.
 - **May the model repair a misheard name?** Asked "I'm at bear oh metro.", hosted Mistral writes "Bérault", the right station, though the prompt says to copy only what was said. The case accepts both a question and Bérault. Repairing names helps with speech-to-text errors but is a guess the resolver cannot see.
 - **`p-two-places` and `fr-leaving` have no start position,** so they can never show a wrong pin. Giving them one changes their expected outcome: the person's call.
 - **The expected answers were written by agents and checked only against the rules.** The Ukrainian and Russian cases need a native speaker.
-- **A misheard name can pin through the resolver.** "I'm at Vincent station." is read right (name "Vincent", a metro station), and the resolver pins Collège Germaine Tillion, whose other name is Collège Vincent d'Indy: with one match, the category said does not narrow (decision [15]). That is the resolver, not the prompt, so it is not for `prompt-tune`. Once the resolver is fixed, add the case: area vincennes, tags `stt_error` and `trap`, outcome asks back, with a `from`. It cannot go in before, because `tests/evalCases.test.ts` needs the resolver to give each case's own outcome. Here the model did not repair "Vincent" to "Vincennes", which bears on the question above.
+- **A misheard name pinned through the resolver** (fixed [185]): "I'm at Vincent station." is read right (name "Vincent", a metro station), and the resolver used to pin Collège Germaine Tillion, the one match for the name. Now a type said outright against a lone match of another type asks among the places of that type; the case is `e-vincent-station`. The model still does not repair "Vincent" to "Vincennes", which bears on the question above.
 - **Layer 3 has one data point.** Hosted speech-to-text wrote "Vincennes" for all 14 American-voiced synthetic clips (macOS voices), including ones spelled to sound American ("Vin Senz station"). No real voice yet. `KEEP_CLIPS=1` keeps each clip and its transcript in `.data/clips/`, which is how to collect real ones. Otherwise the eval is typed text only.
