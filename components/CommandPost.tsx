@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
+import { placedFromObserver, sectorRing } from "@/lib/geo/cone";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
@@ -18,6 +19,7 @@ import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
+import MapTools from "./MapTools";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import styles from "./CommandPost.module.css";
@@ -827,7 +829,9 @@ export default function CommandPost() {
       const color = AFFILIATION_COLOUR[t.affiliation];
       const pts = [...t.trail, p];
       if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
-      acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
+      // Placed by a way and a distance from its observer: a cone on the line of sight, as wide as the circle [233].
+      const cone = p.estimated && t.from && placedFromObserver(p.label) ? sectorRing(t.from, p, p.radius_m) : null;
+      acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [cone ?? circleRing(p, p.radius_m)] } });
       if (t.from && !old && distanceM(t.from, p) > 5) {
         sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [p.lon, p.lat]] } });
       }
@@ -1480,6 +1484,8 @@ export default function CommandPost() {
 
       <main className={styles.mapCol}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
+        {/* The grid under the pointer, its lines, a ruler and "go to grid" [232]. A click here already places or picks, so it copies nothing. */}
+        <MapTools mapRef={mapRef} ready={mapReady} centre={AREAS[area].centre} below="start-fill" top="110px" />
         {/* Top left of the map: "Follow units", then the palette or the picked track's card. */}
         <div className={styles.dock}>
           {!follow ? (
