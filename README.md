@@ -180,13 +180,48 @@ Before the first daily startup, build the coordinator from the repo root:
 npm run build
 ```
 
-Build and install the native Android app using the Studio steps below. On an 8 GB Mac,
-stop Ollama while building the native app, then resume the daily startup.
+Build and install the native Android app with the command-line steps below.
 Full setup and iPhone signing: [docs/setup.md](docs/setup.md).
+
+### Build and try changes without Android Studio
+
+Studio supplies the installed JDK and SDK, but **leave Studio closed**. Use this for the
+first Android install, or after changing native code, native dependencies or app config.
+Install npm dependencies as above first. Stop the three servers with Ctrl+C before a
+native build, especially on an 8 GB Mac.
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="/usr/local/bin:/opt/homebrew/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd ~/Projects/edth-hackathon/transmitter
+npx expo prebuild --platform android
+cd android
+./gradlew --stop
+./gradlew :app:assembleDebug --max-workers=2
+adb -d install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew --stop
+```
+
+Then use the [three-window daily startup](#daily-use-usb-android-phone-no-studio) and open
+Transmitter on the phone. The last Gradle command frees build memory before Ollama starts.
+
+- **Phone JavaScript/TypeScript changes:** restart window 3 and reopen the app; no native build.
+- **Coordinator/web changes:** stop window 2, then paste there:
+
+```bash
+cd ~/Projects/edth-hackathon
+npm run build
+PROVIDER_MODE=local npm run start -- -p 3117
+```
+
+If a USB phone is missing: in its Developer options, revoke USB debugging authorizations,
+re-enable USB debugging, reconnect and accept the authorization prompt.
 
 ### Android Studio on macOS
 
-Quit Studio with **⌘Q** first. From the repo root, paste into Terminal; keep it open:
+Optional, for developers who want the IDE. Quit Studio with **⌘Q** first.
+From the repo root, paste into Terminal; keep it open:
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
@@ -200,8 +235,6 @@ cd transmitter/android
 ```
 
 Sync Gradle. In Device Manager, press ▶ beside your emulator (or connect a phone with USB debugging). Leave optional AGP upgrades alone.
-
-If a USB phone is missing: in its Developer options, revoke USB debugging authorizations, re-enable USB debugging, reconnect and accept the authorization prompt.
 
 In a second terminal, from the repo root:
 

@@ -202,7 +202,7 @@ Check: the app shows the mission's name with Leave, the talk button says "Hold t
 
 ## 6. Transmitter on Android
 
-Install the Android tools listed in the [README](../README.md#run-locally), then use its [macOS Studio startup commands](../README.md#android-studio-on-macos) for the first build so Gradle can find Node. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
+Install the Android tools listed in the [README](../README.md#run-locally), then use [Build and try changes without Android Studio](../README.md#build-and-try-changes-without-android-studio). It sets Node, JDK and SDK paths, generates the Android project, builds with Gradle and installs over USB; Studio stays closed. Check: `adb devices -l` lists the phone as `device`, and the native build installs Transmitter. If authorization is stuck, revoke USB debugging authorizations on the phone, reconnect and accept the prompt.
 
 For later starts, use [Daily use: USB Android phone, no Studio](../README.md#daily-use-usb-android-phone-no-studio). It runs the built coordinator instead of the development reloader, and Metro on 8082 over USB. Check: the receiver stays Connected, and the phone shows a green coordinator dot. Android's microphone now records PCM WAV for Whisper, so **Phone: base** works with the offline coordinator; **Server** still needs hosted mode. Check: join the same mission, hold the button until red, say a place, release, and look for the report on the receiver. Recognition can ask back if it mishears a name.
 
