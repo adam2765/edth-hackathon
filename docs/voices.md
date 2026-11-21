@@ -80,3 +80,19 @@ Steady noise barely hurts, even as loud as the voice: the place names sent as hi
 
 Not covered: real voices, wind on the microphone itself, and noise that starts or stops mid-sentence.
 
+## Mixed languages
+
+21 November, hosted mode, through the coordinator: two scenario clips in different languages (synthetic voices, 0.4 s apart) joined into one, 3 clips for each of the 6 orders of English, French and Ukrainian, sent with the first clip's area and language. A half counts as kept when most of its words are in the transcript.
+
+| Order | Both halves kept |
+|---|---|
+| Ukrainian then English | 3 of 3 |
+| French then English, English then French, French then Ukrainian | 9 of 9 |
+| English then Ukrainian | 2 of 3 |
+| Ukrainian then French | 0 of 3 |
+
+- After Ukrainian, French is not transcribed as French: it comes back spelled in Cyrillic ("Ватюр-цивіль, де вон ла мері" for "Voiture civile devant la mairie") or as made-up Ukrainian ("Я сидів на мурі", "I sat on the wall", for "Je suis devant la mairie"; "Я живу в місті Вінниця" for "Je suis à la mairie de Vincennes").
+- One English half before Ukrainian was dropped, with nothing in the transcript to show it.
+- The area's place names, sent to Mistral as hints, pull the clip towards the area's language: the Ukrainian-then-French clip sent in the Vincennes area came back with its French intact. So a speaker who does not speak the area's language is the one at risk.
+- The two halves are two synthetic voices, so diarization usually marks them as two speakers (">>"). A real speaker switching language is one voice; not tested.
+
