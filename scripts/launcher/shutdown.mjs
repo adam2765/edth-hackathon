@@ -34,7 +34,7 @@ export function selectProjectProcesses(root, processes, { selfPid = process.pid,
   for (const item of processes) {
     if (excluded.has(item.pid) || item.owned === false || !runtime.test(item.command)) continue;
     if (!includeControllers && controller.test(item.command)) continue;
-    const project = inside(item.cwd) || references(item.command) || (/\bollama(?:\.exe)?\s+serve\b/i.test(item.command) && item.ports?.some((p) => ollamaPorts.includes(p))) || (/\bwhisper-server(?:\.exe)?\b/i.test(item.command) && item.ports?.some((p) => whisperPorts.includes(p)));
+    const project = item.projectApp === true || inside(item.cwd) || references(item.command) || (/\bollama(?:\.exe)?\s+serve\b/i.test(item.command) && item.ports?.some((p) => ollamaPorts.includes(p))) || (/\bwhisper-server(?:\.exe)?\b/i.test(item.command) && item.ports?.some((p) => whisperPorts.includes(p)));
     if (project && (role.test(item.command) || item.ports?.length)) chosen.add(item.pid);
   }
   let added = true;
@@ -126,6 +126,16 @@ export async function stopProjectProcesses(root, { env = process.env, includeCon
   const key = (p) => `${p.pid}:${p.started}`;
   const refresh = async () => {
     const all = await snapshot();
+    // A detached Node server can lose its cwd/path metadata. Recognize this app by
+    // its health response, never by a Safari connection or a port number alone.
+    await Promise.all(all.filter(p => p.owned && !p.cwd && runtime.test(p.command) && p.ports?.length).map(async p => {
+      p.projectApp = await Promise.all(p.ports.map(async port => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(500) });
+          return (await response.json()).app === 'voice-to-map';
+        } catch { return false; }
+      })).then(matches => matches.some(Boolean));
+    }));
     const alive = new Set(all.filter((p) => !/defunct|^\(node\)$/.test(p.command || '')).map(key));
     for (const id of pending.keys()) if (!alive.has(id)) pending.delete(id);
     for (const p of selectProjectProcesses(root, all, { selfPid, parentPid, includeControllers, ollamaPorts, whisperPorts })) if (alive.has(key(p))) pending.set(key(p), p);

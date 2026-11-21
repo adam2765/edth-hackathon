@@ -35,6 +35,16 @@ async function launch(kind, cwd, args, extra = {}) {
     cwd, env: runtimeEnv(extra), detached: process.platform !== 'win32', stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
   });
   children.set(kind, child);
+  // A healthy old listener is not proof this coordinator successfully bound its port.
+  const listening = kind === 'coordinator' ? new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Coordinator did not confirm listening.')), 15000);
+    child.on('message', (message) => {
+      if (message?.ready && message.id === id) { clearTimeout(timer); resolve(); }
+    });
+    child.once('error', (error) => { clearTimeout(timer); reject(error); });
+    child.once('exit', () => { clearTimeout(timer); reject(new Error(`Coordinator exited before listening on port ${config.port}. Check .run/launcher.log.`)); });
+  }) : null;
+  listening?.catch(() => {}); // Attach immediately while process identity is inspected.
   state.services[kind] = { pid: child.pid, id, identity: await processIdentity(child.pid) };
   child.on('error', (error) => { state.error = error.message; state.status = 'Failed'; void save(); });
   child.once('exit', () => {
@@ -43,8 +53,11 @@ async function launch(kind, cwd, args, extra = {}) {
     void save();
   });
   await save();
+  if (listening) await listening;
 }
 async function stopOwned() {
+  // Cancellation stops work, never the cleanup that must reap its processes.
+  setCancellation(undefined);
   stopping = true;
   clearInterval(reconnectTimer);
   for (const kind of ['metro', 'coordinator', 'whisper', 'ollama']) {
@@ -107,7 +120,7 @@ async function build() {
   const native = device ? await fingerprint(root, groups.native, { platform: device.platform, team: env.APPLE_TEAM_ID, bundle: env.TRANSMITTER_BUNDLE_ID }) : null;
   const phoneHash = device ? await fingerprint(root, [...groups.phone, ...groups.native], { native, server: phoneServer(config, device), device: device.id }) : null;
   const phoneChanged = device && previous.phone !== phoneHash;
-  if (webChanged || phoneChanged) await stopAll(false);
+  if (webChanged || phoneChanged) { await stopAll(false); setCancellation(operation?.signal); }
   if (webChanged) {
     await phase('Building coordinator…');
     await run('npm', ['run', 'build:web'], { cwd: root, env: runtimeEnv() });
@@ -125,7 +138,7 @@ async function build() {
     previous.phoneBuild = receipt;
     await saveJson(buildFile, previous);
     if (phoneChanged || installed) {
-      if (children.has('metro')) await stopOwned();
+      if (children.has('metro')) { await stopOwned(); setCancellation(operation?.signal); }
       await metro(device);
       await connect(config, device, env, receipt.identity);
     }
@@ -139,6 +152,7 @@ async function build() {
 async function start() {
   // Restart always, without building or opening/reloading the phone app.
   await stopAll(false);
+  setCancellation(operation?.signal);
   if (!existsSync(path.join(root, '.next/BUILD_ID'))) throw new Error('Run npm run build first.');
   state.status = 'Starting'; await phase(`Starting servers (${light ? 'light' : 'regular'})…`);
   if (config.mode === 'local') {
@@ -158,6 +172,9 @@ async function start() {
   await waitFor(() => fetch(`http://127.0.0.1:${config.port}/api/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false), 'coordinator readiness', 240_000);
   const device = selectDevice(await listDevices(env), config);
   await metro(device);
+  for (const kind of ['coordinator', ...(config.mode === 'local' ? ['whisper', 'ollama'] : [])]) {
+    if (!children.has(kind)) throw new Error(`${kind} stopped during startup.`);
+  }
   state.status = 'Ready';
   await phase(`Servers ready.\nReceiver: http://localhost:${config.port}/receiver\nOpen Transmitter on the phone and tap Connect.`);
   reconnectTimer = setInterval(async () => {

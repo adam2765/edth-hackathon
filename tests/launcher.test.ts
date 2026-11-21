@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fork, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
+import { createServer as createHttpServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { fingerprint } from "../scripts/launcher/files.mjs";
 import { ownsProcess, waitFor } from "../scripts/launcher/processes.mjs";
@@ -11,7 +12,9 @@ import { parseAndroidDevices, selectDevice } from "../scripts/launcher/devices.m
 
 const temporary: string[] = [];
 const processes: ChildProcess[] = [];
+const blockers: Server[] = [];
 afterEach(async () => {
+  for (const server of blockers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
   for (const child of processes.splice(0)) {
     if (child.connected) child.disconnect();
     if (child.exitCode == null && child.signalCode == null) {
@@ -86,7 +89,7 @@ describe("owned processes", () => {
   }, 20_000);
 });
 describe("basic start/stop", () => {
-  it.each([["hosted", false], ["local", false], ["local", true]] as const)("restarts %s servers (light=%s) without building or opening the phone, then stops everything", async (mode, light) => {
+  it.each([["hosted", false, false], ["local", false, false], ["local", true, false], ["local", false, true]] as const)("restarts %s servers (light=%s, occupied=%s) without building or opening the phone, then stops everything", async (mode, light, occupied) => {
     const root = await fixture();
     await cp(new URL("../scripts/launcher/", import.meta.url), path.join(root, "scripts/launcher"), { recursive: true });
     // OS process discovery is covered by the separate orphan shutdown regression.
@@ -96,6 +99,11 @@ describe("basic start/stop", () => {
     await writeFile(path.join(root, ".next/BUILD_ID"), "already-built");
     const controlPort = await unusedPort();
     const port = await unusedPort();
+    if (occupied) {
+      const blocker = createHttpServer((req, res) => { res.writeHead(200); res.end('old server still healthy'); });
+      blockers.push(blocker);
+      await new Promise<void>(resolve => blocker.listen(port, '127.0.0.1', resolve));
+    }
     const metroPort = await unusedPort();
     const ollamaPort = await unusedPort();
     const whisperPort = await unusedPort();
@@ -116,7 +124,7 @@ describe("basic start/stop", () => {
       const server=createServer((req,res)=>{res.writeHead(200);res.end(JSON.stringify({profile:process.env.WHISPER_PROFILE,keepAlive:process.env.OLLAMA_KEEP_ALIVE}))});
       const kind=process.argv[2];
       const port=kind==='ollama'?new URL(process.env.OLLAMA_URL).port:kind==='whisper'?new URL(process.env.WHISPER_URL).port:process.argv[5];
-      server.listen(Number(port),'127.0.0.1');
+      server.listen(Number(port),'127.0.0.1',()=>process.send?.({ready:true,id:process.argv[3]}));
       process.on('message',()=>{server.close(()=>process.exit(0));server.closeIdleConnections()});
       process.on('disconnect',()=>process.exit(0));
     `);
@@ -126,6 +134,14 @@ describe("basic start/stop", () => {
     await waitFor(() => fetch(`${base}/status`).then((r) => r.ok).catch(() => false), "server control", 5000);
     const act = (command: string) => fetch(`${base}/${command}`, { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: "{}" });
     expect((await act("start")).status).toBe(202);
+    if (occupied) {
+      await waitFor(() => fetch(`${base}/status`).then(r => r.json()).then(s => s.status === "Failed" && /before listening/.test(s.error)), "bind failure", 5000);
+      expect((await fetch(`http://127.0.0.1:${port}/api/health`)).ok).toBe(true);
+      const exited = new Promise(resolve => child.once("exit", resolve));
+      expect((await act("stop")).status).toBe(202);
+      await exited;
+      return;
+    }
     await waitFor(() => fetch(`${base}/status`).then((r) => r.json()).then((s) => { if (s.error) throw new Error(s.error); return s.status === "Ready"; }), "startup", 5000);
     const first = await fetch(`${base}/status`).then((r) => r.json());
     expect((await fetch(`http://127.0.0.1:${port}/api/health`)).ok).toBe(true);

@@ -152,3 +152,9 @@ adb shell run-as dev.voicetomap.transmitter rm -f files/models/ggml-base-q5_1.bi
 
 Whisper keeps upstream port 3118. The private controller uses 3116 and migrates an old
 conflicting setting automatically. The receiver remains on 3117 and Metro on 8082.
+
+Several Safari tabs can have established connections to one coordinator listener on 3117.
+Those client connections are not extra servers. Cleanup targets server listeners and owned
+workers, leaving browser processes alone. Startup requires the newly launched coordinator
+to confirm it bound its port; an old server’s healthy response cannot produce a false Ready.
+Cleanup finishes even when the operation that requested it was cancelled.
