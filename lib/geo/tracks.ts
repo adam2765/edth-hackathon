@@ -46,7 +46,7 @@ function says(lex: Lexicon, toks: string[], text: string): boolean {
 }
 
 const HOSTILE: Lexicon = {
-  // Field words too [210]: "OPFOR", "bandits", "orcs" (Ukrainian soldiers' word for the enemy).
+  // Field words too [224]: "OPFOR", "bandits", "orcs" (Ukrainian soldiers' word for the enemy).
   words: ["enemy", "enemies", "hostile", "hostiles", "opfor", "bandit", "bandits", "orc", "orcs", "ennemi", "ennemie", "ennemis", "ennemies", "adverse", "adversaire", "adversaires"],
   stems: ["ворож", "ворог", "противник", "враг", "вражеск", "неприятел", "орки", "орків", "оркам", "орка"],
 };
@@ -81,7 +81,7 @@ const KIND_WORDS: [TrackKind, Lexicon][] = [
   [
     "drone",
     {
-      // Models soldiers name them by [210]: Mavic, Shahed, Lancet, Orlan.
+      // Models soldiers name them by [224]: Mavic, Shahed, Lancet, Orlan.
       words: ["drone", "drones", "uav", "uavs", "uas", "quadcopter", "quadcopters", "fpv", "fpvs", "mavic", "mavics", "shahed", "shaheds", "lancet", "lancets", "orlan", "orlans", "geran", "бпла"],
       stems: ["дрон", "безпілотник", "беспилотник", "квадрокоптер", "коптер", "мавік", "мавик", "шахед", "ланцет", "орлан", "герань"],
       phrases: ["loitering munition", "kamikaze drone", "munition rodeuse"],
@@ -92,7 +92,7 @@ const KIND_WORDS: [TrackKind, Lexicon][] = [
     {
       words: ["tank", "tanks", "apc", "apcs", "ifv", "ifvs", "mbt", "mbts", "bmp", "bmps", "btr", "btrs", "bmd", "mrap", "mraps", "armour", "armor", "armoured", "armored", "char", "chars", "blinde", "blindes", "blindee", "blindees", "vbci", "vab", "бмп", "бтр", "ббм", "бмд"],
       stems: ["танк", "бронемашин", "бронетехнік", "бронетехник", "бронетранспортер"],
-      // "T-72" folds to "t 72" [210].
+      // "T-72" folds to "t 72" [224].
       phrases: ["t 62", "t 64", "t 72", "t 80", "t 90", "т 62", "т 64", "т 72", "т 80", "т 90", "mt lb", "мт лб"],
     },
   ],
@@ -582,7 +582,7 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   if (reading.subject === "unclear") {
     return { status: "unresolved", candidates: [], question: prompt(lang, "subject"), evidence: { rule: "subject_unclear", detail: reading.why } };
   }
-  // A grid reference is a place too: "two vehicles at grid DQ 586 101" [209].
+  // A grid reference is a place too: "two vehicles at grid DQ 586 101" [223].
   const grid = readGrid(transcript, input.areaCentre ?? { lat: 48.8455, lon: 2.435 });
   const hasPlace = placeSaid(said) || grid != null;
   const alone = placeAlone(said, transcript);
@@ -651,7 +651,7 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   const target = r.candidates.find((c) => c.id === r.evidence.feature_id);
   const line = target?.category === "street" || target?.category === "water";
   const radius_m = line && r.radius_m != null ? Math.max(r.radius_m, TRACK_ON_LINE_M) : r.radius_m;
-  const dir = bearingSaid(withFacing(intent, transcript).intent); // turned to the facing said [210]
+  const dir = bearingSaid(withFacing(intent, transcript).intent); // turned to the facing said [224]
   const label = target?.name ?? (r.evidence.rule === "grid_reference" && grid ? `grid ${grid.text}` : null) ??
  (intent.distance_m && dir ? `${intent.distance_m} m ${dir.replace("_", "-")} of ${input.observer ?? "the observer"}` : "position");
   return {

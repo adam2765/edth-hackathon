@@ -12,7 +12,7 @@ const IZIUM = { lat: 49.1912, lon: 37.2786 };
 // Checked against the `mgrs` library (proj4js's MGRS, in Python): the castle, Maidan, Izium's square.
 const CASTLE = { lat: 48.8427, lon: 2.4358 }; // 31U DQ 58603 10123
 
-describe("a grid reference said out loud [209]", () => {
+describe("a grid reference said out loud [223]", () => {
   it("reads the full grid, to a metre", () => {
     const g = readGrid("Grid 31U DQ 58603 10123", VINCENNES)!;
     expect(g.text).toBe("31U DQ 58603 10123");
@@ -58,7 +58,7 @@ const gaz = loadGazetteer();
 const NOW = Date.parse("2026-11-21T09:00:00Z");
 const intent = (p: Partial<Intent>): Intent => ({ kind: "position", landmark_text: null, landmark_name: null, landmark_category: null, relation: null, language: "en", confidence: 0.9, subject: "self", ...p });
 
-describe("a grid in a report [209]", () => {
+describe("a grid in a report [223]", () => {
   it("places the speaker at the cell, with no place to look up", () => {
     const r = resolve({ intent: intent({ landmark_name: "DQ 586 101" }), transcript: "I'm at grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
     expect(r).toMatchObject({ status: "resolved", radius_m: 71, evidence: { rule: "grid_reference" } });

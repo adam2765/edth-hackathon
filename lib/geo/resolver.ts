@@ -326,11 +326,11 @@ function unresolvedPrompt(lang: Lang, prompt: Prompt = "place"): string {
 
 export function resolve(input: ResolveInput): Resolution {
   const { transcript, lastPosition: last, now, gazetteer } = input;
-  // A clock direction turns with the way the speaker said they face [210]; else 12 is north [198].
+  // A clock direction turns with the way the speaker said they face [224]; else 12 is north [198].
   const faced = withFacing(input.intent, transcript);
   const intent = faced.intent;
   const lang: Lang = intent.language === "fr" || intent.language === "uk" ? intent.language : "en";
-  // Klicks are kilometres; the model may not know the word [210].
+  // Klicks are kilometres; the model may not know the word [224].
   const d = klicksSaid(transcript) ?? intent.distance_m ?? null;
   const plain = (rule: string, detail: string, prompt?: Prompt): Resolution => ({
     status: "unresolved",
@@ -339,7 +339,7 @@ export function resolve(input: ResolveInput): Resolution {
     evidence: { rule, detail },
   });
 
-  // A grid reference names the cell outright: no place to look up [209].
+  // A grid reference names the cell outright: no place to look up [223].
   const grid = readGrid(transcript, input.areaCentre ?? DEFAULT_CENTRE);
   if (grid && grid.from_centre_km > GRID_MAX_KM) {
     return {

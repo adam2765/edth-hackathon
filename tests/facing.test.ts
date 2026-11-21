@@ -6,7 +6,7 @@ import { resolve } from "../lib/geo/resolver";
 import { affiliationSaid, kindSaid, resolveReport } from "../lib/geo/tracks";
 import type { Intent, LastPosition } from "../lib/geo/types";
 
-describe("which way the speaker faces [210]", () => {
+describe("which way the speaker faces [224]", () => {
   it("reads it in three languages", () => {
     expect(facingSaid("Facing north, contact 200 m at my 2 o'clock")).toBe(0);
     expect(facingSaid("I'm facing the east")).toBe(90);
@@ -48,7 +48,7 @@ function intent(p: Partial<Intent>): Intent {
 }
 const base = { now: NOW, gazetteer: gaz, lastPosition: last, areaCentre: { lat: 48.8455, lon: 2.435 } };
 
-describe("a clock direction placed with the facing said [210]", () => {
+describe("a clock direction placed with the facing said [224]", () => {
   // As the extraction leaves it: `clockChecked` puts the clock's north-based compass way [198].
   const moved = intent({ kind: "movement", distance_m: 300, direction: "east" });
 
@@ -80,7 +80,7 @@ describe("a clock direction placed with the facing said [210]", () => {
   });
 });
 
-describe("field words [211]", () => {
+describe("field words [225]", () => {
   it("knows the names soldiers use for kit", () => {
     expect(kindSaid("Two BMPs moving north")).toBe("armour");
     expect(kindSaid("T-72 behind the church")).toBe("armour");

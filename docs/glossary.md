@@ -10,7 +10,7 @@
 | Call sign | The name a speaker reports under, such as ALPHA 2. Stored in capitals. On a radio net it is said at the start of the report and read from the words against the mission's roster [202] |
 | Check-in | A unit's first report that names a place. It replaces the start point |
 | Command post (CP) | The shared map at the base, with every call sign, the tracks and a replay, at `/cp` (`?session=<code>` for one mission). It opens and ends missions, places and edits tracks by hand, and can answer a unit's open question. Called the receiver, at `/receiver`, before 21 Nov; the old address still leads there |
-| Clock direction | "At 3 o'clock": a way given as an hour on a clock face. Read in code. 12 o'clock is north, as on the map, or the way the speaker said they face [198, 210] |
+| Clock direction | "At 3 o'clock": a way given as an hour on a clock face. Read in code. 12 o'clock is north, as on the map, or the way the speaker said they face [198, 224] |
 | Coordinator | The server endpoint that turns a report into a placement |
 | Crossing | Where named streets meet: a point two streets share in OpenStreetMap. Worked out from the street lines, not stored in the gazetteer |
 | Dead reckoning | Working out a position from the last one plus a stated distance and compass direction |

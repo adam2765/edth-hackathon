@@ -103,7 +103,7 @@ export function clockChecked(intent: Intent, transcript: string): Intent {
   return { ...intent, direction: one?.direction ?? null };
 }
 
-// ---------- Which way the speaker faces [210] ----------
+// ---------- Which way the speaker faces [224] ----------
 // Above, 12 o'clock is north, as on the map [198]. When the speaker says which way they face,
 // 12 o'clock is that way instead: "facing east, 300 metres at my 3 o'clock" is south.
 
