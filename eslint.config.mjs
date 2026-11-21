@@ -14,6 +14,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The native transmitter app has its own tooling.
     "transmitter/**",
+    // Copied from node_modules by `predev` and `prebuild`, and ignored by git.
+    "public/maplibre-gl-worker.mjs",
+    "public/ort/**",
+    "public/tts/**",
   ]),
 ]);
 
