@@ -216,3 +216,17 @@ function gridFrom(run: { t: string; announced: boolean }[], centre: LatLon, home
     from_centre_km: Math.round(best.km * 10) / 10,
   };
 }
+
+/**
+ * The grid of a point, the other way round [231]: "31U DQ 5860 1012" (8 figures, a 10 m cell).
+ * For the map's readout, so an operator can read a grid off the map and say it.
+ */
+export function toGrid(p: LatLon, figures: 6 | 8 | 10 = 8): string {
+  const u = toUtm(p);
+  const band = BANDS[Math.min(19, Math.max(0, Math.floor((p.lat + 80) / 8)))];
+  const k = figures / 2;
+  const cell = 10 ** (5 - k);
+  const e = String(Math.floor((u.easting % 100000) / cell)).padStart(k, "0");
+  const n = String(Math.floor((u.northing % 100000) / cell)).padStart(k, "0");
+  return `${u.zone}${band} ${squareOf(u.zone, u.easting, u.northing)} ${e} ${n}`;
+}

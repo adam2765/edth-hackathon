@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
-import { readGrid, toUtm } from "../lib/geo/grid";
+import { readGrid, toGrid, toUtm } from "../lib/geo/grid";
 import { resolve } from "../lib/geo/resolver";
 import { resolveReport } from "../lib/geo/tracks";
 import { positionFromReport } from "../lib/reports/position";
@@ -52,6 +52,15 @@ describe("a grid reference said out loud [223]", () => {
     for (const said of ["two vehicles at three o'clock", "I see one two three", "I'm 200 metres north of the church", "Track 2, two vehicles at 300 metres", "Maidan Palace Hotel", "I'm at the château de Vincennes", "586 101"]) {
       expect(readGrid(said, VINCENNES), said).toBeNull();
     }
+  });
+
+  it("gives the grid of a point, as the mgrs library does [231]", () => {
+    expect(toGrid(CASTLE)).toBe("31U DQ 5860 1012");
+    expect(toGrid(CASTLE, 10)).toBe("31U DQ 58603 10123");
+    expect(toGrid({ lat: 50.4501, lon: 30.5234 })).toBe("36U UA 2418 9160");
+    expect(toGrid({ lat: 49.1912, lon: 37.2786 }, 6)).toBe("37U CQ 745 501");
+    // Read back, a grid lands within its own cell.
+    expect(distanceM(readGrid(`grid ${toGrid(CASTLE)}`, VINCENNES)!.pin, CASTLE)).toBeLessThan(10);
   });
 
   it("agrees with the reference UTM for the area's centre", () => {
