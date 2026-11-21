@@ -134,3 +134,5 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 ## Provider interfaces
 
 `Transcriber.transcribe(audio, mime, biasTerms) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`.
+
+`ReplyReader.read(reply, question) → { kind, choice }` reads a reply to an open question ([ask-back.md](ask-back.md)). Same providers and switch. Only the reply eval uses it so far [191].
