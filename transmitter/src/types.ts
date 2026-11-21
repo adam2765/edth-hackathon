@@ -59,7 +59,10 @@ export interface Utterance {
   seq: number;
   callsign: string;
   source: "mic" | "scenario" | "open_mic";
-  /** The words transcribed on the phone; absent only for a test clip with no words. */
+  /** Local file with the audio, when speech-to-text runs on the server. */
+  audioUri?: string;
+  mime?: string;
+  /** The words, when speech-to-text already ran on the phone. */
   text?: string;
   /** For tests ("Send clips"): the recording beside the words, and Whisper's timed stretches of it. */
   clipUri?: string;

@@ -7,11 +7,11 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef } from "rea
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { SCENARIOS } from "./scenarios";
-import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
+import { MAX_CLIP_MS, MIN_CLIP_MS, SPEECH_RECORDING, SPEECH_RECORDING_WAV, clipUri, playClipAloud } from "./src/sources";
 import { speak, stopSpeaking } from "./src/speech";
 import { startPcm, stopPcm } from "./src/pcm";
 import { CoordinatorError, callsignKey, fetchMissions, joinMission, loadSaved, positionFromJoin, writeSaved, type Saved } from "./src/mission";
-import { ensureModel, hasModel, hintPrompt, transcribeOnPhone } from "./src/stt";
+import { PHONE_MODELS, downloadModel, hasModel, hintPrompt, transcribeOnPhone, type PhoneMode, type SttMode } from "./src/stt";
 import { describePlacement, positionAfter, sendAnswer, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button, Segmented } from "./src/ui/controls";
@@ -119,20 +119,12 @@ function Transmitter() {
   const [realTime, setRealTime] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
   const [playClips, setPlayClips] = useState(false);
+  const [sttMode, setSttMode] = useState<SttMode>("server");
   const [useHints, setUseHints] = useState(true);
   // Tests only: send each recording beside the phone's words, for the coordinator to keep (KEEP_CLIPS=1).
   const [sendClips, setSendClips] = useState(false);
-  const [modelReady, setModelReady] = useState(hasModel);
-  const [modelError, setModelError] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    ensureModel().then(() => {
-      if (!cancelled) setModelReady(true);
-    }).catch((error: unknown) => {
-      if (!cancelled) setModelError(error instanceof Error ? error.message : "Speech setup failed. Reopen the app.");
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const [modelReady, setModelReady] = useState<Record<PhoneMode, boolean>>(() => ({ "phone-base": hasModel("phone-base"), "phone-small": hasModel("phone-small") }));
+  const [downloadPct, setDownloadPct] = useState<number | null>(null);
   /** The coordinator's missions; null when it has none to offer (an older deployment). */
   const [missionList, setMissionList] = useState<MissionListReply | null>(null);
   const [joined, setJoined] = useState<{ code: string; name: string; area: AreaId; callsign: string } | null>(null);
@@ -162,7 +154,7 @@ function Transmitter() {
   const cancelScenarioRef = useRef(false);
   /** Phone speech-to-text times of the current scenario run, for the summary line. */
   const phoneTimesRef = useRef<number[]>([]);
-  const recorder = useAudioRecorder(SPEECH_RECORDING_WAV);
+  const recorder = useAudioRecorder(SPEECH_RECORDING);
 
   // Is the coordinator answering at this address, and which missions are open? Any HTTP answer
   // counts as answering; only silence does not. Checked when the address changes and then every
@@ -371,19 +363,24 @@ function Transmitter() {
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "running", note: "sending" } }));
       const now = Date.now();
       const base = { seq: ++seqRef.current, callsign: step.callsign, source: "scenario" as const, startedAt: now, endedAt: now, scenarioStepId: step.id };
-
+      let u: Utterance;
+      let phoneMs: number | undefined;
       // Optional: let the room hear the clip first, as if someone had just said it.
       if (playClips) await playClipAloud(step.audio);
-      // Speech-to-text on the phone: only the words travel. Each step says its own language.
-      const heard = await transcribeOnPhone(await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined, language: step.lang });
-      const phoneMs = heard.ms;
-      phoneTimesRef.current.push(heard.ms);
-      if (!heard.text) {
-        console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "phone-base", hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
-        setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "the phone heard nothing" } }));
-        return false;
+      if (sttMode === "server") {
+        u = { ...base, audioUri: await clipUri(step.audio), mime: "audio/mp4" };
+      } else {
+        // Speech-to-text on the phone: only the words travel. Each step says its own language.
+        const heard = await transcribeOnPhone(sttMode, await clipUri(step.wav), { prompt: useHints ? hintPrompt(sc.area) : undefined, language: step.lang });
+        phoneMs = heard.ms;
+        phoneTimesRef.current.push(heard.ms);
+        if (!heard.text) {
+          console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: useHints, said: step.text, heard: "", pass: false, note: "phone heard nothing", phoneMs }));
+          setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "the phone heard nothing" } }));
+          return false;
+        }
+        u = { ...base, text: heard.text, endedAt: Date.now() };
       }
-      const u: Utterance = { ...base, text: heard.text, endedAt: Date.now() };
       const out = await handleUtterance(u, { area: sc.area, language: step.lang, scripted: step.text, quiet: !speakReplies, phoneMs });
       if (!out) {
         setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: "fail", note: "no answer from the coordinator" } }));
@@ -398,11 +395,11 @@ function Transmitter() {
       const verdict = evaluate(step, out.reply, chosen);
       if (manual && verdict.pass && chosen) verdict.note = "asked a question";
       // One line per step in the dev-server log, so runs in different modes can be compared.
-      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: "phone-base", hints: useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
+      console.log("[step]", JSON.stringify({ scenario: sc.id, step: step.id, mode: sttMode, hints: sttMode === "server" ? null : useHints, said: step.text, heard: out.reply.transcript, pass: verdict.pass, note: verdict.note, phoneMs, serverSttMs: out.reply.timings_ms.stt, roundTripMs: out.roundTripMs }));
       setStepResults((r) => ({ ...r, [`${sc.id}/${step.id}`]: { state: verdict.pass ? "pass" : "fail", note: verdict.note } }));
       return verdict.pass;
     },
-    [handleUtterance, choose, speakReplies, useHints, playClips],
+    [handleUtterance, choose, speakReplies, sttMode, useHints, playClips],
   );
 
   const playScenario = useCallback(async () => {
@@ -446,8 +443,26 @@ function Transmitter() {
   );
 
   // ---------- speech-to-text on the phone ----------
-  const modelMissing = !modelReady;
-  const androidPcm = Platform.OS === "android";
+  const modelMissing = sttMode !== "server" && !modelReady[sttMode];
+  // Both phones give Whisper a PCM WAV; Android uses our AudioRecord module.
+  const phoneStt = sttMode !== "server";
+  const androidPcm = phoneStt && Platform.OS === "android";
+
+  const fetchModel = useCallback(async () => {
+    if (sttMode === "server" || downloadPct !== null) return;
+    const mode = sttMode;
+    setDownloadPct(0);
+    setStatus(`Downloading ${PHONE_MODELS[mode].file} (${PHONE_MODELS[mode].mb} MB)…`);
+    try {
+      await downloadModel(mode, (f) => setDownloadPct(Math.round(f * 100)));
+      setModelReady((m) => ({ ...m, [mode]: hasModel(mode) }));
+      setStatus(hasModel(mode) ? "Model ready. Speech-to-text now runs on the phone." : "The download did not complete. Try again.");
+    } catch (e) {
+      setStatus(e instanceof Error ? `Download failed: ${e.message}` : "Download failed.");
+    } finally {
+      setDownloadPct(null);
+    }
+  }, [sttMode, downloadPct]);
 
   // ---------- source: microphone, hold to talk ----------
   const stopAndSend = useCallback(async () => {
@@ -466,22 +481,27 @@ function Transmitter() {
         return;
       }
       const base = { seq: ++seqRef.current, callsign: callsign.trim() || "UNKNOWN", source: "mic" as const, startedAt: recordStartRef.current, endedAt };
-      setStatus("Transcribing on the phone…");
-      const heard = await transcribeOnPhone(uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
-      // With "Send clips" on, a clip the phone heard no words in still goes: a missed whisper is a result.
-      if (!heard.text && !sendClips) {
-        setStatus("The phone heard nothing. Try again.");
-        return;
+      if (phoneStt) {
+        setStatus("Transcribing on the phone…");
+        const heard = await transcribeOnPhone(sttMode as PhoneMode, uri, { prompt: useHints ? hintPrompt(effectiveArea) : undefined, language });
+        // With "Send clips" on, a clip the phone heard no words in still goes: a missed whisper is a result.
+        if (!heard.text && !sendClips) {
+          setStatus("The phone heard nothing. Try again.");
+          return;
+        }
+        setStatus("Sending…");
+        const clip = sendClips ? { clipUri: uri, segments: heard.segments } : {};
+        await handleUtterance({ ...base, text: heard.text || undefined, ...clip }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
+      } else {
+        setStatus("Sending…");
+        await handleUtterance({ ...base, audioUri: uri, mime: "audio/mp4" }, { area: effectiveArea, language, quiet: !speakReplies });
       }
-      setStatus("Sending…");
-      const clip = sendClips ? { clipUri: uri, segments: heard.segments } : {};
-      await handleUtterance({ ...base, text: heard.text || undefined, ...clip }, { area: effectiveArea, language, quiet: !speakReplies, phoneMs: heard.ms });
     } catch (e) {
       setStatus(e instanceof Error ? `Recording failed: ${e.message}` : "Recording failed.");
     } finally {
       setBusyBoth("idle");
     }
-  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, androidPcm, useHints, sendClips]);
+  }, [recorder, callsign, effectiveArea, language, handleUtterance, speakReplies, phoneStt, androidPcm, sttMode, useHints, sendClips]);
 
   const onPressIn = useCallback(async () => {
     if (busyRef.current !== "idle") return;
@@ -499,7 +519,7 @@ function Transmitter() {
       if (androidPcm) {
         await startPcm();
       } else {
-        await recorder.prepareToRecordAsync(SPEECH_RECORDING_WAV);
+        await recorder.prepareToRecordAsync(phoneStt ? SPEECH_RECORDING_WAV : SPEECH_RECORDING);
         recorder.record();
       }
       recordStartRef.current = Date.now();
@@ -514,7 +534,7 @@ function Transmitter() {
       setStatus(e instanceof Error ? `Could not open the microphone: ${e.message}` : "Could not open the microphone.");
       setBusyBoth("idle");
     }
-  }, [recorder, stopAndSend, androidPcm]);
+  }, [recorder, stopAndSend, phoneStt, androidPcm]);
 
   const onPressOut = useCallback(() => {
     releasedRef.current = true;
@@ -584,7 +604,8 @@ function Transmitter() {
     ) : modelMissing ? (
       <View style={[styles.notice, styles.noticeWarn]} accessibilityRole="alert">
         <Ionicons name="cloud-download-outline" size={20} color={color.warn} />
-        <Text style={styles.noticeText}>{modelError ?? "Preparing speech recognition…"}</Text>
+        <Text style={styles.noticeText}>Speech-to-text is set to run on this phone, and its model is not downloaded yet.</Text>
+        <Button label={downloadPct === null ? `Get ${PHONE_MODELS[sttMode].mb} MB` : `${downloadPct}%`} kind="quiet" busy={downloadPct !== null} onPress={fetchModel} />
       </View>
     ) : null;
 
@@ -633,7 +654,7 @@ function Transmitter() {
         {notice}
 
         <View style={styles.talk}>
-          <TalkButton state={busy} blocked={modelMissing ? (modelError ? "Speech unavailable" : "Preparing speech") : needsJoin ? "Join first" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
+          <TalkButton state={busy} blocked={modelMissing ? "Model needed" : needsJoin ? "Join first" : null} onPressIn={onPressIn} onPressOut={onPressOut} />
           <View style={styles.readout}>
             <Text style={styles.status} numberOfLines={4} accessibilityLiveRegion="polite">
               {asking ? "The coordinator needs an answer." : status}
@@ -690,6 +711,11 @@ function Transmitter() {
         localCoordinator={LOCAL_COORDINATOR}
         liveSite={LIVE_SITE}
         reach={reach}
+        sttMode={sttMode}
+        onSttMode={setSttMode}
+        modelReady={modelReady}
+        downloadPct={downloadPct}
+        onDownload={fetchModel}
         useHints={useHints}
         onUseHints={setUseHints}
         sendClips={sendClips}

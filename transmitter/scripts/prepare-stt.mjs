@@ -1,4 +1,5 @@
-// Fetch the fixed phone model during setup, never through a control on the phone.
+// Fetch Whisper base to the Mac, checksum-verified, for scripts/build-transmitter-hints.ts to count
+// prompt tokens with. The app does not bundle it: a phone mode downloads its own copy.
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
@@ -27,7 +28,7 @@ try {
     if (process.env.STT_MODEL_FILE) {
       await copyFile(process.env.STT_MODEL_FILE, temporary);
     } else {
-      console.log("Preparing phone speech recognition: downloading Whisper base (57 MB)…");
+      console.log("Downloading Whisper base (57 MB) for the hints script…");
       const response = await fetch(manifest.url, { signal: AbortSignal.timeout(600_000) });
       if (!response.ok || !response.body) throw new Error(`Model download failed: HTTP ${response.status}`);
       await pipeline(Readable.fromWeb(response.body), createWriteStream(temporary));
@@ -35,7 +36,7 @@ try {
     if (!(await valid(temporary))) throw new Error("Speech model checksum failed; run npm run setup again.");
     await rename(temporary, target);
   }
-  console.log("Phone speech model ready (Whisper base, checksum verified).");
+  console.log("Whisper base ready on the Mac (checksum verified).");
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;
