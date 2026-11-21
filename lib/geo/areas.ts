@@ -15,7 +15,7 @@ export interface Area {
   /**
    * Report words given to speech-to-text after the place names, as short phrases in the languages
    * spoken there. Without them Whisper on the phone heard "Hostile drone" as "Hostel Drone" (21 Nov).
-   * Phrases did better than single words; more Ukrainian would crowd out Kyiv's place names [186].
+   * Phrases did better than single words; more Ukrainian would crowd out Kyiv's place names [188].
    */
   speechWords: string[];
   /**

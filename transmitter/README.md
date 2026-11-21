@@ -146,7 +146,7 @@ A step counts when the coordinator's answer is the expected one.
 
 Whisper keeps only the last 223 tokens of its prompt. The Vincennes list was 268 tokens, so its
 first seven names (the stations and the château) never reached it. The list is now fitted to the
-budget and ends with the area's report phrases ("hostile drone", "Track 2") [186].
+budget and ends with the area's report phrases ("hostile drone", "Track 2") [188].
 
 Measured on the Mac with whisper.cpp built from `whisper.rn`'s own source, `ggml-base-q5_1`,
 language on auto. Clips: the scenario steps and 61 synthetic reports in macOS voices.

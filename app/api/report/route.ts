@@ -61,7 +61,7 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
  * number and the words to say back, or, when nothing was saved, with words that say it has none.
  */
 async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string; resolution: Resolution }> {
-  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent) : input.resolution };
+  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent, input.transcript) : input.resolution };
   if (!session) return unsaved;
   try {
     const saved = await saveReport({ session, ...input });
