@@ -143,6 +143,31 @@ A step counts when the coordinator's answer is the expected one.
   this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
 - The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
 
+### The prompt for Whisper base (21 Nov)
+
+Whisper keeps only the last 223 tokens of its prompt. The Vincennes list was 268 tokens, so its
+first seven names (the stations and the château) never reached it. The list is now fitted to the
+budget and ends with the area's report phrases ("hostile drone", "Track 2") [189].
+
+Measured on the Mac with whisper.cpp built from `whisper.rn`'s own source, `ggml-base-q5_1`,
+language on auto. Clips: the scenario steps and 61 synthetic reports in macOS voices.
+
+| Vincennes, 51 clips | Word error rate | Report words heard |
+|---|---|---|
+| Before: 40 names, the first 7 cut | 0.345 | 33 of 66 |
+| After: 29 names, then 8 report phrases | 0.223 | 56 of 66 |
+
+- "Hostile" now comes back as said in every English voice. Before, one voice gave "Hospital drone" and
+  "Hospital vehicle", and a real voice on the phone gave "Hostel Drone". "Enemy patrol" no longer
+  comes back as "Avenue patrol". One clip got worse: "Hostiles at the Château de Vincennes" lost
+  the château in one voice.
+- Kyiv and Izium, 19 clips: the same or better on all but one ("Об'єкт 2 біля Золотих воріт" lost
+  "Об'єкт 2"). All 24 Kyiv names still fit.
+- French report clips in synthetic voices are poor with every prompt ("Véhicule hostile devant la
+  mairie" came back as "avec une oscillation de la mérite"). Real French voices are not checked.
+- Putting the most useful names last did worse: "devant la mairie" became "devant la mérie".
+- The raw results are in `../scenarios/results/whisper-prompt-2026-11-21.jsonl`.
+
 Whisper base transcribes both scenario clips and the microphone on Android and iOS. Android uses
 the local Expo module in `modules/pcm-recorder` to write 16 kHz mono 16-bit PCM WAV with
 `AudioRecord`; iOS uses expo-audio. Both call the same Whisper function and send text through

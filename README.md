@@ -8,7 +8,7 @@ Live: https://edth-hackathon.vercel.app (single user, no auth; it keeps no repor
 ## How it works
 
 ```
-phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcribe-3, place names as context_bias)
+phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcribe-3, report words and place names as context_bias)
                          ─► intent extraction (Mistral mistral-small-latest, JSON schema; never coordinates)
                          ─► resolver (deterministic, local gazetteer of the chosen area from OpenStreetMap)
                          ◄─ { transcript, language, intent, resolution, timings_ms }

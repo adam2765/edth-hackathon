@@ -52,7 +52,7 @@ async function installModel(): Promise<void> {
   }
 }
 
-/** Place names the speaker is likely to say, as a hint for the phone's speech-to-text. */
+/** Place names, most useful first, then report words: the prompt for the phone's speech-to-text (scripts/build-transmitter-hints.ts). */
 export function hintPrompt(area: AreaId): string {
   const names = (hints as Record<string, string[]>)[area] ?? [];
   return names.join(", ");

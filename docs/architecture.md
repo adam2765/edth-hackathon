@@ -60,7 +60,7 @@ The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed
 flowchart TB
     IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
     CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
-    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, place names as context_bias"]
+    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, report words and place names as context_bias"]
     subgraph VOICES["For each voice"]
         EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
         SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
@@ -94,7 +94,7 @@ flowchart TB
     CLIP["Scenario clip<br/>transmitter/scenarios/"]
     OPEN["Open microphone"]:::todo
     STT{"Speech-to-text<br/>setting"}
-    WH["Whisper on the phone<br/>whisper.rn, base or small<br/>place names as a hint"]
+    WH["Whisper on the phone<br/>whisper.rn, base or small<br/>place names and report words as a hint"]
     UTT["Utterance: audio or text<br/>transmitter/src/types.ts"]
     SEND["Send<br/>transmitter/src/transport.ts"]
     JOIN["Join a mission<br/>transmitter/src/mission.ts"]
