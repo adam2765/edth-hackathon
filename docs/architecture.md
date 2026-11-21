@@ -39,6 +39,7 @@ flowchart TB
 
     MIS["Mistral API, Paris"]
     OLL["Ollama, on the same computer"]
+    WSP["whisper-server, on the same computer"]
 
     WEB -- "report, with its own last position" --> API
     NAT -- "join, report, answer" --> API
@@ -46,13 +47,14 @@ flowchart TB
     GAZ --> PIPE
     API <--> LOG
     PIPE -- "hosted mode" --> MIS
-    PIPE -. "local mode" .-> OLL
+    PIPE -. "local mode: extraction" .-> OLL
+    PIPE -. "local mode: audio" .-> WSP
     LOG -- "the log, every second" --> VIEW
     API <-- "open a mission, find a start point" --> PANEL
     API <-- "plot a track, answer, name a point" --> TOOLS
 ```
 
-The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed line is local mode, `PROVIDER_MODE=local`, which has no speech-to-text on the computer yet [83]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
+The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 195]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
 
 ### A report through the coordinator
 
@@ -60,7 +62,7 @@ The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed
 flowchart TB
     IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
     CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
-    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, report words and place names as context_bias"]
+    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, report words and place names as context_bias,<br/>or Whisper large-v3-turbo in local mode, in the device's language"]
     subgraph VOICES["For each voice"]
         EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
         SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
@@ -134,7 +136,7 @@ The open microphone is not built ([plan](plan.md#transmitter)). Every source end
 |---|---|---|
 | Phone web page: hold to talk, map, pin with confidence circle, ask-back card, log, text box | `app/page.tsx`, `components/VoiceMapApp.tsx` | Live. Checked in a phone-sized desktop browser; no real-phone result is recorded yet. |
 | Report endpoint | `app/api/report/route.ts` | Live |
-| Speech-to-text and extraction | `lib/providers/transcriber.ts`, `lib/providers/extractor.ts` | Mistral, or extraction through Ollama on the computer with `PROVIDER_MODE=local`; behind interfaces |
+| Speech-to-text and extraction | `lib/providers/transcriber.ts`, `lib/providers/extractor.ts` | Mistral, or whisper-server and Ollama on the computer with `PROVIDER_MODE=local`; behind interfaces |
 | Resolver | `lib/geo/resolver.ts` | Pure function, unit-tested (`npm test`) |
 | Gazetteers | `data/gazetteer.vincennes.json` (1,130 places), rebuilt 21 November; `data/gazetteer.kyiv.json` (2,840), rebuilt 20 November; `data/gazetteer.izium.json` (714), built Saturday 21 November | Built with `npm run gazetteer -- <area>`; the running app never calls Overpass. See [gazetteer.md](gazetteer.md). Izium is a town near the front in Kharkiv Oblast; its 9 demo reports were typed into the coordinator with hosted Mistral, 9 of 9. Not spoken yet. |
 | Ukrainian voice for questions | `lib/tts/`, test page at `/tts-lab` | Live. Piper `uk_UA-ukrainian_tts-medium`, speaker tetiana, through onnxruntime-web in a worker, so the page keeps responding [105]. 77 MB on first load, with nothing on screen to show it. Phones unmeasured. |

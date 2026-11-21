@@ -1,5 +1,5 @@
 // Where speech becomes text.
-//   "server"        the clip is uploaded and the coordinator transcribes it (Mistral)
+//   "server"        the clip is uploaded and the coordinator transcribes it (Mistral, or whisper-server offline)
 //   "phone-base"    Whisper base runs on the phone and only the text is sent
 //   "phone-small"   Whisper small, slower and more accurate
 // The phone modes need a model file, downloaded once from Hugging Face into the app's documents.

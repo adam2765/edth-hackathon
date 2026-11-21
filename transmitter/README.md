@@ -92,8 +92,9 @@ shared Wi-Fi. A numeric address does not: over the cable the Mac's address chang
 the link re-forms, and the app then reports "no answer from the coordinator". iOS must be
 allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
 network is allowed. In hosted mode the coordinator calls Mistral, so the computer needs the
-internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither, but it takes text
-only: use "Phone: base" or "Phone: small", not "Server" ([../docs/setup.md](../docs/setup.md), part 3).
+internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither. In Server mode the
+coordinator then transcribes with whisper-server, which must be running (`npm run stt`,
+[../docs/setup.md](../docs/setup.md), part 3); the phone modes send text and do not need it.
 
 Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
 ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
@@ -106,7 +107,7 @@ Setup chooses where speech becomes text (`src/stt.ts`).
 
 | Mode | What happens | Needs |
 |---|---|---|
-| Server | The clip is uploaded and the coordinator transcribes it (Mistral). | A connection good enough for audio |
+| Server | The clip is uploaded and the coordinator transcribes it: Mistral, or whisper-server in offline mode [195]. | A connection good enough for audio |
 | Phone: base | Whisper `ggml-base-q5_1` runs on the phone; only the words are sent. | A one-time 56 MB download |
 | Phone: small | Whisper `ggml-small-q5_1`, slower and more accurate. | A one-time 181 MB download |
 
