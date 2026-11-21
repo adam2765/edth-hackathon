@@ -27,6 +27,7 @@ New to the project? Read these in order:
 | [known-gaps.md](known-gaps.md) | Known limits and risks | One is found or fixed |
 | [glossary.md](glossary.md) | Terms we use | A new term comes up |
 | [voices.md](voices.md) | Other voices in a clip, whispers, and how to record test clips | The voice rules change, or clips are measured |
+| [stt-comparison.md](stt-comparison.md) | Speech-to-text options measured on the scenario clips: Whisper base and small, Parakeet, Voxtral; the failures seen and a recommendation | An option is measured again, on real clips or a real phone |
 | [tracks.md](tracks.md) | Tracks: screenshots of the command post and the phone, the symbols, diagrams of how a report becomes a track, and placing tracks by hand | The track rules or the screens for them change; retake the pictures |
 | [setup.md](setup.md) | Setting up a computer and phone, with a check after each step | A tool, version, command or port changes |
 | [kickoff.md](kickoff.md) | The Saturday 08:00 opening for the two new teammates: what we build, where we stand, the two days, the streams of work | Delete it after the weekend; the other files hold the detail |
