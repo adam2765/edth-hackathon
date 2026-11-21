@@ -122,19 +122,18 @@ Times are Paris.
 
 ---
 
-## 9. The work: five streams
+## 9. The work: four roles
 
-Pick one; nobody is assigned. The detail, and three ways to fit five streams to four people, are in [work-split.md](work-split.md). The plan behind each stream is in [plan.md](plan.md).
+There are four of us, so the work is four roles. Pick one; nobody is assigned. The detail, and what we leave out to fit, are in [work-split.md](work-split.md). The plan behind each part is in [plan.md](plan.md).
 
-| Stream | A first task for someone new today |
+| Role | A first task |
 |---|---|
-| 1. Receiver and missions | Run a mission with three phones and a projector, and write down what breaks. |
-| 2. Transmitter and audio in | Stress scenarios: a laptop script that plays ten call signs at once, with late and duplicate reports. |
-| 3. Local mode | The offline map: save the tiles, fonts and icons for our areas and serve them from the Mac. Self-contained, 2 to 3 hours. |
-| 4. Evaluation and evidence | Sixty text reports with the answer each should get, run through the pipeline, giving a wrong-pin rate. |
-| 5. Pitch and presentation | The story in ten lines, then a 3-minute demo script. |
+| 1. Core: receiver, missions, tracks | Alex keeps it, and turns the mentors' answers into changes. |
+| 2. Phones | The Android microphone ([handoff](handoff-android-microphone.md)), then a mission with three phones and a projector: write down what breaks. |
+| 3. Local mode | A Wi-Fi network with no internet, then the offline map: save the tiles, fonts and icons for our areas and serve them from the Mac. Self-contained. |
+| 4. Evidence, then pitch | Ten real clips from the team, scored on the place that comes back. From 13:00, the story in ten lines and a 3-minute demo script. |
 
-Streams 1, 3 and 4 need no phone and no Xcode. Stream 5 needs no code.
+Roles 1, 3 and 4 need no Xcode. Role 4 needs no code after midday.
 
 ---
 
@@ -176,7 +175,7 @@ Four rules of the product, which agents follow too:
 
 ## 12. To settle before 08:30
 
-1. Who takes which stream, and who owns the pitch ([work-split.md](work-split.md#five-streams-four-people)).
+1. Who takes which role, and who owns the pitch ([work-split.md](work-split.md#four-roles)).
 2. Git: everyone on `main` with small commits and `git pull --rebase`, or short branches with pull requests.
 3. One shared Mistral key, or each person their own. Offline mode needs none.
 4. The demo area: Vincennes, central Kyiv, or Izium. The mentors' answer may decide it.
