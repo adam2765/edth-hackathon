@@ -101,7 +101,7 @@ For tracks [146, 152]: `subject` (self or track; absent means self), `track_ref`
 
 For a report about a track, `track` is set: `n` (the number, null until the report is saved), `opened`, `affiliation` (hostile, suspect, unknown, neutral, friendly, or null when no word said), `kind`, `count`, `text`, `heading`, `placement` (where the track is), `label`, and `say`. `pin` and `radius_m` are then absent and each candidate's `placement` is empty; where the track would be for each choice is in the candidate's `track_placement`. So a client that only knows `pin` never moves its own marker for a track [146].
 
-A clip with more than one voice that names a place: `evidence.rule` is `voices_differ` (a question, each choice one voice's place, or "say your position again") or `voices_too_many` [154]. See [voices.md](voices.md).
+A clip with more than one voice that names a place: `evidence.rule` is `voices_differ` (a question, each choice one voice's place, or "say your position again") or `voices_too_many` [154], or `voices_context` when all voices but one were out of reach of the last position and that one is placed without a question [175]. See [voices.md](voices.md).
 
 ## Tracks
 
