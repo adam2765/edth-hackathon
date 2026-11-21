@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
-import { toGrid } from "@/lib/geo/grid";
+import MapTools from "./MapTools";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
 import { loadingLabel, ukrainianVoice } from "@/lib/tts/ukrainianVoice";
 
@@ -238,8 +238,6 @@ export default function VoiceMapApp() {
   const mlRef = useRef<typeof import("maplibre-gl") | null>(null);
   const candMarkers = useRef<Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
-  /** The grid under the pointer, or at the map's centre on a touch screen [231]. */
-  const [gridText, setGridText] = useState("");
   const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
   const speakerLang = useSyncExternalStore(langStore.subscribe, langStore.get, (): Lang => "en");
   const voiceLoading = useSyncExternalStore(voiceLoadStore.subscribe, voiceLoadStore.get, () => VOICE_IDLE);
@@ -301,24 +299,6 @@ export default function VoiceMapApp() {
         attributionControl: { compact: false, customAttribution: "© OpenStreetMap contributors" },
       });
       map.addControl(new ml.NavigationControl({ showCompass: true }), "top-right");
-      // The grid of the point under the pointer, else of the centre: read a grid off the map [231].
-      let hovering = false;
-      const centreGrid = () => {
-        const c = map.getCenter();
-        setGridText(toGrid({ lat: c.lat, lon: c.lng }));
-      };
-      map.on("mousemove", (e) => {
-        hovering = true;
-        setGridText(toGrid({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
-      });
-      map.on("mouseout", () => {
-        hovering = false;
-        centreGrid();
-      });
-      map.on("moveend", () => {
-        if (!hovering) centreGrid();
-      });
-      centreGrid();
       map.on("load", () => {
         map.addSource("trail", { type: "geojson", data: EMPTY_FC });
         map.addSource("accuracy", { type: "geojson", data: EMPTY_FC });
@@ -815,11 +795,8 @@ export default function VoiceMapApp() {
           </button>
         ))}
       </nav>
-      {gridText && (
-        <div className="grid-readout" title="MGRS grid of the point under the pointer, or of the map's centre">
-          {gridText}
-        </div>
-      )}
+      {/* The grid under the pointer, its lines, a ruler and "go to grid" [231, 232]. */}
+      <MapTools mapRef={mapRef} ready={mapReady} centre={AREAS[area].centre} below="trail-line" copyOnClick top="calc(120px + env(safe-area-inset-top))" />
       {speakerLang === "uk" && (voiceLoading.state === "loading" || voiceLoading.state === "failed") && (
         <div className="voice-load" role="status" aria-live="polite">
           {voiceLoading.state === "loading" ? voiceLoading.text : "Голос недоступний: питання читає системний голос."}
