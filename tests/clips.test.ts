@@ -179,6 +179,8 @@ describe("the report endpoint with a clip", () => {
     expect(res.status).toBe(200);
     expect(reply.transcript).toBe("");
     expect(reply.resolution.evidence.rule).toBe("empty_transcript");
+    // Says what helps, not only "try again" [192].
+    expect(reply.resolution.question).toBe("I didn't catch that. Speak closer to the microphone and try again.");
     expect(reply.clip).toMatch(/-alpha-1-9\.wav$/);
     const saved = JSON.parse(readFileSync(path.join(dir, reply.clip.replace(/\.wav$/, ".json")), "utf8"));
     expect(saved).toMatchObject({ source: "phone", transcript: "", rule: "empty_transcript" });

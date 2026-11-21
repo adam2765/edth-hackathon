@@ -27,9 +27,10 @@ const AREA_DATA = Object.fromEntries(
 ) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
 
 const NO_WORDS: Record<string, string> = {
-  uk: "Не розчув. Повторіть, будь ласка.",
-  fr: "Je n'ai pas compris. Répétez, s'il vous plaît.",
-  en: "I didn't catch that. Try again.",
+  // Bangs, rain or a phone held away gave empty transcripts in the noise tests: say what helps [192].
+  uk: "Не розчув. Говоріть ближче до мікрофона і повторіть.",
+  fr: "Je n'ai rien entendu. Parlez plus près du micro et répétez.",
+  en: "I didn't catch that. Speak closer to the microphone and try again.",
 };
 
 // Per-instance, best effort. Enough to stop a runaway loop in stage 1.
