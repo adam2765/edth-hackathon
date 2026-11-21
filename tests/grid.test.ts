@@ -78,6 +78,17 @@ describe("a grid in a report [223]", () => {
     expect(positionFromReport(r, null)?.label).toBe("grid DQ 586 101");
   });
 
+  it("places a thing off a grid by the distance and way said [230]", () => {
+    const self = resolve({ intent: intent({ distance_m: 200, direction: "north" }), transcript: "I'm at grid DQ 586 101, 200 metres north", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    const cell = readGrid("grid DQ 586 101", VINCENNES)!.pin;
+    expect(distanceM(cell, self.pin!)).toBeCloseTo(200, -1);
+    expect(self).toMatchObject({ evidence: { rule: "grid_reference" }, estimated: true });
+    expect(positionFromReport(self, null)?.label).toBe("200 m north of grid DQ 586 101");
+    const drone = resolveReport({ intent: intent({ subject: "track", track_kind: "drone", distance_m: 200, relation: "north_of", landmark_name: "grid DQ 586 101" }), transcript: "Enemy drone 200 metres north of grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES, observer: "ALPHA 1" });
+    expect(drone.track?.label).toBe("200 m north of grid DQ 586 101");
+    expect(distanceM(cell, drone.track!.placement!.pin!)).toBeCloseTo(200, -1);
+  });
+
   it("asks again for a grid far outside the area", () => {
     const r = resolve({ intent: intent({}), transcript: "grid 31U DQ 100 900", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
     expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "grid_too_far" } });
