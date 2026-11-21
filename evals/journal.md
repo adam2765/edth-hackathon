@@ -43,3 +43,14 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - Accepted by Alex with the local regressions ("Keep it", and for this final wording "Keep and commit"). Baselines saved from the two runs above (`eval:baseline`).
 - The eval does not see whose marker moved: a wrong pin compares places only, so the live bug, read as the speaker at the right station, shows only in the `subject` field.
 - Next: unchanged. The example names on the 3B model come first; `a-two-places-2` is the same leak.
+
+## 2026-11-21, cases: contact and blocks [ollama:ministral-3:3b]
+
+- Rule: none in the prompt. A contact is a track whatever the model reads [180], and blocks are counted in code with no distance from the model [184], [51]. Before: no case said "contact", and the one case with blocks (`p-blocks`) has no compass word, so neither was scored.
+- 17 cases, each with a start (`from`) so a misreading can pin. 12 for blocks (`b-*`): English, French and Ukrainian; both counts agree; they differ (asks); counted from a crossing street; "a few blocks" (asks); a distance said wins; a house number is not a count. 5 for contact (`c-*`): a track behind the castle, at the town hall, by the Golden Gate; "lost contact with" and "in contact with the base" are about the speaker. Outcomes from the resolver (`eval:outcomes`). A second, independent reading of the expected fields agreed.
+- Local 3B, 3 rounds, prompt `4c9ef72e73`: 27 of 51, outcomes 43 of 48, 0 wrong pins, 0 flaky. `distance_m` stayed null for "two blocks" in every round: the model does not turn a count into metres. Median 10.1 s on a loaded machine; a few rounds hit the 25 s limit.
+- Hold every round: `b-moved-east`, `b-east-of-street`, `b-from-crossing-street`, `b-fr-moved`, `b-uk-moved`, `b-few`, `b-distance-said`, `b-address`, `c-uk-gate`.
+- Weak without harm: "Unknown contact, two blocks east." in all three languages reads as the speaker moving towards; the code makes it a track [180] and the outcome passes. `b-counts-differ` reads as a movement; it asks either way. `c-fr-mairie` and `c-base` write "mairie" as a name; they ask either way. `c-behind-castle` writes "castle de Vincennes", the example leak, and asks back where the track should be placed.
+- Miss: `c-lost` ("Lost contact with BRAVO 2. I'm at Bérault.") reads as a track every round, so the speaker is not placed. The code does not count "lost contact" as a contact, but it does not undo the model's track. A question, not a wrong pin.
+- Hosted not run: this worktree has no key. Not in the baselines yet.
+- Next: prompt-tune for contact, with these cases: "contact" read as the speaker, and "lost contact" read as a track. The example names on the 3B model, as before.
