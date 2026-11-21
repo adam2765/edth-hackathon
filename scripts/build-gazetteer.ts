@@ -63,8 +63,23 @@ type OsmEl = {
   tags?: Record<string, string>;
 };
 
+/**
+ * Military offices and sites are left out: the gazetteer is streets and civilian landmarks only.
+ * By tag, or by name for an enlistment office mapped as a plain government office ("Військкомат",
+ * also spelt with a Latin i). Streets named after units are street names and stay. So does a
+ * museum piece (`historic`), and anything that only stands on military land (`landuse`): the
+ * Bégin hospital in Saint-Mandé is a hospital first.
+ */
+const MILITARY_NAME = /в[iі]йськкомат|во[еє]нкомат|(?<![\p{L}])ТЦК(?![\p{L}])|центр\S* комплектування|військов\S* частин|воинск\S* част/iu;
+function isMilitary(t: Record<string, string>): boolean {
+  if (("military" in t && !("historic" in t)) || t.office === "military" || t.government === "military") return true;
+  return ["name", "name:uk", "name:ru", "official_name", "alt_name"].some((k) => MILITARY_NAME.test(t[k] ?? ""));
+}
+
 function categorize(t: Record<string, string>): { category: Category; subtype: string } | null {
   const has = (k: string, re?: RegExp) => (re ? re.test(t[k] ?? "") : k in t);
+  // A bus station ("автостанція") is where buses stop, not a rail station: "the station" must not mean it.
+  if (has("amenity", /^bus_station$/) && !has("railway")) return { category: "stop", subtype: "bus_station" };
   // Before streets: a bus stop is tagged highway=bus_stop. Metro platforms (railway=platform) are not stops.
   if (has("highway", /^bus_stop$/) || has("railway", /^tram_stop$/) || (has("public_transport", /^platform$/) && !has("railway"))) {
     const sub = has("railway", /^tram_stop$/) || t.tram === "yes" ? "tram" : t.trolleybus === "yes" ? "trolleybus" : "bus";
@@ -252,6 +267,7 @@ async function main() {
   const pois: (GazetteerFeature & { _prio: number })[] = [];
   const pieces = new Map<string, StreetPiece[]>();
   const riverPieces = new Map<string, StreetPiece[]>();
+  let military = 0;
 
   for (const el of json.elements) {
     const t = el.tags ?? {};
@@ -260,6 +276,10 @@ async function main() {
     if (!name) continue;
     const cat = categorize(t);
     if (!cat) continue;
+    if (cat.category !== "street" && isMilitary(t)) {
+      military++;
+      continue;
+    }
 
     // A river runs far beyond the area: keep only the stretches in or near it.
     if (cat.category === "water" && t.waterway) {
@@ -302,6 +322,8 @@ async function main() {
       _prio: priority(el),
     });
   }
+
+  if (military) console.log(`Left out ${military} military office(s) or site(s)`);
 
   // Streets: pieces of one name are one street when they are close, or close enough and in the
   // same town. Two towns' "rue Gambetta" stay two features, each with its town, so a report naming

@@ -11,7 +11,7 @@ The types live in `lib/geo/types.ts`. The transmitter imports them as types only
 | Field | Meaning |
 |---|---|
 | `audio` (file) or `text` | The report. Text skips speech-to-text: it is the test hook and the demo fallback if the hall is too noisy. |
-| `area` | `vincennes` (default) or `kyiv`. In a mission, the mission's area is used instead [108]. |
+| `area` | `vincennes` (default), `kyiv` or `izium`. In a mission, the mission's area is used instead [108]. |
 | `language` | Optional: `en`, `fr` or `uk`, the language the speaker's device is set to. The question comes back in it. Without it, the language is guessed from the words [104, 106]. |
 | `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. Used only with no mission: in a mission the coordinator takes the unit's last position from the log, its latest fix or else the start point [108]. It then also sets `street` (the gazetteer id of the street the unit is on) and `heading_deg` (the bearing from its previous fix), which the phone's own `lastPosition` never carries [117]. |
 | `clientTs` | Client time, epoch ms |

@@ -23,7 +23,7 @@ components/Receiver.tsx     the receiver at /receiver: shared map, units, feed, 
 lib/providers/              Transcriber and IntentExtractor interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
-data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv); rebuilt by a script, not by hand
+data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers

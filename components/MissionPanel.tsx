@@ -193,7 +193,7 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                       className={styles.input}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder={area === "kyiv" ? "Search a place, e.g. Майдан" : "Search a place, e.g. château"}
+                      placeholder={area === "kyiv" ? "Search a place, e.g. Майдан" : area === "izium" ? "Search a place, e.g. собор" : "Search a place, e.g. château"}
                       autoComplete="off"
                     />
                     {places.length ? (

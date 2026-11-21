@@ -21,7 +21,7 @@ Our own differentiators (asking back, Ukrainian, no invented coordinates) come o
 - **Ask back instead of guessing.** When a report could mean more than one place, the system asks which one, aloud, with up to three choices. A silently wrong pin is worse than a question.
 - **The language model never produces coordinates.** It only extracts intent: place name, category, relation, a stated distance, a compass direction, language. Deterministic code resolves that against a local gazetteer built from OpenStreetMap. Nothing is invented.
 - **No GPS.** The app never reads the phone's location, so jamming does not affect it. Position comes from named places, and from dead reckoning off the last known position when a report states a distance and a compass direction [54].
-- **Three languages, two areas.** English and French in Vincennes; Ukrainian and English in central Kyiv. A report in Russian is answered in Ukrainian [38].
+- **Three languages, three areas.** English and French in Vincennes; Ukrainian and English in central Kyiv and, since Saturday 21 November, in Izium, a town in Kharkiv Oblast near the front ([gazetteer.md](gazetteer.md#izium-added-saturday-21-november)). A report in Russian is answered in Ukrainian [38].
 - **European providers.** Mistral for speech-to-text and extraction, with the server in Vercel's Paris region [25]. ElevenLabs was removed because it is not EU-resident [42]. Vercel itself is a US company; we accept that for now, and moving later is small (plain Next.js, no Vercel-specific packages).
 - **Works without a network.** Alex has made an uplink-off demo mandatory for Demo Day. See [Local mode](plan.md#local-mode).
 

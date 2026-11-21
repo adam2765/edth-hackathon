@@ -131,7 +131,7 @@ export async function POST(req: Request) {
       const resolution: Resolution = {
         status: "unresolved",
         candidates: [],
-        question: NO_WORDS[heard === "ru" ? "uk" : (heard ?? "")] ?? NO_WORDS[area.id === "kyiv" ? "uk" : "en"],
+        question: NO_WORDS[heard === "ru" ? "uk" : (heard ?? "")] ?? NO_WORDS[area.id === "kyiv" || area.id === "izium" ? "uk" : "en"],
         evidence: { rule: "empty_transcript", detail: "speech-to-text returned no words" },
       };
       const saved = await save(session, { ...meta, transcript: "", language: heard, intent: null, resolution, timings_ms: timings });

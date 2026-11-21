@@ -6,7 +6,7 @@ import type { JoinReply, MissionListReply, MissionSummary, UnitPosition } from "
 export type { Candidate, Intent, Placement, Resolution };
 export type { JoinReply, MissionListReply, MissionSummary, UnitPosition };
 
-export type AreaId = "vincennes" | "kyiv";
+export type AreaId = "vincennes" | "kyiv" | "izium";
 export type Lang = "en" | "fr" | "uk";
 
 export interface ScenarioStep {

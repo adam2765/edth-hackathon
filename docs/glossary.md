@@ -3,7 +3,7 @@
 | Term | Meaning |
 |---|---|
 | Ask-back | The question the app asks, aloud and on screen, when a report could mean more than one place |
-| Area | A region with its own gazetteer: `vincennes` or `kyiv` |
+| Area | A region with its own gazetteer: `vincennes`, `kyiv` or `izium` |
 | Bias terms | Up to 100 place names sent to speech-to-text so it spells them right (`context_bias`) |
 | Call sign | The name a speaker reports under, such as ALPHA 2. Stored in capitals; one phone per call sign in a mission |
 | Check-in | A unit's first report that names a place. It replaces the start point |

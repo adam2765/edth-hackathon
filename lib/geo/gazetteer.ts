@@ -1,5 +1,6 @@
 import vincennes from "../../data/gazetteer.vincennes.json";
 import kyiv from "../../data/gazetteer.kyiv.json";
+import izium from "../../data/gazetteer.izium.json";
 import type { AreaId } from "./areas";
 import type { Category, GazetteerFeature } from "./types";
 import { normalize, tokens } from "./normalize";
@@ -15,6 +16,7 @@ interface GazetteerFile {
 const FILES: Record<AreaId, GazetteerFile> = {
   vincennes: vincennes as unknown as GazetteerFile,
   kyiv: kyiv as unknown as GazetteerFile,
+  izium: izium as unknown as GazetteerFile,
 };
 
 export function loadGazetteer(area: AreaId = "vincennes"): GazetteerFeature[] {

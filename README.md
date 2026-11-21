@@ -3,7 +3,7 @@
 EDTH Paris 2026, challenge 01 (Lysk): spoken position reports become live map updates.
 When a report could mean more than one place, the app asks back instead of guessing.
 
-Live: https://edth-hackathon.vercel.app (stage 1, single user, no auth). Two areas: Vincennes (English, French) and central Kyiv (Ukrainian, English), switched at the top of the page or with `?area=kyiv`.
+Live: https://edth-hackathon.vercel.app (stage 1, single user, no auth). Two areas: Vincennes (English, French) and central Kyiv (Ukrainian, English), switched at the top of the page or with `?area=kyiv`. A third, Izium (Ukrainian, English), a town near the front in Kharkiv Oblast, is on `main` and not deployed (`?area=izium`, 21 November).
 
 ## How it works
 
@@ -83,6 +83,22 @@ Switch to **Київ** (2,840 features: 26 stations, 67 churches, 317 streets, 4
 
 Order matters for step 1: said within 10 minutes of a fix at the station, «Я на Хрещатику» resolves to the station without asking (nearest wins).
 
+### Izium, in Ukrainian
+
+Switch to **Ізюм** (714 features: 1 railway station, 6 churches, 503 streets, 16 stops, 16 pharmacies, 11 fuel stations, the Siverskyi Donets) and start from a fresh page. A made-up walk from the station to the hospital. Typed into the coordinator on 21 November with hosted Mistral: 9 of 9, three times. Not yet spoken, and not checked with a native speaker. Why Izium, and what it still lacks (no bridge has a name), is in [docs/gazetteer.md](docs/gazetteer.md#izium-added-saturday-21-november).
+
+| # | Say | Expected |
+|---|---|---|
+| 1 | "I'm at Izium station." | Pin at the railway station, ±30 m; the bus station of the same name is a stop, so no question |
+| 2 | «Рухаюсь до Європейської вулиці.» | An arrow to Європейська вулиця; the marker moves 40 m, as the street runs past the station |
+| 3 | «Я на південь від Свято-Вознесенського собору.» | Pin 120 m south of the Ascension Cathedral, ±100 m |
+| 4 | «Пройшов п'ятсот метрів на схід.» | Dead reckoning: 500 m east, ≈, ±300 m |
+| 5 | «Рухаюсь до Сіверського Дінця.» | The marker moves half way to the nearest bank, with an arrow. «До річки» would ask: three waterways are near |
+| 6 | «Я на Центральній площі.» | Pin on the central square, ±82 m |
+| 7 | «Я біля церкви.» | Asks «Яка церква: Спасо-Преображенський собор чи Хрестовоздвиженська церква?»; tap **Спасо-Преображенський собор** |
+| 8 | "Passing the next intersection, heading west." | The next crossing to the west, Залікарняна вулиця / Старопоштова вулиця. In three runs of four the model read "passing" as moving: an arrow to it and the marker half way (≈). In the other, a pin on it, ±30 m |
+| 9 | «Я біля Центральної районної лікарні.» | Pin at the district hospital, ±80 m, not one of the eight other clinics nearby |
+
 ## Run locally
 
 The short version is below. [docs/setup.md](docs/setup.md) has every step with a check, including offline mode and the transmitter on a phone.
@@ -97,7 +113,7 @@ PROVIDER_MODE=local npm run dev -- -p 3117     # offline mode: no key, needs Oll
 
 ```bash
 npm test             # resolver unit tests
-npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes or kyiv)
+npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (vincennes, kyiv or izium)
 ```
 
 Environment (all optional; see `.env.example`): `MISTRAL_API_KEY` for hosted mode, the default; copy `.env.example` to `.env.local` and paste it there, never in a commit. Without it, use offline mode. Extraction falls back to `FEATHERLESS_API_KEY` behind the same interface if it is absent. Optional overrides: `MISTRAL_STT_MODEL`, `MISTRAL_EXTRACT_MODEL`.

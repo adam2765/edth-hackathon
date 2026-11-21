@@ -1,0 +1,16 @@
+{
+  "id": "izium-demo",
+  "title": "Izium demo script",
+  "area": "izium",
+  "steps": [
+    { "id": "i1", "t": 0, "callsign": "CHARLIE 1", "lang": "en", "text": "I'm at Izium station.", "expect": { "status": "resolved", "feature_id": "node/610644672" } },
+    { "id": "i2", "t": 10, "callsign": "CHARLIE 1", "lang": "uk", "text": "Рухаюсь до Європейської вулиці.", "expect": { "status": "resolved", "heading_to": "street/європейська-вулиця" } },
+    { "id": "i3", "t": 20, "callsign": "CHARLIE 1", "lang": "uk", "text": "Я на південь від Свято-Вознесенського собору.", "expect": { "status": "resolved", "feature_id": "way/418080265" } },
+    { "id": "i4", "t": 30, "callsign": "CHARLIE 1", "lang": "uk", "text": "Пройшов п'ятсот метрів на схід.", "expect": { "status": "resolved" } },
+    { "id": "i5", "t": 40, "callsign": "CHARLIE 1", "lang": "uk", "text": "Рухаюсь до Сіверського Дінця.", "expect": { "status": "resolved", "heading_to": "water/сіверський-донець" } },
+    { "id": "i6", "t": 50, "callsign": "CHARLIE 1", "lang": "uk", "text": "Я на Центральній площі.", "expect": { "status": "resolved", "feature_id": "way/1456976965" } },
+    { "id": "i7", "t": 60, "callsign": "CHARLIE 1", "lang": "uk", "text": "Я біля церкви.", "expect": { "status": "ambiguous" }, "choose": "way/303690440" },
+    { "id": "i8", "t": 70, "callsign": "CHARLIE 1", "lang": "en", "text": "Passing the next intersection, heading west.", "expect": { "status": "resolved", "feature_id": "crossing/49.19046,37.27422" } },
+    { "id": "i9", "t": 80, "callsign": "CHARLIE 1", "lang": "uk", "text": "Я біля Центральної районної лікарні.", "expect": { "status": "resolved", "feature_id": "way/303604941" } }
+  ]
+}

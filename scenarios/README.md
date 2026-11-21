@@ -8,7 +8,7 @@ clip with a synthetic voice and writes the bundle the transmitter app loads.
 {
   "id": "vincennes-demo",
   "title": "...",
-  "area": "vincennes" | "kyiv",
+  "area": "vincennes" | "kyiv" | "izium",
   "steps": [
     {
       "id": "v1",                 // unique within the scenario

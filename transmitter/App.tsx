@@ -47,6 +47,7 @@ const CHECK_IN: Record<Lang, string> = {
 const AREAS: { id: AreaId; label: string }[] = [
   { id: "vincennes", label: "Vincennes" },
   { id: "kyiv", label: "Київ" },
+  { id: "izium", label: "Ізюм" },
 ];
 /** The language the speaker uses (decision 106). Speech-to-text listens for it and questions come back in it. */
 const LANGUAGES: { id: Lang; label: string }[] = [

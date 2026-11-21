@@ -9,8 +9,8 @@ import { AREAS, type AreaId } from "../lib/geo/areas";
 import { biasTerms, loadGazetteer } from "../lib/geo/gazetteer";
 
 // Whisper's prompt holds about 224 tokens. Latin names cost roughly 4 tokens each and
-// Cyrillic names roughly 8, so the Kyiv list is shorter.
-const MAX_NAMES: Record<AreaId, number> = { vincennes: 40, kyiv: 24 };
+// Cyrillic names roughly 8, so the Kyiv and Izium lists are shorter.
+const MAX_NAMES: Record<AreaId, number> = { vincennes: 40, kyiv: 24, izium: 24 };
 
 const out: Record<string, string[]> = {};
 for (const id of Object.keys(AREAS) as AreaId[]) {
