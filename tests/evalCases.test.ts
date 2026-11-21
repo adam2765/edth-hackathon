@@ -60,7 +60,9 @@ describe("extraction eval cases", () => {
       const o = scoreOutcome(c, resolveCase(c, intent, now));
       if (o) expect(o, c.id).toEqual({ misses: [], wrongPin: false });
     }
-  });
+    // Every case through the resolver: about 3 s for 85 cases, most of it Kyiv name searches, and it
+    // grows with the corpus. The 5 s default failed on a loaded machine (21 Nov, 102 cases, 8.5 s).
+  }, 30_000);
 });
 
 describe("extraction eval scoring", () => {
