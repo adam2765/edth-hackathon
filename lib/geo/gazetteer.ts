@@ -78,6 +78,7 @@ export const CATEGORY_WORDS: Record<NamedCategory, string[]> = {
   hotel: ["hotel", "hostel", "motel", "готель", "хостел", "гостиниця", "гостиница"],
   water: ["river", "lake", "pond", "canal", "stream", "riviere", "fleuve", "lac", "etang", "ruisseau", "річка", "озеро", "ставок", "канал", "река"],
   building: ["building", "immeuble", "batiment", "residence", "будівля", "будинок", "корпус", "жк", "здание"],
+  intersection: ["intersection", "crossroads", "crossroad", "junction", "crossing", "corner", "carrefour", "croisement", "angle", "coin", "перехрестя", "ріг", "розі", "перекресток", "перекрёсток"],
 };
 
 /**
@@ -104,6 +105,7 @@ const CATEGORY_STEMS: Record<NamedCategory, string[]> = {
   // Not "ставк": "ставка" is also a headquarters.
   water: ["річк", "річц", "озер", "рек"],
   building: ["будівл", "будинк", "корпус", "здани"],
+  intersection: ["перехрест", "перекрестк"],
 };
 const CASE_ENDINGS = new Set(["", "а", "я", "у", "ю", "і", "ї", "и", "е", "є", "ь", "й", "ом", "ем", "єм", "ою", "ею", "єю", "ові", "еві", "ій", "ої", "ах", "ях"]);
 const CYRILLIC = /[Ѐ-ӿ]/;
@@ -344,6 +346,8 @@ const BIAS_RANK: Record<Category, number> = {
   pharmacy: 12,
   fuel: 12,
   building: 12,
+  // Worked out from the streets, never a feature of its own.
+  intersection: 13,
 };
 
 /** Up to `max` distinct place names to bias speech-to-text, most useful first. */

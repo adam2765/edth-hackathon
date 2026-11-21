@@ -373,7 +373,8 @@ export default function Receiver() {
       pos.push({ type: "Feature", properties: { color, op, label }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
       acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
       if (p.heading_to) {
-        if (u.arrowFrom) arrows.push(...arrowFeatures(u.arrowFrom, p.heading_to, color, op));
+        // From the marker, the middle of the circle, so the trail stays visible up to it.
+        if (distanceM(p, p.heading_to) > 5) arrows.push(...arrowFeatures(p, p.heading_to, color, op));
         targets.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [p.heading_to.lon, p.heading_to.lat] } });
       }
     }

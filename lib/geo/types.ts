@@ -19,6 +19,8 @@ export type Category =
   | "water"
   /** A named building that is none of the above. */
   | "building"
+  /** Where streets meet. Not in the gazetteer: worked out from the street lines (lib/geo/crossings.ts). */
+  | "intersection"
   | "other";
 
 export type Relation =
@@ -90,6 +92,13 @@ export interface LastPosition {
   uncertainty_m?: number;
   /** The circle shown around this position, metres. A position worked out from it starts that unsure. */
   radius_m?: number;
+  /**
+   * The gazetteer id of the street the unit is on or moving along, when its latest placement named
+   * one. Kept through a crossing on that street. Set by the coordinator, never by the phone.
+   */
+  street?: string;
+  /** The bearing the unit moved on from its previous fix to this one, degrees. Set by the coordinator. */
+  heading_deg?: number;
 }
 
 export interface HeadingTo {
@@ -124,6 +133,8 @@ export interface Candidate {
   /** As in GazetteerFeature: the town, when another street has the same name. */
   town?: string;
   score?: number;
+  /** A crossing: the ids of the streets that meet there. */
+  streets?: string[];
   placement: Placement;
 }
 

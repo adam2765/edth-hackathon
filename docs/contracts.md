@@ -13,7 +13,7 @@ The types live in `lib/geo/types.ts`. The transmitter imports them as types only
 | `audio` (file) or `text` | The report. Text skips speech-to-text: it is the test hook and the demo fallback if the hall is too noisy. |
 | `area` | `vincennes` (default) or `kyiv`. In a mission, the mission's area is used instead [108]. |
 | `language` | Optional: `en`, `fr` or `uk`, the language the speaker's device is set to. The question comes back in it. Without it, the language is guessed from the words [104, 106]. |
-| `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. Used only with no mission: in a mission the coordinator takes the unit's last position from the log, its latest fix or else the start point [108]. |
+| `lastPosition` | JSON `{ lat, lon, ts, uncertainty_m?, radius_m? }`. `uncertainty_m` is set only when the last position was an estimate [47, 56]. Used only with no mission: in a mission the coordinator takes the unit's last position from the log, its latest fix or else the start point [108]. It then also sets `street` (the gazetteer id of the street the unit is on) and `heading_deg` (the bearing from its previous fix), which the phone's own `lastPosition` never carries [117]. |
 | `clientTs` | Client time, epoch ms |
 | `session` | The mission's code. With one, the mission has to be open: 404 for an unknown code, 409 with `ended: true` for an ended one [108]. The report is saved to the mission's log for the receiver. Without one (the web page, or a coordinator that keeps no record), nothing is saved [99]. |
 | `callsign`, `seq` | Who sent it, and the transmitter's own counter. With `clientTs`, `seq` lets the server save a report sent twice only once [102]. Call signs are stored in capitals [111]. A call sign that has not joined the mission joins with its first report. |
@@ -57,11 +57,11 @@ Types in `lib/reports/types.ts`. The log is append-only; nothing in it is edited
 
 ## Intent (what the model returns)
 
-`kind` (position, movement, other), `landmark_text` (verbatim), `landmark_name`, `landmark_name_lemma` (the name in dictionary form, for Ukrainian case endings [32]), `landmark_category` (church, metro_station, castle, town_hall, school, park, cemetery, hospital, police, bridge, street, stop, fuel, pharmacy, hotel, water, building, other), `relation` (at, near, in_front_of, behind, next_to, eight compass relations, towards, between), `distance_m` (only if a distance was said, at most 20 km [51]), `direction` (eight compass points, for movement), `language` (en, fr, uk), `confidence` (not used by anything yet).
+`kind` (position, movement, other), `landmark_text` (verbatim), `landmark_name`, `landmark_name_lemma` (the name in dictionary form, for Ukrainian case endings [32]), `landmark_category` (church, metro_station, castle, town_hall, school, park, cemetery, hospital, police, bridge, street, stop, fuel, pharmacy, hotel, water, building, intersection, other; `intersection` is a crossing, found from the street lines, never a gazetteer feature [117]), `relation` (at, near, in_front_of, behind, next_to, eight compass relations, towards, between), `distance_m` (only if a distance was said, at most 20 km [51]), `direction` (eight compass points, for movement), `language` (en, fr, uk), `confidence` (not used by anything yet).
 
 ## Resolution (what the resolver returns)
 
-`status` (resolved, ambiguous, unresolved), `pin`, `radius_m`, `heading_to` (target of a movement), `estimated` (worked out from the last position, shown with ≈), `candidates` (up to three, each with its own precomputed placement, so tapping a choice needs no second call [18]; a street also carries its `town` when another street has the same name), `question` (the ask-back or the prompt), `evidence` (the rule that fired and the gazetteer id).
+`status` (resolved, ambiguous, unresolved), `pin`, `radius_m`, `heading_to` (target of a movement), `estimated` (worked out from the last position, shown with ≈), `candidates` (up to three, each with its own precomputed placement, so tapping a choice needs no second call [18]; a street also carries its `town` when another street has the same name, and a crossing the `streets` that meet there, with an id `crossing/<lat>,<lon>`), `question` (the ask-back or the prompt), `evidence` (the rule that fired and the gazetteer id).
 
 ## Utterance (transmitter side)
 

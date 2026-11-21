@@ -34,6 +34,10 @@ phone mic ─► /api/report ─► speech-to-text (Mistral voxtral-mini-transcr
 | No place, but a distance and a compass direction ("moved 300 metres north") | `resolved` by dead reckoning from the last position, shown as an estimate |
 | The same with no last position | `unresolved`: "I don't know where you started", asks for a place |
 | No place, and only a distance or only a direction ("heading north") | `unresolved`: asks for a distance and a compass direction, or a landmark |
+| "Passing the next intersection", on a known street | the nearest crossing ahead on that street, if the unit's last two fixes ran along it; otherwise `ambiguous` between the nearest crossing each way |
+| The same, street not known | the nearest crossings around the last position, in different directions; a compass direction said in the report picks the one ahead |
+| "At the corner of rue X" | the crossings of rue X, those with the unit's own street first, then as for a named place |
+| A crossing with no last position | `unresolved`: asks for the streets that cross there |
 
 Radius: at 30 m; near / behind / in front of / next to 80 m; compass relations (eight points) offset 100 m on that bearing with 100 m radius; large features (parks, the château, streets) use at least their own extent.
 
@@ -41,12 +45,16 @@ A stated distance replaces those defaults. "200 metres south of X" pins 200 m ou
 
 Movement ("moving towards X", "I moved towards X") gives a direction, not a distance. The marker moves to the middle of the leg from the last position to X, its circle spans the whole leg, an arrow points at X, and the time is shown at the marker with a ≈. The next report can still use that estimate, but "nearest wins" must hold even if the estimate is off by its full radius.
 
+Movement along a street ("moving down Avenue X", "je remonte la rue X", "йду вулицею X") puts the speaker on the street, not on the way to it: at the point on it nearest the last position, shown with a ≈. The circle is the last position's own, plus the step onto the street, plus 1.25 × any distance said, since the way along it is not known. Only "towards", "heading to" and the like give the arrow.
+
 Movement with a distance is dead reckoning from the last position, and is also shown with a ≈:
 
 - "Moved 300 metres north": 300 m on that bearing. The circle is the last position's own circle plus 0.4 × the distance, so it grows with every leg until a report names a place again.
 - "Moved 200 metres towards X": 200 m along the leg, never past X. The circle is the last position's circle plus a quarter of the distance (50 m at least).
 - "Moved 300 metres east on rue X": the reckoned point is moved onto that street.
 - A place that cannot be found does not stop a move that states its distance and direction; the log says the place was ignored.
+
+Crossings are not in the gazetteer. `lib/geo/crossings.ts` finds them where two named streets share a point in OpenStreetMap; a bridge shares none, so it is not a crossing. In a mission the coordinator remembers the street each unit is on (from a report that named a street, kept through crossings on it) and the way it last moved, and passes both with the last position. A crossing within 20 m is the one the unit is at, never the next one. The pin is the crossing, with a 30 m circle.
 
 ## Demo script
 
@@ -56,7 +64,7 @@ Chosen from the real gazetteer (1,108 features: 6 rail/metro stations, 11 church
 |---|---|---|
 | 1 | "I'm at Bérault metro." | Unique named place: pin at Bérault, ±30 m |
 | 2 | "Now I'm at the château de Vincennes." | Ambiguous: phone asks "castle or station?" aloud; tap **Château de Vincennes (metro station)** |
-| 3 | "Moving towards the town hall." | Movement: the marker moves half way to Mairie de Vincennes (±174 m, the whole leg), with an arrow from the station to the mairie (nearest town hall wins: 347 m vs 1.45 km to Saint-Mandé) |
+| 3 | "Moving towards the town hall." | Movement: the marker moves half way to Mairie de Vincennes (±174 m, the whole leg), with a dashed line from the station and an arrow on to the mairie (nearest town hall wins: 347 m vs 1.45 km to Saint-Mandé) |
 | 4 | "Je suis devant la mairie." | French: pin in front of Mairie de Vincennes, ±80 m |
 
 If hall noise defeats transcription, type the same sentences in the text box; text and voice go through the same pipeline.
@@ -131,7 +139,7 @@ The shared map for the base station: open `http://localhost:3117/receiver` on th
 
 A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Phones then join it from the transmitter: it lists the open missions, and the talk button waits until the phone has joined. A unit that joins starts around the start point, shown with ≈, and the phone asks it to check in by saying where it is. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. End mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
-Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
+Every report shows up within about a second: one coloured marker per call sign with its time, circle and trail, a list of units, and a feed of what was said. The dashed trail runs from fix to fix and ends at the marker, the middle of its circle; a movement's arrow starts there and points at where the unit is heading. A question shows as "awaiting answer", with its choices numbered on the map, until the speaker taps one. The bar at the bottom replays the session at 1×, 10× or 30×, or from any moment on the slider; Live goes back to now. A unit silent for 3 minutes fades.
 
 The coordinator keeps each mission in `.data/sessions/<code>.jsonl`: its opening, joins, reports, answers and end, one line each, never edited. A deleted mission's file moves to `.data/sessions/deleted/`. The live site keeps no record yet, so it has no missions, phones report to it without one, and its receiver stays empty [101].
 
@@ -151,6 +159,7 @@ lib/providers/transcriber.ts               Transcriber interface + Mistral
 lib/providers/extractor.ts                 IntentExtractor interface + prompt + JSON schema
 lib/geo/areas.ts                           areas: centre, bounding box, hint text
 lib/geo/gazetteer.ts                       name search, category words (en, fr, uk), bias terms
+lib/geo/crossings.ts                       street crossings, from the points streets share
 lib/geo/resolver.ts                        pure resolver
 scripts/build-gazetteer.ts                 one Overpass query → data/gazetteer.<area>.json
 docs/                                      design docs, one file per topic; start at docs/README.md

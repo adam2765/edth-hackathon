@@ -8,6 +8,7 @@
 | Call sign | The name a speaker reports under, such as ALPHA 2. Stored in capitals; one phone per call sign in a mission |
 | Check-in | A unit's first report that names a place. It replaces the start point |
 | Coordinator | The server endpoint that turns a report into a placement |
+| Crossing | Where named streets meet: a point two streets share in OpenStreetMap. Worked out from the street lines, not stored in the gazetteer |
 | Dead reckoning | Working out a position from the last one plus a stated distance and compass direction |
 | Estimate (≈) | A position worked out from a movement, not from a named place; shown with ≈ |
 | Gazetteer | Our local list of named places from OpenStreetMap, one file per area ([gazetteer.md](gazetteer.md)) |

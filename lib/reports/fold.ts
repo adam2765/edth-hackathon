@@ -6,6 +6,7 @@
  */
 import type { AreaId } from "@/lib/geo/areas";
 import type { Candidate, Resolution } from "@/lib/geo/types";
+import { bearingDeg, distanceM } from "../geo/geo";
 import type { JoinEntry, LogEntry, ReportEntry, StartPoint, UnitPosition } from "./types";
 
 /** One colour per call sign, in the order they first report. Distinct on the light map, each with a label as well. */
@@ -32,8 +33,6 @@ export interface UnitState {
   positionTs: number | null;
   /** Earlier positions, oldest first. */
   trail: { lat: number; lon: number; ts: number }[];
-  /** Start of the movement arrow, when the current position came from a movement. */
-  arrowFrom: { lat: number; lon: number } | null;
   /** Last join, report or answer from this call sign. */
   lastHeard: number;
   pending: Pending | null;
@@ -43,6 +42,8 @@ export interface UnitState {
   device: string | null;
   /** Still at the start point it was given on joining: an assumption, so it leaves no trail. */
   atStart: boolean;
+  /** The street it is on or moving along, when its latest placement named one (a gazetteer id). */
+  street: string | null;
 }
 
 export interface FeedItem {
@@ -116,11 +117,31 @@ function reportOutcome(e: ReportEntry): string {
   return r.question ?? "Could not place that.";
 }
 
+/**
+ * The street a placement leaves a unit on: a street it was placed on or sent along, kept through a
+ * crossing on that street. Anything else (a church, a move by compass) says nothing about a street.
+ */
+function streetAfter(before: string | null, c: Candidate | undefined): string | null {
+  if (c?.category === "street") return c.id;
+  if (c?.category === "intersection" && before && c.streets?.includes(before)) return before;
+  return null;
+}
+
+/** Fixes closer together than this say nothing about which way the unit is going. */
+const HEADING_MIN_M = 15;
+
+/** The bearing a unit moved on from its previous fix to its current one; null when unknown. */
+export function headingOf(u: UnitState): number | null {
+  const prev = u.trail.at(-1);
+  if (!u.position || !prev || u.atStart) return null;
+  if (distanceM(prev, u.position) < HEADING_MIN_M) return null;
+  return Math.round(bearingDeg(prev, u.position));
+}
+
 /** The picture after every entry up to and including `upTo` (epoch ms). */
 export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, colours = colourMap(entries)): SessionState {
   const units = new Map<string, UnitState>();
   const feed = new Map<string, FeedItem>();
-  const reports = new Map<string, ReportEntry>();
   let first: number | null = null;
   let last: number | null = null;
   let area: AreaId | null = null;
@@ -129,21 +150,17 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
     if (!u) {
-      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], arrowFrom: null, lastHeard: 0, pending: null, joined: null, device: null, atStart: false };
+      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null };
       units.set(callsign, u);
     }
     return u;
   };
 
-  const move = (u: UnitState, p: UnitPosition, ts: number, from: { lat: number; lon: number } | null) => {
+  const move = (u: UnitState, p: UnitPosition, ts: number) => {
     if (u.position && u.positionTs != null && !u.atStart) u.trail = [...u.trail, { lat: u.position.lat, lon: u.position.lon, ts: u.positionTs }].slice(-TRAIL_MAX);
     u.atStart = false;
-    // The arrow starts where the phone said the speaker was; failing that, where the map had them.
-    const prev = from ?? u.position;
-    const start = prev ? { lat: prev.lat, lon: prev.lon } : null;
     u.position = p;
     u.positionTs = ts;
-    u.arrowFrom = p.heading_to ? start : null;
   };
 
   for (const e of entries) {
@@ -181,8 +198,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       if (e.position && !u.position) {
         u.position = e.position;
         u.positionTs = e.ts;
-        u.arrowFrom = null;
         u.atStart = true;
+        u.street = mission?.start?.category === "street" ? mission.start.id : null;
       }
       feed.set(e.id, {
         kind: "join",
@@ -203,14 +220,14 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
 
     if (e.kind === "report") {
-      reports.set(e.id, e);
       area = e.area;
       const u = unitFor(e.callsign, e.area);
       u.area = e.area;
       u.lastHeard = e.ts;
       const r = e.resolution;
       if (e.position) {
-        move(u, e.position, e.ts, e.lastPosition);
+        move(u, e.position, e.ts);
+        u.street = streetAfter(u.street, r.candidates.find((c) => c.id === r.evidence.feature_id));
         u.pending = null;
       } else if (r.status === "ambiguous") {
         u.pending = { reportId: e.id, ts: e.ts, question: r.question ?? "Which one?", candidates: r.candidates };
@@ -244,7 +261,8 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     // A newer fix since the question beats a late answer to it.
     const reportTs = item?.ts ?? e.ts;
     if (e.position && (u.positionTs == null || u.positionTs <= reportTs)) {
-      move(u, e.position, e.ts, reports.get(e.report_id)?.lastPosition ?? null);
+      move(u, e.position, e.ts);
+      u.street = streetAfter(u.street, chosen ?? undefined);
     }
     if (item) {
       item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null };

@@ -3,7 +3,8 @@
 The largest untested risks are real Ukrainian speech and mixed-language clips; the rest are known limits. Add a gap when you find one; remove it, with a decision line, when it is fixed.
 
 - **Mixed languages in one clip:** in one synthetic test the English half of a Ukrainian-then-English clip was dropped.
-- **One place per report:** intersections, "between A and B" and "at A, going to B" keep only one place. In "the pharmacy on rue de Fontenay" the street does not narrow the choice.
+- **One place per report:** "the corner of A and B", "between A and B" and "at A, going to B" keep only one place. A crossing is found from one street named and the street the unit is on [117]; with no street known, "the corner of A and B" asks among the crossings of A. In "the pharmacy on rue de Fontenay" the street does not narrow the choice.
+- **"The next crossing" outside a mission:** the phone does not send the street it is on or the way it is going, so with no mission the coordinator asks which crossing every time.
 - **No shops, cafés, restaurants, banks or house numbers** in the gazetteer ([gazetteer.md](gazetteer.md#how-it-is-built)). Stops, fuel stations, pharmacies, hotels, water and named buildings are in.
 - **A name shared by a hotel and a landmark goes to the nearest one.** From Maidan, "Я біля Дніпра" picks Hotel Dnipro, 250 m away, not the river; before hotels were in, it picked the Dnipro metro station, 2.6 km away. Saying "the river" picks the river. The model's guess of a category is not used unless the word was said [15].
 - **Spoken coordinates and grid references** are not parsed.

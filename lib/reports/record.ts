@@ -1,7 +1,7 @@
 /** Saving to the shared record: missions, joins, reports, answers and ends. Server only. */
 import type { AreaId } from "@/lib/geo/areas";
 import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
-import { FADE_AFTER_MS, foldLog } from "./fold";
+import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { getStore, newEntryId, withSessionLock } from "./store";
@@ -145,8 +145,14 @@ export async function reportContext(
   if (!mission) return NO_MISSION;
   if (endOf(entries)) return ENDED;
   const u = foldLog(entries).units.find((x) => x.callsign === callsign);
-  const lastPosition =
-    u?.position && u.positionTs != null ? toLastPosition(u.position, u.positionTs) : mission.start ? toLastPosition(startPosition(mission.start), now) : null;
+  let lastPosition: LastPosition | null = null;
+  if (u?.position && u.positionTs != null) {
+    // The street and the way it was going let "the next crossing" be found (decision 117).
+    const heading = headingOf(u);
+    lastPosition = { ...toLastPosition(u.position, u.positionTs), ...(u.street ? { street: u.street } : {}), ...(heading != null ? { heading_deg: heading } : {}) };
+  } else if (mission.start) {
+    lastPosition = { ...toLastPosition(startPosition(mission.start), now), ...(mission.start.category === "street" ? { street: mission.start.id } : {}) };
+  }
   return { ok: true, area: mission.area, lastPosition, inMission: true };
 }
 

@@ -6,7 +6,8 @@
  */
 import type { Candidate, Category, Direction, GazetteerFeature, Intent, LastPosition, Placement, Relation, Resolution } from "./types";
 import { bboxHalfDiagonalM, bboxHalfExtentM, bearingDeg, destination, distanceM, nearestPointOnLines, type LatLon } from "./geo";
-import { canonTokens, categoryIsExplicit, genericCategoryOf, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
+import { canonTokens, categoryIsExplicit, genericCategoryOf, isCategoryWord, searchByName, stripCategoryWords, type NameMatch } from "./gazetteer";
+import { angleBetween, crossingName, crossingsOf, crossStreets, streetAxisAt, type Crossing } from "./crossings";
 
 export const FRESH_MS = 10 * 60 * 1000;
 export const CATEGORY_RADIUS_M = 1500;
@@ -61,6 +62,44 @@ export const COMPASS_SPREAD = 0.4;
 /** A distance said aloud is paced or judged by eye; it is taken as good to a quarter. */
 export const DISTANCE_SLACK = 0.25;
 
+/** A crossing this close to the last position is the one the speaker is at, not the next one. */
+export const AT_CROSSING_M = 20;
+/** "The next crossing" is looked for this far along the street, or around the speaker. */
+export const NEXT_CROSSING_REACH_M = 500;
+/** The speaker counts as on their street while their last position is this close to it. */
+export const ON_STREET_M = 60;
+/** A crossing is ahead when it lies within this angle of the way the speaker is going. */
+export const AHEAD_DEG = 60;
+/** The way the speaker moved counts only when it runs along their street, within this angle. */
+export const ALONG_STREET_DEG = 45;
+
+/** Words that pick out which crossing, not a street: "the next crossing", "le prochain carrefour", "наступне перехрестя". */
+function isPointerWord(t: string): boolean {
+  return (
+    ["next", "nearest", "first", "this", "that", "upcoming", "prochain", "prochaine", "premier", "premiere", "suivant", "suivante", "ce", "cet", "cette"].includes(t) ||
+    /^(наступн|найближч|ближч|перш|цьом|цей|це|следующ|ближайш)/.test(t)
+  );
+}
+
+/** Was a crossing word said? */
+function saysCrossing(text: string): boolean {
+  return canonTokens(text).some((t) => isCategoryWord(t, "intersection"));
+}
+
+/** A name with the crossing and pointer words taken out: "the corner of rue de Fontenay" → "rue fontenay"; null when nothing is left. */
+function crossingCore(name: string): string | null {
+  const core = canonTokens(name).filter((t) => !isCategoryWord(t, "intersection") && !isPointerWord(t));
+  return core.length ? core.join(" ") : null;
+}
+
+/** "Which crossing on Avenue de Nogent: Villa d'Idalie, or Route des Pelouses Marigny?" */
+function crossingQuestion(labels: string[], onStreet: string | null, lang: Lang): string {
+  const list = joinOr(labels, lang);
+  if (lang === "fr") return onStreet ? `Quel carrefour sur ${onStreet} : ${list} ?` : `Quel carrefour : ${list} ?`;
+  if (lang === "uk") return onStreet ? `Яке перехрестя на ${onStreet}: ${list}?` : `Яке перехрестя: ${list}?`;
+  return onStreet ? `Which crossing on ${onStreet}: ${list}?` : `Which crossing: ${list}?`;
+}
+
 /** Circle for a point a stated distance away on a compass bearing. */
 const compassRadius = (d: number) => Math.max(MOVE_MIN_RADIUS_M, Math.round(COMPASS_SPREAD * d));
 /** How unsure the last position itself is: a position worked out from it starts with that much. */
@@ -95,6 +134,17 @@ export function placementFor(f: GazetteerFeature, said: Said, last: LastPosition
     const reckoned = destination(last, travel, d);
     const pin = nearestPointOnLines(reckoned, f.lines);
     return { pin, radius_m: Math.max(startRadius(last) + compassRadius(d), Math.round(distanceM(reckoned, pin))), estimated: true };
+  }
+
+  // "Moving down Avenue X": a move with a street and no "towards" is a move along it, so the speaker
+  // is on the street, not on the way to it. Where along it is not said: the point nearest the last
+  // position, with a circle that takes in the last position's own, the step onto the street and any
+  // distance said. With no last position, anywhere on the street, as for "I'm on Avenue X".
+  if (said.kind === "movement" && said.relation == null && f.lines?.length) {
+    if (!last) return placementFor(f, { ...said, kind: "position", relation: "at", distance_m: null }, last);
+    const pin = nearestPointOnLines(last, f.lines);
+    const reach = startRadius(last) + Math.round(distanceM(last, pin)) + (d != null ? Math.round(d * (1 + DISTANCE_SLACK)) : 0);
+    return { pin, radius_m: Math.max(MOVE_MIN_RADIUS_M, reach), estimated: true };
   }
 
   // The landmark's reference point: for a street, the point on it nearest the speaker's last position.
@@ -171,6 +221,7 @@ const CAT_LABEL: Record<Category, Record<Lang, string> & { frWhich: string; ukWh
   hotel: { en: "hotel", fr: "hôtel", uk: "готель", frWhich: "Quel hôtel", ukWhich: "Який готель" },
   water: { en: "river or lake", fr: "plan d'eau", uk: "водойма", frWhich: "Quel plan d'eau", ukWhich: "Яка водойма" },
   building: { en: "building", fr: "bâtiment", uk: "будівля", frWhich: "Quel bâtiment", ukWhich: "Яка будівля" },
+  intersection: { en: "crossing", fr: "carrefour", uk: "перехрестя", frWhich: "Quel carrefour", ukWhich: "Яке перехрестя" },
   other: { en: "place", fr: "lieu", uk: "місце", frWhich: "Quel lieu", ukWhich: "Яке місце" },
 };
 
@@ -202,8 +253,9 @@ export function choiceLabels(cands: Candidate[], lang: Lang): string[] {
   const twin = (a: Candidate, b: Candidate) => a.category === b.category && name(a) === name(b);
   const far = (m: number) => (m < 1000 ? `${m} ${lang === "uk" ? "м" : "m"}` : `${(m / 1000).toFixed(1).replace(".", lang === "en" ? "." : ",")} ${lang === "uk" ? "км" : "km"}`);
   return cands.map((c) => {
-    // Also when another choice contains this name: "Хрещатик (станція)" next to "вулиця Хрещатик".
-    const kindClash = cands.some((o) => o !== c && !twin(o, c) && name(o).includes(name(c)));
+    // Also when another choice of another kind contains this name: "Хрещатик (станція)" next to
+    // "вулиця Хрещатик". Of the same kind, the kind tells them no further apart.
+    const kindClash = cands.some((o) => o !== c && !twin(o, c) && o.category !== c.category && name(o).includes(name(c)));
     const twins = cands.filter((o) => o !== c && twin(o, c));
     const where = !twins.length ? null : c.town && twins.every((o) => o.town && o.town !== c.town) ? c.town : far(c.distance_m);
     const parts = [kindClash ? kind(c) : null, where].filter(Boolean);
@@ -235,10 +287,18 @@ function askQuestion(cands: Candidate[], lang: Lang, category: Category | null, 
   return `${lead}Which ${cat ? cat.en : "one"}: ${labels}?`;
 }
 
-/** `no_start`: a move with nowhere to start from. `incomplete`: a move with its distance or its direction missing. */
-type Prompt = "place" | "no_start" | "incomplete";
+/**
+ * `no_start`: a move with nowhere to start from. `incomplete`: a move with its distance or its
+ * direction missing. `crossing_no_start`: "the next crossing" with no idea where the speaker is.
+ */
+type Prompt = "place" | "no_start" | "incomplete" | "crossing_no_start";
 
 function unresolvedPrompt(lang: Lang, prompt: Prompt = "place"): string {
+  if (prompt === "crossing_no_start") {
+    if (lang === "fr") return "Je ne sais pas où vous êtes. Donnez les noms des rues qui se croisent.";
+    if (lang === "uk") return "Не знаю, де ви. Назвіть вулиці, що там перетинаються.";
+    return "I don't know where you are. Name the streets that cross there.";
+  }
   if (prompt === "no_start") {
     if (lang === "fr") return "Je ne sais pas d'où vous partez. Donnez le nom d'une rue ou d'un lieu.";
     if (lang === "uk") return "Не знаю, звідки ви вирушили. Назвіть вулицю або орієнтир.";
@@ -305,6 +365,23 @@ export function resolve(input: ResolveInput): Resolution {
       if (!category || (category === "other" && generic)) category = generic;
     }
   }
+  // A crossing only when one was said: the model has called a square one ("Я на Майдані
+  // Незалежності" came back as "intersection"). Without a crossing word, the name is searched as usual.
+  if (category === "intersection" && !saysCrossing(transcript)) category = null;
+  // "Passing the next intersection" read as no place at all: the crossing word is in what was said.
+  if (!name && (!category || category === "street" || category === "other") && d == null && !intent.direction && saysCrossing(transcript)) {
+    category = "intersection";
+  }
+  // A crossing word inside the name: "Carrefour des Rigollots" is a place of its own; "the next
+  // crossing" and "the corner of rue de Fontenay" are not, so only the street name is kept.
+  if (category === "intersection" && name && saysCrossing(name)) {
+    const best = searchByName([...new Set([lemma, name].filter((q): q is string => !!q))], gazetteer)[0];
+    if (best && best.score >= GOOD_SCORE && saysCrossing(best.feature.name)) category = null;
+    else {
+      name = crossingCore(name);
+      lemma = null;
+    }
+  }
   if (!name && !category) {
     // "300 metres north of my last position" says the same as "moved 300 metres north".
     const bearing = intent.direction ? DIRECTION_DEG[intent.direction] : intent.relation ? COMPASS[intent.relation] : undefined;
@@ -319,7 +396,7 @@ export function resolve(input: ResolveInput): Resolution {
     if (!last) return plain("dead_reckoning_no_start", `${d} m on bearing ${bearing}° but no last position to start from`, "no_start");
     return reckon(last, bearing, d, "no place named");
   }
-  if (intent.kind === "other") return plain("no_position_in_report", "the report did not state a position or movement");
+  if (intent.kind === "other" && category !== "intersection") return plain("no_position_in_report", "the report did not state a position or movement");
 
   const ref: LatLon = last ?? input.areaCentre ?? DEFAULT_CENTRE;
   const fresh = !!last && now - last.ts < FRESH_MS;
@@ -355,6 +432,98 @@ export function resolve(input: ResolveInput): Resolution {
       evidence: { rule: `${prefix}_ambiguous`, detail: `${extra}; ${why}` },
     };
   };
+
+  // A crossing: worked out from where the street lines meet, never from the model.
+  if (category === "intersection") {
+    const crossings = crossingsOf(gazetteer);
+    const street = last?.street ? gazetteer.find((f) => f.id === last.street && f.category === "street" && f.lines?.length) : undefined;
+    // On the street only while near it: "moving towards Avenue X" from 600 m away is not on it yet.
+    const onStreet = street && last && distanceM(last, nearestPointOnLines(last, street.lines!)) <= ON_STREET_M ? street : undefined;
+    // Measured from the point on the street nearest the last position: an estimate can sit beside the street.
+    const from: LatLon = last ? (onStreet ? nearestPointOnLines(last, onStreet.lines!) : last) : ref;
+    const rel: Relation = intent.relation ?? "at";
+    const said: Said = { relation: rel, kind: rel === "towards" ? "movement" : "position", distance_m: COMPASS[rel] !== undefined ? d : null, direction: null };
+    const toCand = (c: Crossing): Candidate => {
+      const label = crossingName(c, onStreet?.id);
+      const f: GazetteerFeature = { id: c.id, name: label, names: [label], category: "intersection", lat: c.lat, lon: c.lon, osm_type: "node", osm_id: 0 };
+      return { id: c.id, name: label, category: "intersection", lat: c.lat, lon: c.lon, distance_m: Math.round(distanceM(from, c)), streets: c.streets, placement: placementFor(f, said, last) };
+    };
+
+    // "At the corner of rue de Fontenay": the crossings of that street, with the speaker's own street if it has one.
+    if (name) {
+      const queries = [...new Set([lemma, name].filter((q): q is string => !!q))];
+      const found = searchByName(queries, gazetteer).filter((m) => m.feature.category === "street");
+      const best = found[0]?.score ?? 0;
+      const named = new Set(found.filter((m) => m.score >= GOOD_SCORE && m.score >= best - SCORE_MARGIN).map((m) => m.feature.id));
+      if (!named.size) return unresolved("crossing_street_none", `no street called "${lemma ?? name}" above ${GOOD_SCORE}`);
+      let pool = crossings.filter((c) => c.streets.some((s) => named.has(s)));
+      let note = `${named.size} street(s) called "${lemma ?? name}"`;
+      if (onStreet) {
+        const both = pool.filter((c) => c.streets.includes(onStreet.id));
+        if (both.length) {
+          pool = both;
+          note += ` crossing ${onStreet.name}`;
+        }
+      }
+      const cands = pool.map(toCand).filter((c) => c.distance_m <= CATEGORY_RADIUS_M);
+      return decide(cands, "crossing", `${note}; ${cands.length} crossing(s) within ${CATEGORY_RADIUS_M} m of ${refLabel}`);
+    }
+
+    // "Passing the next crossing": the nearest one along the speaker's street, or around them.
+    if (!last) return plain("crossing_no_start", "a crossing with no street named and no last position", "crossing_no_start");
+    const where = onStreet ? `on ${onStreet.name}` : "around the last position";
+    const near = crossings
+      .filter((c) => !onStreet || c.streets.includes(onStreet.id))
+      .map((c) => ({ c, dist: distanceM(from, c), bearing: bearingDeg(from, c) }))
+      .filter((x) => x.dist > AT_CROSSING_M && x.dist <= NEXT_CROSSING_REACH_M)
+      .sort((a, b) => a.dist - b.dist);
+    if (!near.length) return unresolved("crossing_none", `no crossing ${where} within ${NEXT_CROSSING_REACH_M} m`);
+
+    // Which way the speaker is going: a compass direction said in this report, or else the way they
+    // moved between their last two fixes, when that was recent and runs along their street.
+    let heading: number | null = null;
+    let why = "";
+    if (intent.direction) {
+      heading = DIRECTION_DEG[intent.direction];
+      why = `going ${intent.direction.replace("_", "-")}, as said`;
+    } else if (onStreet && fresh && last.heading_deg != null) {
+      const axis = streetAxisAt(from, onStreet.lines!);
+      if (axis != null && Math.min(angleBetween(last.heading_deg, axis), angleBetween(last.heading_deg, axis + 180)) <= ALONG_STREET_DEG) {
+        heading = last.heading_deg;
+        why = `going on the way it moved from its previous fix (${Math.round(heading)}°)`;
+      }
+    }
+    if (heading != null) {
+      const ahead = near.find((x) => angleBetween(x.bearing, heading) <= AHEAD_DEG);
+      if (ahead) {
+        const c = toCand(ahead.c);
+        return resolvedFrom(c, [c], "crossing_next_ahead", `${near.length} crossing(s) ${where} within ${NEXT_CROSSING_REACH_M} m; ${why}; nearest ahead ${c.distance_m} m`);
+      }
+    }
+
+    // Not known which way: one each way along the street, or the nearest few in different directions.
+    const picks: typeof near = [];
+    for (const x of near) {
+      if (picks.length >= (onStreet ? 2 : MAX_CHOICES)) break;
+      if (picks.every((p) => angleBetween(p.bearing, x.bearing) > (onStreet ? 90 : 45))) picks.push(x);
+    }
+    const cands = picks.map((x) => toCand(x.c));
+    if (cands.length === 1) {
+      return resolvedFrom(cands[0], cands, "crossing_next_one_way", `${near.length} crossing(s) ${where} within ${NEXT_CROSSING_REACH_M} m, all one way; nearest ${cands[0].distance_m} m`);
+    }
+    // On a known street the choices are the streets that cross it.
+    const short = onStreet ? picks.map((x) => crossStreets(x.c, onStreet.id)) : [];
+    const labels = short.length && short.every(Boolean) && new Set(short).size === short.length ? short : choiceLabels(cands, lang);
+    return {
+      status: "ambiguous",
+      candidates: cands,
+      question: crossingQuestion(labels, short === labels ? onStreet!.name : null, lang),
+      evidence: {
+        rule: "crossing_next_ambiguous",
+        detail: `${near.length} crossing(s) ${where} within ${NEXT_CROSSING_REACH_M} m; ${heading == null ? "which way is not known" : "none ahead"}, so ${onStreet ? "one each way" : "the nearest in different directions"}`,
+      },
+    };
+  }
 
   if (name) {
     const queries = [...new Set([lemma, name].filter((q): q is string => !!q))];

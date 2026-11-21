@@ -128,13 +128,13 @@ describe("rebuilding the map from the log", () => {
     expect(s.feed[0].outcome).toBe("None of the choices was right.");
   });
 
-  it("a movement draws its arrow from the position the phone sent", () => {
+  it("a movement keeps where it is heading, and the trail runs on to the new marker", () => {
     const heading_to = { id: CHATEAU.id, name: CHATEAU.name, lat: CHATEAU.lat, lon: CHATEAU.lon };
-    const move = report("r2", "ALPHA 1", 5, resolved(CHATEAU, { pin: { lat: 48.844, lon: 2.432 }, radius_m: 200, heading_to, estimated: true }), {
-      lastPosition: { lat: BERAULT.lat, lon: BERAULT.lon, ts: T0 },
-    });
+    const move = report("r2", "ALPHA 1", 5, resolved(CHATEAU, { pin: { lat: 48.844, lon: 2.432 }, radius_m: 200, heading_to, estimated: true }));
     const u = foldLog([report("r1", "ALPHA 1", 0, resolved(BERAULT)), move]).units[0];
-    expect(u.arrowFrom).toEqual({ lat: BERAULT.lat, lon: BERAULT.lon });
+    // The receiver draws the dashed trail from the last fix to the marker, and the arrow on from the marker.
+    expect(u.trail.at(-1)).toMatchObject({ lat: BERAULT.lat, lon: BERAULT.lon });
+    expect(u.position).toMatchObject({ lat: 48.844, lon: 2.432 });
     expect(u.position?.heading_to?.id).toBe(CHATEAU.id);
   });
 });

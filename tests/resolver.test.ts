@@ -538,3 +538,61 @@ describe("cemeteries", () => {
     expect(r.status).not.toBe("resolved");
   });
 });
+
+describe("a move along a street", () => {
+  const NOGENT = gaz.find((f) => f.id === "street/avenue-de-nogent")!;
+  // The answer that put ALPHA 1 at Château de Vincennes station, mission vincennes-4.
+  const station: LastPosition = { lat: 48.84458, lon: 2.43891, ts: NOW - 30_000, radius_m: 30 };
+  const said = (relation: Intent["relation"], text: string) =>
+    resolve({
+      intent: intent({ kind: "movement", landmark_text: "Avenue de Nogent", landmark_name: "Avenue de Nogent", landmark_name_lemma: "Avenue de Nogent", landmark_category: "street", relation }),
+      transcript: text,
+      lastPosition: station,
+      now: NOW,
+      gazetteer: gaz,
+    });
+
+  it("puts 'moving down Avenue de Nogent' on the avenue, as an estimate", () => {
+    const r = said(null, "Moving down Avenue de Nogent.");
+    expect(r.status).toBe("resolved");
+    expect(r.evidence.feature_id).toBe(NOGENT.id);
+    expect(r.heading_to).toBeUndefined();
+    expect(r.estimated).toBe(true);
+    expect(distanceM(r.pin!, nearestPointOnLines(r.pin!, NOGENT.lines!))).toBeLessThan(1);
+    // The station's own 30 m, and the step onto the avenue.
+    const step = Math.round(distanceM(station, r.pin!));
+    expect(r.radius_m).toBe(Math.max(50, 30 + step));
+  });
+
+  it("keeps 'moving towards Avenue de Nogent' on the way to it", () => {
+    const r = said("towards", "Moving towards Avenue de Nogent.");
+    expect(r.heading_to?.id).toBe(NOGENT.id);
+  });
+
+  it("with no last position, puts the speaker anywhere on the street", () => {
+    const r = resolve({
+      intent: intent({ kind: "movement", landmark_name: "Avenue de Nogent", landmark_category: "street", relation: null }),
+      transcript: "Moving down Avenue de Nogent.",
+      now: NOW,
+      gazetteer: gaz,
+    });
+    expect(r.status).toBe("resolved");
+    expect(r.heading_to).toBeUndefined();
+    expect(r.radius_m).toBe(400);
+  });
+
+  it("widens the circle by a distance said with no direction", () => {
+    const r = said(null, "Moving down Avenue de Nogent.");
+    const step = Math.round(distanceM(station, r.pin!));
+    const withDistance = resolve({
+      intent: intent({ kind: "movement", landmark_name: "Avenue de Nogent", landmark_category: "street", relation: null, distance_m: 200 }),
+      transcript: "Moved 200 metres down Avenue de Nogent.",
+      lastPosition: station,
+      now: NOW,
+      gazetteer: gaz,
+    });
+    // Either way along the street: the station's 30 m, the step onto it, and 200 m with a quarter's slack.
+    expect(withDistance.radius_m).toBe(30 + step + 250);
+    expect(withDistance.pin).toEqual(r.pin);
+  });
+});
