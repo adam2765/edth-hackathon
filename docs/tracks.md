@@ -161,10 +161,26 @@ flowchart TD
 | "Suspicious vehicle near the church." | Placed | "Track 3, suspect vehicle, Église Notre-Dame." The nearest church to the observer |
 | "Enemy patrol near the cemetery." | Ask which | "Track 4. Which cemetery: Cimetière Nord de Saint-Mandé, or Cimetière ancien?" |
 | "I see a drone about 300 metres north of me." | Placed, ≈ | "Track 2, unknown drone, 300 metres north of you." |
+| "Hostile drone, 1 km east, heading north." | Placed, ≈ | "Track 5, hostile drone, 1000 metres east of you." Its symbol points north [184] |
 | The same, from a unit with no position yet | Ask for a place | "I don't know where you are. Name a place near what you see." |
 | "Enemy vehicle to the east." | Ask how far | "How far east is it? Or name a place near it." [180] |
+| "Hostile drone 1 km away, heading north." | Ask which way | "Which way is it from you? Give a compass direction, or name a place near it." [184] |
 
 A track on a street or along a river gets a circle of at least 150 m. "Track 1 moved to Avenue de Nogent" is read as "at Avenue de Nogent": the model often reads "moved to" as "towards", so only a word such as "heading" or "on its way" makes it a direction [149]. A compass word said with a place, as in "moving east", is the way the track was moving, not where it is.
+
+**Where it is, and the way it is going** [184]. A report can hold two compass words: "Hostile drone, 1 km east, heading north." The offline model drops one, swaps them or merges them; the swap pinned the drone 1 km north with no question. So code reads them from the words, as it reads the subject:
+
+| The compass word comes | It says | Example |
+|---|---|---|
+| after a distance | where the thing is | "1 km **east**", "à un kilomètre à l'**est**", "за кілометр на **схід**" |
+| before "of" | where the thing is | "**east** of me", "**north** of the church" |
+| after a verb of moving | the way it is going | "heading **north**", "il se dirige vers le **nord**", "летить на **північ**", "**north**bound" |
+| after "towards" or "vers", no distance before | the way it is going | "drone towards the **north**" |
+| after "I'm moving", "je me dirige" | the speaker's own move: neither | |
+| after "coming from" | where it came from: neither | |
+| anywhere else | not clear: the model's reading stands | "Enemy vehicle to the **east**" |
+
+When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as the arrow on the track's symbol and "moving north, as said" in the list.
 
 ## A track's life
 
