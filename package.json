@@ -12,7 +12,9 @@
     "test": "vitest run",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
     "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts",
-    "eval:extract": "tsx scripts/eval-extraction.ts"
+    "eval:extract": "tsx scripts/eval-extraction.ts",
+    "eval:format": "tsx scripts/eval-format.ts",
+    "eval:outcomes": "tsx scripts/eval-outcomes.ts"
   },
   "dependencies": {
     "maplibre-gl": "^6.19.0",

@@ -1,0 +1,529 @@
+{
+  "extractor": "mistral:mistral-small-latest",
+  "prompt_id": "a6871d1ee3",
+  "at": "2026-11-21T09:17:34.232Z",
+  "repeat": 3,
+  "resolve": true,
+  "summary": {
+    "cases": {
+      "passed": 182,
+      "total": 195
+    },
+    "heldOut": {
+      "passed": 173,
+      "total": 186
+    },
+    "inPrompt": {
+      "passed": 9,
+      "total": 9
+    },
+    "fields": {
+      "kind": {
+        "passed": 159,
+        "total": 162
+      },
+      "landmark_name": {
+        "passed": 96,
+        "total": 96
+      },
+      "landmark_name_lemma": {
+        "passed": 42,
+        "total": 42
+      },
+      "landmark_category": {
+        "passed": 129,
+        "total": 135
+      },
+      "relation": {
+        "passed": 141,
+        "total": 150
+      },
+      "language": {
+        "passed": 114,
+        "total": 114
+      },
+      "subject": {
+        "passed": 195,
+        "total": 195
+      },
+      "direction": {
+        "passed": 36,
+        "total": 36
+      },
+      "distance_m": {
+        "passed": 30,
+        "total": 30
+      },
+      "landmark_text": {
+        "passed": 12,
+        "total": 12
+      },
+      "track_kind": {
+        "passed": 18,
+        "total": 18
+      },
+      "track_ref": {
+        "passed": 6,
+        "total": 6
+      },
+      "track_count": {
+        "passed": 3,
+        "total": 3
+      },
+      "track_heading": {
+        "passed": 3,
+        "total": 3
+      }
+    },
+    "tags": {
+      "scenario": {
+        "passed": 54,
+        "total": 54
+      },
+      "fr": {
+        "passed": 27,
+        "total": 30
+      },
+      "uk": {
+        "passed": 59,
+        "total": 60
+      },
+      "distance": {
+        "passed": 21,
+        "total": 21
+      },
+      "intersection": {
+        "passed": 3,
+        "total": 3
+      },
+      "paraphrase": {
+        "passed": 33,
+        "total": 39
+      },
+      "trap": {
+        "passed": 15,
+        "total": 15
+      },
+      "filler": {
+        "passed": 9,
+        "total": 9
+      },
+      "mixed": {
+        "passed": 9,
+        "total": 9
+      },
+      "stt_error": {
+        "passed": 6,
+        "total": 6
+      },
+      "other": {
+        "passed": 12,
+        "total": 15
+      },
+      "track": {
+        "passed": 21,
+        "total": 21
+      }
+    },
+    "outcomes": {
+      "passed": 195,
+      "total": 195
+    },
+    "wrongPins": 0,
+    "flaky": 1,
+    "medianMs": 709,
+    "p90Ms": 964
+  },
+  "cases": {
+    "s-v1": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-v2": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-v3": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-v4": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-k1": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-k2": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-k3": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-k4": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-k5": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i1": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i2": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i3": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i4": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i5": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i6": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i7": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i8": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "s-i9": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-outside": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-beside": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-near": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-chateau": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-street": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-along": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-halfkm": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-offset": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-from-last": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-minutes": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-blocks": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-left": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "p-two-places": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "f-um": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "f-procedure": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "f-callsign": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-beside": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-towards": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-along": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-north-of": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-hdv": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-hotel": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "fr-leaving": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-opposite": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-along": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-pharmacy": {
+      "pass": true,
+      "passes": 2,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-bridge": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-russian": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-moved": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "uk-behind": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "m-latin-cyr": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "m-latin-uk": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "e-berault": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "e-no-punct": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "o-radio": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "o-say-again": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "o-moving-out": {
+      "pass": false,
+      "passes": 0,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "o-uk": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "o-see-church": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-patrol": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-trucks": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-drone-offset": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-char": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-ref": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-mortar": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    },
+    "t-jammer": {
+      "pass": true,
+      "passes": 3,
+      "rounds": 3,
+      "wrong_pins": 0
+    }
+  }
+}

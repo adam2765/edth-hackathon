@@ -29,7 +29,8 @@ data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, iziu
 components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
-evals/                      extraction eval: transcripts with expected intent fields, and saved runs
+evals/                      extraction eval: cases, baselines, saved runs, the prompt journal
+.agents/skills/             skills for every agent: prompt-attack, prompt-tune (.claude/skills links here)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
 tests/                      vitest
 docs/                       design docs, one Markdown file per topic; start at docs/README.md
@@ -47,6 +48,7 @@ npm run lint
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (network)
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
+npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)
 ```
 
 Run `npm test`, `npx tsc --noEmit` and `npm run lint` before calling a task done. If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`.
@@ -64,6 +66,8 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - Secrets live in env vars only. The repo is public.
 - `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the receiver. Change them on purpose, and say so in the decision line.
 - Do not deploy to production, push, or move the `prior-work-fri-1800` tag unless the person you are working for asks.
+- The extraction prompt (`systemPrompt()` in `lib/providers/extractor.ts`) changes only with an eval run before and after on both models, and no regression against `evals/baselines/` unless the person accepts it. The `prompt-tune` skill is the procedure; `prompt-attack` grows the cases.
+- Skills live in `.agents/skills/`, one folder each, so every agent reads the same ones.
 - Write user-facing text and docs in plain, short sentences, in the same style as `README.md` and `DECISIONS.md`.
 - The docs live only in this repo, as Markdown. Do not create or update copies in other tools (Claude Docs, Google Docs, Notion); not everyone on the team uses them.
 
