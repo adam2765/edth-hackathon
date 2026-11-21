@@ -320,7 +320,7 @@ Things already found:
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].
 - **On the MacBook now:** Ollama 0.40.16 with `ministral-3:3b` and `ministral-3:8b`; whisper.cpp 1.9.5 (Homebrew) with large-v3-turbo; ffmpeg present; no local certificate tool.
-- **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone. Audio sent to the coordinator misses it: turbo alone takes 3 to 5 s per clip on the M1 Pro, so 5 to 10 s in all [193].
+- **Target under 4 s** from end of speech to pin. Local extraction leaves about 1.5 s for the phone's speech-to-text, which is not yet measured on a real phone. Audio sent to the coordinator is close to it: turbo takes about 1.2 s per clip on the M1 Pro, so 3 to 5 s in all, 4.1 s in the middle [193].
 
 Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localhost`). Offline, no public certificate is possible for a private address. Options:
 

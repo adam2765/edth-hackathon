@@ -151,8 +151,9 @@ class WhisperServerTranscriber implements Transcriber {
   async transcribe(audio: Blob, mime: string, _biasTerms: string[], opts: TranscribeOptions = {}): Promise<TranscribeResult> {
     const form = new FormData();
     form.append("file", new File([audio], `clip.${extFor(mime)}`, { type: mime.split(";")[0] }));
-    // verbose_json is the one answer that always names the language.
-    form.append("response_format", "verbose_json");
+    // Only verbose_json names the language, but it also runs a second pass to score every language,
+    // about 0.9 s on the M1 Pro. So it is asked for only when the device names no language.
+    form.append("response_format", opts.language ? "json" : "verbose_json");
     form.append("language", opts.language || "auto");
     let res: Response;
     try {

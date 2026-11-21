@@ -223,14 +223,15 @@ describe("Whisper on this computer in offline mode (decision 193)", () => {
   const formOf = (fetchMock: ReturnType<typeof vi.fn>) => (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
 
   it("listens for the device's language, with no prompt", async () => {
-    const fetchMock = reply({ language: "ukrainian", text: " Я біля Центральної районної лікарні." });
+    // Plain json names no language: the device's is kept, and the server skips scoring every language.
+    const fetchMock = reply({ text: " Я біля Центральної районної лікарні." });
     vi.stubGlobal("fetch", fetchMock);
     const { getTranscriber } = await providers();
     const r = await getTranscriber().transcribe(clip, "audio/webm", ["Ізюм"], { language: "uk" });
     expect(r).toEqual({ text: "Я біля Центральної районної лікарні.", language: "uk" });
     const form = formOf(fetchMock);
     expect(form.get("language")).toBe("uk");
-    expect(form.get("response_format")).toBe("verbose_json");
+    expect(form.get("response_format")).toBe("json");
     expect(form.get("prompt")).toBeNull();
     expect((form.get("file") as File).name).toBe("clip.webm");
   });
@@ -241,6 +242,7 @@ describe("Whisper on this computer in offline mode (decision 193)", () => {
     const { getTranscriber } = await providers();
     expect((await getTranscriber().transcribe(clip, "audio/mp4", [])).language).toBe("fr");
     expect(formOf(fetchMock).get("language")).toBe("auto");
+    expect(formOf(fetchMock).get("response_format")).toBe("verbose_json");
   });
 
   it("returns no words for silence, so the speaker is asked to repeat", async () => {

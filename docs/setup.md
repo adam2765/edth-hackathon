@@ -115,7 +115,7 @@ Expect JSON with `"status":"resolved"` and `"feature_id":"node/9415191169"`, and
 curl -s -X POST http://localhost:3117/api/report --form-string area=vincennes --form-string language=fr -F audio=@transmitter/scenarios/audio/vincennes-tracks/t2.m4a
 ```
 
-Expect `"transcript":"Je suis à la mairie de Vincennes."`, `"status":"resolved"` at the Mairie de Vincennes, and `timings_ms.stt` around 3,000 to 5,000 on an M1 Pro. (person) Open http://localhost:3117 in a browser to see the map, and type or say a report there.
+Expect `"transcript":"Je suis à la mairie de Vincennes."`, `"status":"resolved"` at the Mairie de Vincennes, and `timings_ms.stt` around 1,000 to 1,500 on an M1 Pro (more while something else uses the GPU). (person) Open http://localhost:3117 in a browser to see the map, and type or say a report there.
 
 (person) To prove nothing leaves the computer, turn off Wi-Fi and send the `curl` again. It should still be placed.
 
