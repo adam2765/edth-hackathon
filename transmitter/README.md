@@ -41,7 +41,7 @@ The main screen is only for reporting. Top to bottom:
   from this phone with the coordinator's answer and timings).
 
 **Setup** is a sheet: call sign, area and language, which coordinator, where speech becomes text
-and the model download, sound, and scenario timing. The language is the one you speak, English by
+sound, and scenario timing. Speech is always transcribed on the phone. The language is the one you speak, English by
 default: it goes with every report, Whisper on the phone listens for it, and questions come back
 in it. Scenarios use each report's own language instead ([decision 106](../DECISIONS.md)).
 
@@ -55,8 +55,9 @@ Setup sheet. `src/mission.ts` lists and joins missions and keeps what the phone 
 
 ```bash
 npm install
+npm run setup                       # prepares the fixed speech model on this Mac
 LANG=en_US.UTF-8 npx expo run:ios      # first build takes a few minutes; needs Xcode
-npx expo start --dev-client            # the dev server the app loads its code from
+npm run start -- --dev-client            # the dev server the app loads its code from
 ```
 
 `LANG=en_US.UTF-8` matters: CocoaPods fails without a UTF-8 locale.
@@ -93,26 +94,34 @@ the link re-forms, and the app then reports "no answer from the coordinator". iO
 allowed to "find devices on your local network" when it asks. A plain `http://` address on the local
 network is allowed. In hosted mode the coordinator calls Mistral, so the computer needs the
 internet and a key. In offline mode (`PROVIDER_MODE=local`) it needs neither, but it takes text
-only: use "Phone: base" or "Phone: small", not "Server" ([../docs/setup.md](../docs/setup.md), part 3).
+only, which the native app always sends ([../docs/setup.md](../docs/setup.md), part 3).
 
 Checked on 20 Nov on an iPhone 13 mini through the coordinator on the Mac: the Kyiv scenario
 ran twice, 10 of 10 steps as expected, round trip 1.2 to 1.9 s (median 1.5 s), with server
 speech-to-text. Results: `../scenarios/results/iphone13mini-via-mac-coordinator-2026-11-20.jsonl`.
 The Android microphone check is recorded below.
 
-## Speech-to-text: on the server or on the phone
+## Speech-to-text on the phone
 
-Setup chooses where speech becomes text (`src/stt.ts`).
+Microphone and scenario reports always use Whisper base (`ggml-base-q5_1`), on Android
+and iOS. There is no mode selector or download button, and no native server-transcription
+fallback. The coordinator receives text; optional test clips still use the separate `clip` field.
 
-| Mode | What happens | Needs |
-|---|---|---|
-| Server | The clip is uploaded and the coordinator transcribes it (Mistral). | A connection good enough for audio |
-| Phone: base | Whisper `ggml-base-q5_1` runs on the phone; only the words are sent. | A one-time 56 MB download |
-| Phone: small | Whisper `ggml-small-q5_1`, slower and more accurate. | A one-time 181 MB download |
+Run `npm run setup` in this folder during installation. It fetches the model on the Mac,
+checks its size and SHA-256, and keeps it in ignored `assets/models/`. `npm run start`,
+`npm run android` and `npm run ios` also prepare it automatically. Use those npm commands
+rather than calling Expo directly, or run setup first. A fresh clone needs the one-time
+57 MB download; the model is not committed to Git.
 
-Models come from `ggerganov/whisper.cpp` on Hugging Face and are kept in the app's documents.
-"Place-name hints" gives Whisper a short list of the area's place names (`src/hints.generated.json`,
-the head of the list the server sends Mistral).
+Metro bundles the model as an asset. At first launch the app automatically copies it into
+its documents; development builds receive it from Metro over the existing USB/network link.
+The phone needs no Hugging Face access. Existing complete base models are reused.
+Native builds and exports must run setup before bundling, on either platform.
+
+### Historical model comparison
+
+The following measurements predate the fixed-model app; the compared modes are no longer
+user-selectable.
 
 Measured on 20 Nov in the iPhone simulator, on the 9 scenario steps (synthetic voices, clean audio).
 A step counts when the coordinator's answer is the expected one.
@@ -133,7 +142,7 @@ A step counts when the coordinator's answer is the expected one.
   this says nothing about a real phone; that still has to be measured. The server takes about 0.3 s.
 - The raw results are in `../scenarios/results/stt-comparison-2026-11-20.jsonl`.
 
-Phone modes transcribe both scenario clips and the microphone on Android and iOS. Android uses
+Whisper base transcribes both scenario clips and the microphone on Android and iOS. Android uses
 the local Expo module in `modules/pcm-recorder` to write 16 kHz mono 16-bit PCM WAV with
 `AudioRecord`; iOS uses expo-audio. Both call the same Whisper function and send text through
 the existing report path. Rebuild the Android development app after adding the native module.
@@ -142,7 +151,7 @@ Checked on 21 Nov on a Samsung Galaxy S10 (SM-G973U): microphone audio reaches t
 coordinator as text (`timings_ms.stt: 0`). Two live reports, "I am at the town hall in Vincennes",
 placed the unit at Mairie de Vincennes (±31 m) on the receiver. This verifies build and connections;
 recognition accuracy, old question cards and transcription speed remain separate runtime work.
-Small and the iOS path were not tested in this Android change.
+The iOS path was not tested in this Android change.
 
 ## What you hear
 

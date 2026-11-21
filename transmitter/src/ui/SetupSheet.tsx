@@ -1,8 +1,6 @@
-// Everything you set once and then leave alone: who you are, which coordinator, where speech
-// becomes text, and sound. Kept off the main screen so that screen is only for reporting.
+// Everything you set once and then leave alone: who you are, which coordinator, and sound. Kept off the main screen so that screen is only for reporting.
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { PHONE_MODELS, STT_MODES, type PhoneMode, type SttMode } from "../stt";
 import type { AreaId, Lang } from "../types";
 import { Button, Group, Row, Segmented, SwitchRow } from "./controls";
 import type { Reach } from "./model";
@@ -30,11 +28,6 @@ export interface SetupProps {
   liveSite: string;
   reach: Reach;
 
-  sttMode: SttMode;
-  onSttMode: (m: SttMode) => void;
-  modelReady: Record<PhoneMode, boolean>;
-  downloadPct: number | null;
-  onDownload: () => void;
   useHints: boolean;
   onUseHints: (v: boolean) => void;
   sendClips: boolean;
@@ -48,19 +41,11 @@ export interface SetupProps {
   onRealTime: (v: boolean) => void;
 }
 
-const STT_NOTES: Record<SttMode, string> = {
-  server: "On the coordinator. The recording is sent.",
-  "phone-base": "On this phone, the faster model. Only the words are sent.",
-  "phone-small": "On this phone, the more accurate model. Only the words are sent.",
-};
-
 function host(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 }
 
 export function SetupSheet(p: SetupProps) {
-  const phoneMode = p.sttMode === "server" ? null : p.sttMode;
-  const needsModel = phoneMode !== null && !p.modelReady[phoneMode];
   const reachText =
     p.reach === "ok"
       ? "The coordinator is answering."
@@ -142,34 +127,9 @@ export function SetupSheet(p: SetupProps) {
               />
             </Group>
 
-            <Group title="Speech-to-text" footer="Phone models are downloaded once from Hugging Face and kept on this phone.">
-              {STT_MODES.map((m) => {
-                // A full sentence, so a line break can never leave a stray separator at the start of a line.
-                const size = m.id === "server" ? "" : ` ${PHONE_MODELS[m.id].mb} MB, ${p.modelReady[m.id] ? "downloaded" : "not downloaded yet"}.`;
-                return (
-                  <Row
-                    key={m.id}
-                    label={m.label}
-                    note={`${STT_NOTES[m.id]}${size}`}
-                    selected={p.sttMode === m.id}
-                    onPress={() => p.onSttMode(m.id)}
-                    disabled={p.locked || p.downloadPct !== null}
-                  />
-                );
-              })}
-              {needsModel && phoneMode ? (
-                <View style={styles.padded}>
-                  <Button
-                    kind="primary"
-                    icon="cloud-download-outline"
-                    label={p.downloadPct === null ? `Download the model (${PHONE_MODELS[phoneMode].mb} MB)` : `Downloading… ${p.downloadPct}%`}
-                    busy={p.downloadPct !== null}
-                    onPress={p.onDownload}
-                  />
-                </View>
-              ) : null}
-              {phoneMode ? <SwitchRow label="Place-name hints" note="Gives the phone’s model the area’s place names" value={p.useHints} onValueChange={p.onUseHints} /> : null}
-              {phoneMode ? <SwitchRow label="Send clips for testing" note="Also sends each recording. The coordinator keeps it only when started with KEEP_CLIPS=1" value={p.sendClips} onValueChange={p.onSendClips} /> : null}
+            <Group title="Speech" footer="Speech is transcribed on this phone. Only text is sent unless test clips are enabled.">
+              <SwitchRow label="Place-name hints" note="Gives the phone’s model the area’s place names" value={p.useHints} onValueChange={p.onUseHints} />
+              <SwitchRow label="Send clips for testing" note="Also sends each recording. The coordinator keeps it only when started with KEEP_CLIPS=1" value={p.sendClips} onValueChange={p.onSendClips} />
             </Group>
 
             <Group title="Sound">

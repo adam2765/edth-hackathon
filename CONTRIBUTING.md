@@ -23,7 +23,7 @@ If you changed `lib/geo/types.ts`, also run `npx tsc --noEmit` in `transmitter/`
 
 ## Git workflow
 
-Every change goes through a short branch and a pull request. Nobody commits to `main` directly [172].
+Every change goes through a short branch and a pull request. Nobody commits to `main` directly [173].
 
 1. **One task, one worktree, one branch.** Start each Claude Code session in a worktree: the desktop app's worktree option, or `claude --worktree` in a terminal. It lives in `.claude/worktrees/<name>`, on a branch of its own (`claude/<name>` from the desktop app). With Codex or by hand: `git worktree add .claude/worktrees/<name> -b <you>/<name> origin/main`. Worktrees go nowhere else; a hook refuses one outside that folder. Git, ESLint and Vitest ignore the folder, so the checks in one checkout never run another's copy.
 2. **Set the worktree up.** A new worktree has no `node_modules`: run `npm ci` in it, and in `transmitter/` if you work on the app. `.worktreeinclude` copies your `.env.local` into a new session worktree, so hosted mode works there too.
@@ -43,7 +43,7 @@ GitHub Actions runs [.github/workflows/ci.yml](.github/workflows/ci.yml) on ever
 - **Production build:** `npm run build`, which catches what the dev server lets through.
 - **Transmitter types:** `npx tsc --noEmit` in `transmitter/`, so a change to `lib/geo/types.ts` that breaks the app shows up even if you did not run it.
 
-It needs no key: nothing in it calls Mistral or Overpass. See the runs on the repo's Actions tab, or with `gh run list`. A ruleset on `main` makes all three jobs a condition for merging a pull request, and refuses direct pushes, force pushes and deleting `main` [172]. If `main` still turns red, fix it or revert it before you go on.
+It needs no key: nothing in it calls Mistral or Overpass. See the runs on the repo's Actions tab, or with `gh run list`. A ruleset on `main` makes all three jobs a condition for merging a pull request, and refuses direct pushes, force pushes and deleting `main` [173]. If `main` still turns red, fix it or revert it before you go on.
 
 ## Working agreements (proposed)
 
@@ -61,7 +61,7 @@ It needs no key: nothing in it calls Mistral or Overpass. See the runs on the re
 
 Skills for every agent live in `.agents/skills/`, one folder each; `.claude/skills` links there. Besides `prompt-tune` and `prompt-attack` there are `git-sync` and `pr` (Git workflow, above).
 
-**Guard hooks.** `.agents/hooks/` holds five small Python scripts that Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`) run around an agent's tool calls [173]:
+**Guard hooks.** `.agents/hooks/` holds five small Python scripts that Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`) run around an agent's tool calls [174]:
 
 - `guard-secrets` refuses to read `.env` files, keys and credential files, so a key never lands in a transcript. An agent asks you to run such a command yourself.
 - `guard-key-literals` refuses an edit that writes a key into a file, and flags one that got in another way. Mistral and Featherless keys have no prefix, so it catches them by their variable name.

@@ -40,7 +40,7 @@ export function playClipAloud(assetId: number): Promise<void> {
 }
 
 /** Speech-sized recording: 16 kHz mono AAC in an m4a file, the same as the scenario clips. */
-export const SPEECH_RECORDING: RecordingOptions = {
+const SPEECH_RECORDING: RecordingOptions = {
   extension: ".m4a",
   sampleRate: 16000,
   numberOfChannels: 1,
@@ -52,7 +52,7 @@ export const SPEECH_RECORDING: RecordingOptions = {
 
 /**
  * Uncompressed 16 kHz mono recording, for speech-to-text on the phone. iOS only: Android's
- * recorder cannot write uncompressed audio, so there the open-microphone stream will be used.
+ * microphone uses the local PCM recorder instead.
  */
 export const SPEECH_RECORDING_WAV: RecordingOptions = {
   ...SPEECH_RECORDING,
