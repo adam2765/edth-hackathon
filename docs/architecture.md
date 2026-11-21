@@ -197,5 +197,7 @@ The main rules:
 - Radius: "at" 30 m; near, behind, in front of, next to 80 m; compass relations 100 m out with a 100 m circle; a stated distance replaces those defaults [52, 53].
 - Movement towards a place moves the marker to the middle of the leg, with a circle spanning the leg and an arrow [46]. A stated distance moves it that far along the leg instead [55].
 - Dead reckoning ("moved 300 metres north") moves from the last position; the circle grows with each leg until a report names a place again [54].
+- A grid reference (MGRS: "grid 31U DQ 586 101", "Delta Quebec 586 101", "grille 586 101") places the pin at the centre of the cell it names, with no place to look up; the zone and square, when left out, come from the area. A grid more than 60 km from the area is asked again as misheard. A track at a grid is placed the same way [209].
+- A clock direction ("300 metres at my 2 o'clock") is a bearing: 12 o'clock is north, or the way the speaker said they face ("facing north") [198, 210]. Klicks are kilometres [210].
 - A position that is an estimate only wins "nearest" if that still holds when it is off by its full radius [47].
 - A report about a track is placed by the same rules, measured from the observer, and never moves the speaker. Who the report is about and whose the track is are read from the words in code; when the model and the words disagree, the app asks [147 to 149].

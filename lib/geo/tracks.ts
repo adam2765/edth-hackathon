@@ -13,6 +13,8 @@
  */
 import { resolve, type ResolveInput } from "./resolver";
 import { blocksSaid } from "./blocks";
+import { readGrid } from "./grid";
+import { withFacing } from "./clock";
 import type { Affiliation, Candidate, Direction, Intent, Placement, Resolution, TrackKind, TrackResolution } from "./types";
 
 /** A track seen "on" a street or along a river is somewhere along it, not at the point nearest the observer. */
@@ -44,8 +46,9 @@ function says(lex: Lexicon, toks: string[], text: string): boolean {
 }
 
 const HOSTILE: Lexicon = {
-  words: ["enemy", "enemies", "hostile", "hostiles", "ennemi", "ennemie", "ennemis", "ennemies", "adverse", "adversaire", "adversaires"],
-  stems: ["ворож", "ворог", "противник", "враг", "вражеск", "неприятел"],
+  // Field words too [210]: "OPFOR", "bandits", "orcs" (Ukrainian soldiers' word for the enemy).
+  words: ["enemy", "enemies", "hostile", "hostiles", "opfor", "bandit", "bandits", "orc", "orcs", "ennemi", "ennemie", "ennemis", "ennemies", "adverse", "adversaire", "adversaires"],
+  stems: ["ворож", "ворог", "противник", "враг", "вражеск", "неприятел", "орки", "орків", "оркам", "орка"],
 };
 const SUSPECT: Lexicon = { words: ["suspect", "suspects", "suspected", "suspicious", "suspecte", "suspectes"], stems: ["підозр", "подозр"] };
 /** Doubt about a hostile word makes a suspect ("possible enemy vehicle"); doubt alone says nothing about whose it is. */
@@ -54,7 +57,7 @@ const DOUBT: Lexicon = {
   stems: ["ймовірн", "імовірн", "можлив", "вероятн", "возможн"],
 };
 const FRIENDLY: Lexicon = {
-  words: ["friendly", "friendlies", "allied", "ally", "our", "ours", "ami", "amie", "amis", "amies", "allie", "allies", "notre", "nos", "свій", "своя", "своє", "свої", "своїх", "наш", "наша", "наше", "наші", "наших", "нашого", "нашої", "нашу"],
+  words: ["friendly", "friendlies", "blufor", "allied", "ally", "our", "ours", "ami", "amie", "amis", "amies", "allie", "allies", "notre", "nos", "свій", "своя", "своє", "свої", "своїх", "наш", "наша", "наше", "наші", "наших", "нашого", "нашої", "нашу"],
   stems: ["дружн", "союзн"],
 };
 const NEUTRAL: Lexicon = {
@@ -75,26 +78,44 @@ const KIND_WORDS: [TrackKind, Lexicon][] = [
       ],
     },
   ],
-  ["drone", { words: ["drone", "drones", "uav", "uavs", "uas", "quadcopter", "quadcopters", "fpv", "бпла"], stems: ["дрон", "безпілотник", "беспилотник", "квадрокоптер", "коптер"] }],
+  [
+    "drone",
+    {
+      // Models soldiers name them by [210]: Mavic, Shahed, Lancet, Orlan.
+      words: ["drone", "drones", "uav", "uavs", "uas", "quadcopter", "quadcopters", "fpv", "fpvs", "mavic", "mavics", "shahed", "shaheds", "lancet", "lancets", "orlan", "orlans", "geran", "бпла"],
+      stems: ["дрон", "безпілотник", "беспилотник", "квадрокоптер", "коптер", "мавік", "мавик", "шахед", "ланцет", "орлан", "герань"],
+      phrases: ["loitering munition", "kamikaze drone", "munition rodeuse"],
+    },
+  ],
   [
     "armour",
     {
-      words: ["tank", "tanks", "apc", "apcs", "ifv", "ifvs", "armour", "armor", "armoured", "armored", "char", "chars", "blinde", "blindes", "blindee", "blindees", "бмп", "бтр", "ббм"],
+      words: ["tank", "tanks", "apc", "apcs", "ifv", "ifvs", "mbt", "mbts", "bmp", "bmps", "btr", "btrs", "bmd", "mrap", "mraps", "armour", "armor", "armoured", "armored", "char", "chars", "blinde", "blindes", "blindee", "blindees", "vbci", "vab", "бмп", "бтр", "ббм", "бмд"],
       stems: ["танк", "бронемашин", "бронетехнік", "бронетехник", "бронетранспортер"],
+      // "T-72" folds to "t 72" [210].
+      phrases: ["t 62", "t 64", "t 72", "t 80", "t 90", "т 62", "т 64", "т 72", "т 80", "т 90", "mt lb", "мт лб"],
     },
   ],
   ["mortar", { words: ["mortar", "mortars", "mortier", "mortiers"], stems: ["міномет", "миномет"] }],
-  ["artillery", { words: ["artillery", "howitzer", "howitzers", "gun", "guns", "cannon", "artillerie", "canon", "canons", "obusier", "obusiers"], stems: ["артилер", "артиллер", "гармат", "гаубиц", "пушк"] }],
+  [
+    "artillery",
+    {
+      words: ["artillery", "howitzer", "howitzers", "gun", "guns", "cannon", "mlrs", "grad", "grads", "himars", "smerch", "uragan", "msta", "artillerie", "canon", "canons", "obusier", "obusiers", "caesar", "lrm", "сау", "рсзо", "град", "гради"],
+      stems: ["артилер", "артиллер", "гармат", "гаубиц", "пушк", "градів", "хаймарс", "смерч", "ураган"],
+    },
+  ],
   ["jammer", { words: ["jammer", "jammers", "jamming", "brouilleur", "brouilleurs", "brouillage", "реб", "рэб"], stems: ["глушилк", "глушник"], phrases: ["electronic warfare", "guerre electronique"] }],
   [
     "people",
     {
       words: [
         "person", "persons", "people", "man", "men", "soldier", "soldiers", "infantry", "troops", "patrol", "squad", "fighter", "fighters", "gunman", "gunmen", "individual", "individuals", "personnel",
+        "sniper", "snipers", "dismount", "dismounts", "dismounted", "rifleman", "riflemen", "sapper", "sappers", "saboteur", "saboteurs",
         "personne", "personnes", "homme", "hommes", "soldat", "soldats", "fantassin", "fantassins", "infanterie", "patrouille", "individu", "individus", "combattant", "combattants",
-        "люди",
+        "tireur", "tireurs", "snipeur", "snipeurs", "debarques",
+        "люди", "дрг",
       ],
-      stems: ["людин", "люде", "солдат", "піхот", "пехот", "бійц", "боєц", "військов", "патрул", "боец", "бойц", "человек"],
+      stems: ["людин", "люде", "солдат", "піхот", "пехот", "бійц", "боєц", "військов", "патрул", "боец", "бойц", "человек", "снайпер", "диверсант", "сапер"],
     },
   ],
   [
@@ -561,7 +582,9 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   if (reading.subject === "unclear") {
     return { status: "unresolved", candidates: [], question: prompt(lang, "subject"), evidence: { rule: "subject_unclear", detail: reading.why } };
   }
-  const hasPlace = placeSaid(said);
+  // A grid reference is a place too: "two vehicles at grid DQ 586 101" [209].
+  const grid = readGrid(transcript, input.areaCentre ?? { lat: 48.8455, lon: 2.435 });
+  const hasPlace = placeSaid(said) || grid != null;
   const alone = placeAlone(said, transcript);
   const checked = compassChecked(said, transcript, alone);
   const intent = checked.intent;
@@ -628,8 +651,9 @@ export function resolveReport(input: ReportResolveInput): Resolution {
   const target = r.candidates.find((c) => c.id === r.evidence.feature_id);
   const line = target?.category === "street" || target?.category === "water";
   const radius_m = line && r.radius_m != null ? Math.max(r.radius_m, TRACK_ON_LINE_M) : r.radius_m;
-  const dir = bearingSaid(intent);
-  const label = target?.name ?? (intent.distance_m && dir ? `${intent.distance_m} m ${dir.replace("_", "-")} of ${input.observer ?? "the observer"}` : "position");
+  const dir = bearingSaid(withFacing(intent, transcript).intent); // turned to the facing said [210]
+  const label = target?.name ?? (r.evidence.rule === "grid_reference" && grid ? `grid ${grid.text}` : null) ??
+ (intent.distance_m && dir ? `${intent.distance_m} m ${dir.replace("_", "-")} of ${input.observer ?? "the observer"}` : "position");
   return {
     status: "resolved",
     candidates: r.candidates.map(forTrack),

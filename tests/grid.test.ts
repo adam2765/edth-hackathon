@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import { loadGazetteer } from "../lib/geo/gazetteer";
+import { distanceM } from "../lib/geo/geo";
+import { readGrid, toUtm } from "../lib/geo/grid";
+import { resolve } from "../lib/geo/resolver";
+import { resolveReport } from "../lib/geo/tracks";
+import type { Intent } from "../lib/geo/types";
+
+const VINCENNES = { lat: 48.8455, lon: 2.435 };
+const KYIV = { lat: 50.4501, lon: 30.5234 };
+const IZIUM = { lat: 49.1912, lon: 37.2786 };
+// Checked against the `mgrs` library (proj4js's MGRS, in Python): the castle, Maidan, Izium's square.
+const CASTLE = { lat: 48.8427, lon: 2.4358 }; // 31U DQ 58603 10123
+
+describe("a grid reference said out loud [209]", () => {
+  it("reads the full grid, to a metre", () => {
+    const g = readGrid("Grid 31U DQ 58603 10123", VINCENNES)!;
+    expect(g.text).toBe("31U DQ 58603 10123");
+    expect(distanceM(g.pin, CASTLE)).toBeLessThan(2);
+    expect(g.radius_m).toBe(5);
+    expect(distanceM(readGrid("Квадрат UA 24182 91607", KYIV)!.pin, { lat: 50.450099, lon: 30.523404 })).toBeLessThan(2);
+    expect(distanceM(readGrid("37U CQ 74577 50137", IZIUM)!.pin, { lat: 49.191203, lon: 37.278595 })).toBeLessThan(2);
+  });
+
+  it("reads it spelled, run together, or with the zone and square left out", () => {
+    const six = readGrid("I'm at grid DQ 586 101", VINCENNES)!;
+    expect(six.text).toBe("DQ 586 101");
+    expect(six.radius_m).toBe(71); // a 100 m cell
+    expect(distanceM(six.pin, CASTLE)).toBeLessThan(100);
+    for (const said of ["Delta Quebec 586 101", "grille 586 101", "31UDQ586101", "grid dq 586 101", "grid at DQ 586 101 by the hotel"]) {
+      expect(readGrid(said, VINCENNES)?.pin, said).toEqual(six.pin);
+    }
+    expect(readGrid("сітка 745 501", IZIUM)?.text).toBe("CQ 745 501");
+  });
+
+  it("reads digits said one by one, as on a radio", () => {
+    for (const said of ["Grid Delta Quebec five eight six one zero one", "grid five eight six one oh one", "grid DQ five eight six, one zero one, over", "grille cinq huit six un zéro un", "Track 2, grid DQ 586 101"]) {
+      expect(readGrid(said, VINCENNES)?.text, said).toBe("DQ 586 101");
+    }
+    expect(readGrid("Квадрат UA два чотири один дев'ять один шість", KYIV)?.text).toBe("UA 241 916");
+  });
+
+  it("leaves distances, counts and names alone", () => {
+    for (const said of ["two vehicles at three o'clock", "I see one two three", "I'm 200 metres north of the church", "Track 2, two vehicles at 300 metres", "Maidan Palace Hotel", "I'm at the château de Vincennes", "586 101"]) {
+      expect(readGrid(said, VINCENNES), said).toBeNull();
+    }
+  });
+
+  it("agrees with the reference UTM for the area's centre", () => {
+    const u = toUtm(VINCENNES);
+    expect(u.zone).toBe(31);
+    expect(u.easting).toBeCloseTo(458546.9, 0);
+    expect(u.northing).toBeCloseTo(5410434.9, 0);
+  });
+});
+
+const gaz = loadGazetteer();
+const NOW = Date.parse("2026-11-21T09:00:00Z");
+const intent = (p: Partial<Intent>): Intent => ({ kind: "position", landmark_text: null, landmark_name: null, landmark_category: null, relation: null, language: "en", confidence: 0.9, subject: "self", ...p });
+
+describe("a grid in a report [209]", () => {
+  it("places the speaker at the cell, with no place to look up", () => {
+    const r = resolve({ intent: intent({ landmark_name: "DQ 586 101" }), transcript: "I'm at grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    expect(r).toMatchObject({ status: "resolved", radius_m: 71, evidence: { rule: "grid_reference" } });
+    expect(distanceM(r.pin!, CASTLE)).toBeLessThan(100);
+  });
+
+  it("asks again for a grid far outside the area", () => {
+    const r = resolve({ intent: intent({}), transcript: "grid 31U DQ 100 900", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "grid_too_far" } });
+    expect(r.question).toMatch(/^Grid 31U DQ 100 900 is \d+ km away/);
+  });
+
+  it("places a track at the grid, and leaves the speaker where they are", () => {
+    const said = "Two enemy vehicles at grid DQ 586 101";
+    const r = resolveReport({ intent: intent({ subject: "track", track_kind: "vehicle", track_count: 2 }), transcript: said, now: NOW, gazetteer: gaz, areaCentre: VINCENNES, observer: "ALPHA 1" });
+    expect(r.status).toBe("resolved");
+    expect(r.pin).toBeUndefined();
+    expect(r.track?.label).toBe("grid DQ 586 101");
+    expect(distanceM(r.track!.placement!.pin!, CASTLE)).toBeLessThan(100);
+  });
+});
