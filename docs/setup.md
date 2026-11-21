@@ -108,7 +108,7 @@ Optional. Only if the person has a Mistral key; otherwise skip to part 5. Hosted
 cp .env.example .env.local
 ```
 
-Check, without printing the key: `grep -c '^MISTRAL_API_KEY=.' .env.local` prints `1`. A key exported in the shell works too.
+Check (person), without printing the key: `grep -c '^MISTRAL_API_KEY=.' .env.local` prints `1`. An agent cannot run this: a guard hook stops agents reading `.env` files. The check after the next step shows whether the key works. A key exported in the shell works too.
 
 Stop the offline coordinator, then start it without `PROVIDER_MODE`:
 

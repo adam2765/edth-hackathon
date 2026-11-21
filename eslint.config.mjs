@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The native transmitter app has its own tooling.
     "transmitter/**",
+    // Other sessions' worktrees: each is a whole copy of the repo, linted in its own checkout.
+    ".claude/worktrees/**",
     // Copied from node_modules by `predev` and `prebuild`, and ignored by git.
     "public/maplibre-gl-worker.mjs",
     "public/ort/**",

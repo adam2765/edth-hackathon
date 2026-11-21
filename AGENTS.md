@@ -30,7 +30,8 @@ components/VoiceMapApp.tsx  the phone web page
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
 evals/                      extraction eval: cases, baselines, saved runs, the prompt journal
-.agents/skills/             skills for every agent: prompt-attack, prompt-tune (.claude/skills links here)
+.agents/skills/             skills for every agent: prompt-attack, prompt-tune, git-sync, pr (.claude/skills links here)
+.agents/hooks/              guard hooks for every agent: secrets, keys, deletes, worktrees (.claude/settings.json, .codex/hooks.json)
 transmitter/                native app (Expo); its own package.json, tooling and AGENTS.md
 tests/                      vitest
 .github/workflows/ci.yml    CI: the checks below, a build and the transmitter's types, on every push to main and every pull request
@@ -63,7 +64,9 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 - When a report is ambiguous, ask back. Do not add silent guesses.
 - Tracks are for reconnaissance only (decision 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between a unit and a track: no range check, no pairing, no "target" wording.
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).
-- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours.
+- Work on a branch, never on `main`: one session, one worktree in `.claude/worktrees/`, one branch, one pull request (decision 173). Catch up by merging `origin/main`; never rebase a pushed branch or force-push. The steps are in `CONTRIBUTING.md` (Git workflow); `git-sync` and `pr` are the skills.
+- Record every choice in `DECISIONS.md`: append one numbered line at the end. If someone else appended at the same time, keep both lines and renumber yours; on a branch, do it when you merge `main` in. `tests/decisions.test.ts` checks the numbers.
+- The hooks in `.agents/hooks/` refuse reading `.env` files, writing keys into files, deleting outside the repo and worktrees outside `.claude/worktrees/`. Do not work around a refusal; ask the person to run the command.
 - Secrets live in env vars only. The repo is public.
 - `lib/geo/types.ts` and the fields of `POST /api/report` are a contract with the transmitter and the receiver. Change them on purpose, and say so in the decision line.
 - Do not deploy to production, push, or move the `prior-work-fri-1800` tag unless the person you are working for asks.
