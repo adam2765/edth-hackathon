@@ -33,7 +33,7 @@ The goal is fewer **wrong pins**: a pin or a heading on the map at a place the s
 ## Setup
 
 - **Hosted model** (Mistral Small): `MISTRAL_API_KEY` in `.env.local`. The script loads it itself.
-- **Local model** (Ministral 3 3B): Ollama running with `ministral-3:3b` ([setup.md](setup.md), part 3). No key.
+- **Local model** (Ministral 3 3B): Ollama running with `ministral-3:3b` ([setup.md](setup.md#install-once)). No key.
 - Check both: `npm run eval:extract -- --only s-v1 --no-save --no-compare`, and the same with `PROVIDER_MODE=local` in front. Each should print `ok s-v1`.
 
 ## Commands

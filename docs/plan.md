@@ -211,7 +211,7 @@ Command post:
 Transmitter, before the talk button can be used:
 
 ```
-Coordinator: This Mac ●            (as today)
+Coordinator: Configured host ●     (Hosts placeholder)
 Mission:     Vincennes walk ▾      (open missions on that coordinator; picked if only one)
 Call sign:   ALPHA 1               [Join]
 → joined: "Check in: say where you are"
@@ -274,19 +274,19 @@ The uplink-off setup. Dashed boxes and lines are not built yet, as of Saturday 2
 ```mermaid
 flowchart LR
     subgraph NET["Wi-Fi with no internet"]
-        NAT["Native app<br/>audio in Server mode, text in phone modes<br/>plain http"]
+        NAT["Native app<br/>records and sends compressed audio<br/>plain http"]
         WEB["Phone web page<br/>needs HTTPS for the microphone"]:::todo
         subgraph MAC["MacBook, M1 Pro"]
             CO["Coordinator<br/>PROVIDER_MODE=local"]
             OLL["Ollama<br/>ministral-3:3b"]
-            WHS["whisper-server<br/>Whisper large-v3-turbo"]
+            WHS["Whisper turbo by default, base with `npm start light`<br/>speech-to-text on the coordinator"]
             ST[("File store<br/>.data/sessions/")]
             RX["Command post<br/>on the Mac's screen"]
             TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
         end
     end
 
-    NAT -- "text" --> CO
+    NAT -- "audio" --> CO
     WEB -. "audio or text" .-> CO
     CO -- "extraction" --> OLL
     CO -- "audio" --> WHS
@@ -306,7 +306,7 @@ Until track C is done, the command post's map still loads from OpenFreeMap and n
 | A | Serve the app from the MacBook over HTTPS the phones accept | 1 to 3 h |
 | A | Prove on iOS and Android, mobile data off, that the microphone opens | 0.5 h |
 | B. Models | The `PROVIDER_MODE` switch | done |
-| B | Local speech-to-text: Whisper large-v3-turbo in whisper-server (whisper.cpp), 574 MB, `npm run stt` [195]. For the transmitter's Server mode and the web page; the phone modes send text | done |
+| B | Local speech-to-text: whisper-server with quantized turbo (base with `npm start light`), VAD and ffmpeg, about 635 MB of host models for both options and VAD | integrated; live validation pending setup |
 | B | Local extraction: Ministral 3 3B through Ollama with the same schema, 3 GB. Built; the prompt is not tuned for it yet | done |
 | C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
@@ -332,17 +332,21 @@ Why HTTPS matters: browsers only open the microphone on HTTPS pages (or `localho
 | Our own certificate authority installed on the phone | Installs a profile once | Our phones only | 1 to 2 h |
 | Real certificate for a domain we own, router points it at the MacBook | Nothing | Any phone, including a judge's | 2 to 3 h, needs a domain and a travel router |
 
-The native transmitter sidesteps this: it may use plain `http://` on the local network, and with on-device speech-to-text (see [Transmitter](#transmitter)) the MacBook only runs extraction and the resolver. The command post on the MacBook's own screen and typed reports need no certificate at all.
+The native transmitter sidesteps this: it may send compressed audio over plain `http://` on the local network. The coordinator runs speech-to-text, extraction and the resolver. The receiver on the MacBook's own screen and typed reports need no certificate at all.
 
 Open calls for Alex: whose phones (ours only, or any phone); travel router or the Mac's hotspot; Ukrainian offline or English and French only (a small model may handle Ukrainian dictionary forms poorly); Mistral's open models first for the European story, or whichever is fastest.
 
 ## Transmitter
 
-- **A radio, not a unit [208]:** the phone picks a mission and sends reports to it with no call sign, so the coordinator reads the sender from the words. It shows only whether a report went, or waits for the operator; questions are answered on the command post [178].
-- **Built:** on-device speech-to-text with Whisper (`whisper.rn`), switchable on screen between the server, `ggml-base-q5_1` (56 MB) and `ggml-small-q5_1` (181 MB). The phone sends text, and the server skips its own speech-to-text. Android's microphone now records PCM WAV through a local Expo module; a Galaxy S10 sent a microphone report to the offline coordinator on 21 Nov. Results and remaining recognition checks are in [transmitter/README.md](../transmitter/README.md). Still to do: measure warm phone transcription times with base and small, and check recognition on live speech.
+- **Startup:** Build changed components with `npm run build`; `npm start` restarts the servers and `npm stop` stops processes. Open the phone app and tap Connect. Start/Stop mission controls are on the receiver. Hosts lists discovered coordinators; the phone automatically follows the newest running mission; developer overrides and direct console commands remain. See [setup](setup.md).
+- **Scope:** phone voice-to-text is replaced by compressed audio capture and coordinator transcription. Keep the simple Connect and automatic mission flow.
+
+- **Merged:** microphone and scenarios send compressed audio to the coordinator. Both phones use expo-audio recording; no phone model is prepared or installed. Existing native dependencies remain compatible with installed builds. See [transmitter/README.md](../transmitter/README.md) for historical comparisons and the pending live check.
+- **A radio, not a unit [208, 222]:** the phone follows the newest running mission and sends reports to it with no call sign, so the coordinator reads the sender from the words. It shows only whether a report went, or waits for the operator; questions are answered on the command post [178].
+- **Current speech path:** compressed audio goes to the coordinator; regular/light Start selects the host model. No phone model is installed.
 - **Later, about one day:** an open microphone with no button, cutting at pauses. Tuning against hall noise is the risk. The microphone is muted while the app speaks a question, and the coordinator learns to drop non-reports and duplicates. Screen-off listening is another half day and not planned.
 - **Stress scenarios** to build as data files: eight to ten call signs at once; late, out-of-order and duplicate reports; several open questions at once; implausible jumps (3 km in 20 s); units that go silent; radio-style audio with static and clipping; mixed languages; a spoken call sign that does not match the device. A laptop script can play many units at once with no phones.
-- **Installing:** iPhones by cable from a Mac with Xcode, with a free Apple ID; each phone needs Developer Mode and the install expires after 7 days. Android by install file. Expo Go cannot run it, because on-device speech-to-text and an open microphone need native modules [59].
+- **Installing:** iPhones by cable from a Mac with Xcode, with a free Apple ID; each phone needs Developer Mode and the install expires after 7 days. Android by install file. Use the existing native development build; its native dependencies are retained [59, 182].
 
 ## Evaluation harness
 

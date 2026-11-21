@@ -2,6 +2,22 @@
 
 One speaker's path works end to end on the live site, in two areas and three languages. The shared command post works on a coordinator that runs on a computer; the live site does not keep reports yet. Local mode and the evaluation harness are not finished. Status as of Friday 20 November, evening.
 
+## Build, start and stop (21 November)
+
+`npm run build` fingerprints source/dependencies, builds changed components and loads a
+changed or missing phone app on the connected device. `npm start` stops existing project
+servers and starts whisper-server, Ollama, coordinator/web server and Metro; it does not build or launch
+the phone app. `npm stop` stops project components and the connected phone app. The private
+local process controller exits on Stop. The normal Next output is `.next`; state is `.run`.
+
+The phone detects the configured coordinator, offers Connect, and shows whether a mission
+is running. Start mission/Stop mission live on the receiver. Phones automatically join the newest running mission and follow newer missions between reports. Open missions survive server
+restarts. Hosts lists reachable coordinators from the USB/Metro bootstrap and Bonjour LAN discovery; developer settings and direct console commands
+remain. Phone utterances now carry compressed audio; speech-to-text runs on the coordinator. See [setup](setup.md).
+
+`/api/health` returns Ready after local extraction warm-up and Whisper readiness, or after a hosted provider is
+configured. Hosted readiness checks configuration, not live provider availability.
+
 ## The parts
 
 - **Transmitter**: anything that captures a spoken report. Today that is the phone web page and a native app in `transmitter/`. Lysk's real users may well use radios; the coordinator does not care where a report comes from [58].
@@ -62,7 +78,7 @@ The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed
 flowchart TB
     IN["POST /api/report<br/>audio or text, area, language, lastPosition,<br/>session, callsign, seq, clientTs"]
     CTX["Mission context, only with a session<br/>reportContext in lib/reports/record.ts<br/>area, last position and tracks from the log"]
-    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>Mistral voxtral-mini-transcribe-3, report words and place names as context_bias,<br/>or Whisper large-v3-turbo in local mode, in the device's language"]
+    STT["Step 1: speech-to-text, skipped for text<br/>Transcriber in lib/providers/transcriber.ts<br/>local Whisper turbo by default, base with `npm start light` or hosted Mistral"]
     subgraph VOICES["For each voice"]
         EXT["Step 2: extraction<br/>IntentExtractor in lib/providers/extractor.ts<br/>mistral-small-latest, or ministral-3:3b in local mode<br/>strict JSON schema, never coordinates"]
         SUB["Step 3a: who is it about<br/>resolveReport in lib/geo/tracks.ts<br/>the speaker, a track, or unclear"]
@@ -92,35 +108,25 @@ Each box names the function or interface that does the step. Steps 2 and 3 run o
 
 ```mermaid
 flowchart TB
-    MIC["Hold to talk"]
-    CLIP["Scenario clip<br/>transmitter/scenarios/"]
-    OPEN["Open microphone"]:::todo
-    STT{"Speech-to-text<br/>setting"}
-    WH["Whisper on the phone<br/>whisper.rn, base or small<br/>place names and report words as a hint"]
-    UTT["Utterance: audio or text<br/>transmitter/src/types.ts"]
-    SEND["Send<br/>transmitter/src/transport.ts"]
-    PICK["Pick a mission<br/>transmitter/src/mission.ts"]
-    CO["Coordinator"]
-    LINE["Status line: sent,<br/>held for the operator,<br/>or not sent"]
-
-    MIC & CLIP & OPEN --> STT
-    STT -- "server" --> UTT
-    STT -- "phone" --> WH -- "text" --> UTT
-    UTT --> SEND -- "POST /api/report" --> CO
-    CO -- "GET /api/sessions" --> PICK -- "the code, as session" --> SEND
-    CO -- "reply" --> LINE
-
-    classDef todo stroke-dasharray: 5 5
+    HOST["Discover hosts; Connect"] --> MISSION["Newest running mission"]
+    MIC["Hold to talk"] --> UTT["Utterance: compressed audio"]
+    CLIP["Developer scenario clip"] --> UTT
+    MISSION --> SEND["Send with mission code"]
+    UTT --> SEND --> CO["Coordinator: transcribe, read sender, extract, resolve"]
+    CO --> STATUS["Phone: sent, held, or not sent"]
+    CO --> CP["Command post: operator answers and places held reports"]
 ```
 
-The open microphone is not built ([plan](plan.md#transmitter)). Every source ends in the same utterance and the same send path, so a scenario clip goes the way a recording does [60, 61]. The transmitter has no map; the command post shows it. Like a radio, it sends no call sign from the microphone and does not answer or speak questions: the operator does that on the command post [178, 208].
+No mission picker or join step. The sender says its call sign; the coordinator reads it
+against the mission roster. New missions are followed between reports. The phone performs
+no speech-to-text. Developer tools contain scenarios and connection overrides.
 
 ## Where each step runs
 
 | Step | Where |
 |---|---|
 | Recording | On the phone |
-| Speech-to-text | Mistral's API, called from our server in Paris; or on the phone, in the native app [71 to 74] |
+| Speech-to-text | Mistral's API, called from our server in Paris; or Whisper turbo by default, base with `npm start light` on the coordinator in local mode [182] |
 | Intent extraction | Mistral's API, same route; or Ollama on the same computer in local mode [83] |
 | Resolving the place | Our server; plain code, no AI, no outside calls |
 | Map | On the phone; tiles, fonts and icons from OpenFreeMap |
@@ -141,7 +147,7 @@ The open microphone is not built ([plan](plan.md#transmitter)). Every source end
 | Stated distances, eight compass points, dead reckoning | resolver and extractor | Live since the deploy of 21 November |
 | Clock directions ("at 3 o'clock"), read in code [198] | `lib/geo/clock.ts`, extractor and resolver | Unit-tested with the report of 21 November; not yet spoken again through the live pipeline |
 | Native transmitter (Expo 58, React Native) | `transmitter/` | iPhone 13 mini through the Mac coordinator: Kyiv scenario 10 of 10 steps on 20 Nov, round trip 1.2 to 1.9 s [79]. On 21 Nov a Galaxy S10 recorded PCM WAV through a local Expo module; two live town-hall reports reached the offline coordinator and placed its unit on the command post. |
-| On-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
+| Historical on-device speech-to-text in the transmitter (Whisper via `whisper.rn`) | `transmitter/src/stt.ts` | Built. In the simulator, on the 9 scenario steps: server 9 of 9; phone `small` 8 of 9; phone `base` 8 of 9 with place-name hints and 4 of 9 without. Every miss was a question or "could not place", never a wrong pin. Speed on a real phone is not measured [71 to 74]. |
 | Scenarios with expected answers | `scenarios/*.json`; clips in `transmitter/scenarios/audio/` | 4 scenarios, 29 clips, synthetic voices: Vincennes, Kyiv, Izium (9 steps) and `vincennes-tracks.json` (11 steps, made-up tracks, 21 November). The transmitter's ✓ and ✗ also check a step's track: its number, whose it is and what it is. |
 | Shared map, call signs, replay | `app/cp/page.tsx`, `components/CommandPost.tsx`, `lib/reports/`, `app/api/answer`, `app/api/sessions/[code]` | Built 20 Nov. Checked in a desktop browser with typed reports from three call signs: markers, open question, answered movement with its arrow, dimming, replay. A Galaxy S10 sent two live reports on 21 Nov; not yet checked on a projector. Works only where the coordinator keeps a file (the Mac); the live site keeps no record [101]. |
 | Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/MissionCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. Since decision 208 the transmitter picks a mission instead of joining; joining stays on the coordinator for older phones. |

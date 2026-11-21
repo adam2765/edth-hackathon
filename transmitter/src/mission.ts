@@ -38,6 +38,7 @@ export async function fetchMissions(serverUrl: string): Promise<MissionListReply
 // ---- kept on the phone ----
 
 export interface Saved {
+  server?: string;
   /** The mission this phone is on, and the coordinator it is on: picked again on start. */
   mission?: { server: string; code: string };
 }
@@ -49,9 +50,10 @@ export function loadSaved(): Saved {
     const f = savedFile();
     if (!f.exists) return {};
     // `joined` is what a phone that joined kept before [114]: its code still picks the mission.
-    const s = JSON.parse(f.textSync()) as { mission?: unknown; joined?: unknown };
+    const s = JSON.parse(f.textSync()) as { server?: string; mission?: unknown; joined?: unknown };
     const m = (s.mission ?? s.joined) as { server?: unknown; code?: unknown } | undefined;
-    if (m && typeof m.server === "string" && typeof m.code === "string") return { mission: { server: m.server, code: m.code } };
+    if (!m) return { server: s.server };
+    if (m && typeof m.server === "string" && typeof m.code === "string") return { server: s.server ?? m.server, mission: { server: m.server, code: m.code } };
   } catch {
     // Unreadable: start with no mission.
   }

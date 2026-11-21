@@ -37,6 +37,13 @@ flowchart TB
     SCN -- "Scenario file" --> SRC
 ```
 
+## Runtime readiness
+
+`GET /api/health` returns `{ app: "voice-to-map", id, name, port, ready: boolean }`, HTTP 200 when ready or 503 otherwise,
+with no cache. In local mode ready means all area prompts warmed successfully; hosted
+mode checks that a provider key exists, not that its remote service is reachable.
+`GET /api/hosts` returns `{ hosts: [{ id, name, urls }] }` for the current server and LAN coordinators. The phone verifies readiness and mission storage before offering Connect. Native reports require a mission and a saved-report acknowledgement. No report/reply fields change.
+
 ## Report endpoint
 
 `POST /api/report`, multipart form:
@@ -130,7 +137,7 @@ A track is something on the map that is not a reporting unit: a unit sees it, or
 
 ## Utterance (transmitter side)
 
-One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scenario, open_mic), the audio file or the text, start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
+One spoken report, whatever produced it: `seq`, optional scenario `callsign`, `source` (mic, scenario, open_mic), an audio file URI and MIME type (or text for developer callers), start and end times. Every source feeds the same send path, so a scripted clip goes down exactly the path a recording does [60, 61]. Defined in `transmitter/src/types.ts`.
 
 ## Scenario file
 
@@ -145,3 +152,7 @@ One spoken report, whatever produced it: `seq`, `callsign`, `source` (mic, scena
 `Transcriber.transcribe(audio, mime, biasTerms, { language }) → { text, language }` and `IntentExtractor.extract(text) → Intent`. Local mode adds a second implementation of each behind one switch, `PROVIDER_MODE=hosted|local`: whisper-server and Ollama on the computer [83, 195]. `language` is the language the device pinned; Whisper listens for it, Mistral ignores it. Whisper takes no bias terms.
 
 `ReplyReader.read(reply, question) → { kind, choice }` reads a reply to an open question ([ask-back.md](ask-back.md)). Same providers and switch. Only the reply eval uses it so far [199].
+
+In local mode audio goes to loopback whisper-server; an unavailable or loading speech
+service returns HTTP 503. The phone allows up to 60 s for coordinator speech and extraction
+and requires `report_id` before showing a successful saved report.

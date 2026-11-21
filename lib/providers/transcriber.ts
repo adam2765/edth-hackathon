@@ -3,8 +3,8 @@
  *   hosted  Mistral, with MISTRAL_API_KEY. Mistral is asked to tell speakers apart (diarization):
  *           where the speaker changes, the transcript gets a ">>" mark, the same mark
  *           lib/geo/voices.ts splits voice turns at. MISTRAL_STT_DIARIZE=0 turns it off.
- *   local   Whisper large-v3-turbo in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
- *           (decision 195). Audio never leaves the computer. It does not tell speakers apart.
+ *   local   Whisper in whisper-server (whisper.cpp) on this computer, at WHISPER_URL
+ *           (decisions 195, 215). Audio never leaves the computer. It does not tell speakers apart.
  * GRADIUM_API_KEY is recognised but its transcriber is not built in stage 1.
  */
 import { providerMode, whisperUrl } from "./mode";
@@ -143,6 +143,7 @@ export function withoutSoundMarks(text: string): string {
  * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
  * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
  * scenario clips and twice put a prompt word in the transcript (docs/stt-comparison.md).
+ * Light mode uses base with the same request format; its accuracy is not remeasured.
  */
 class WhisperServerTranscriber implements Transcriber {
   name = "whisper-server";
@@ -185,13 +186,15 @@ export function getTranscriber(): Transcriber {
 }
 
 /** Says at start-up whether whisper-server answers, so a missing one shows before the first spoken report. */
-export async function checkLocalTranscriber(): Promise<void> {
+export async function checkLocalTranscriber(): Promise<boolean> {
   const url = whisperUrl();
   try {
     const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3_000) });
     if (res.ok) console.log(`[stt] whisper-server ready at ${url}`);
     else console.warn(`[stt] whisper-server at ${url} is still loading its model`);
+    return res.ok;
   } catch {
-    console.warn(`[stt] No whisper-server at ${url}: spoken reports will fail until it runs. Start it with \`npm run stt\` (docs/setup.md, part 3); typed reports and the phone's own speech-to-text work without it.`);
+    console.warn(`[stt] No whisper-server at ${url}: spoken reports will fail until it runs. Run \`npm run build\` then \`npm start\`; typed reports still work without it.`);
+    return false;
   }
 }

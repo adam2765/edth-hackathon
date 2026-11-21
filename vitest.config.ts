@@ -7,6 +7,6 @@ export default defineConfig({
   test: {
     // The native transmitter app in transmitter/ has its own tooling. Other sessions' worktrees
     // in .claude/worktrees/ are whole copies of the repo and run their own tests.
-    exclude: ["**/node_modules/**", "transmitter/**", ".next/**", ".claude/**"],
+    exclude: ["**/node_modules/**", "transmitter/**", ".next/**", ".run/**", ".claude/**"],
   },
 });

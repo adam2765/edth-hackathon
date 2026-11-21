@@ -22,14 +22,15 @@ export interface SendResult {
   roundTripMs: number;
 }
 
-const TIMEOUT_MS = 20_000;
+// Allow the coordinator speech and extraction timeouts to finish before the phone gives up.
+const TIMEOUT_MS = 60_000;
 
 /**
- * Sends one utterance to the coordinator: audio if there is a clip, otherwise the text. A test clip
- * ("Send clips") goes beside the text, with Whisper's segments; it may be all there is when the
- * phone heard no words.
+ * Sends microphone/scenario audio to the coordinator for transcription, or developer text.
+ * Legacy clip fields are still accepted for compatibility with older developer clients.
  */
 export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<SendResult> {
+  if (!ctx.session) throw new Error("Wait for a running mission before reporting.");
   const form = new FormData();
   if (u.audioUri) {
     // Expo's fetch does not take React Native's old `{ uri, name, type }` part; it takes a
@@ -67,6 +68,7 @@ export async function sendUtterance(u: Utterance, ctx: SendContext): Promise<Sen
     // A page that is not JSON (a proxy's error page) is read as no answer, with the HTTP status.
     const reply = ((await res.json().catch(() => null)) ?? {}) as ReportReply;
     if (!res.ok || reply.error) throw new CoordinatorError(reply.error ?? `Coordinator answered ${res.status}`, res.status, !!reply.ended);
+    if (!reply.report_id && !reply.held) throw new Error("The server did not acknowledge saving this report in the mission.");
     return { reply, roundTripMs: Date.now() - t0 };
   } finally {
     clearTimeout(timer);
