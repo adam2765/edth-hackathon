@@ -389,11 +389,20 @@ const only = <T>(xs: T[]): T | null => (new Set(xs).size === 1 ? xs[0] : null);
  * One compass word is not both. Two different ones for the same role are not a reading: that one
  * is left out, and the app asks.
  * When no compass word is found at all, the model's reading is kept: the word lists may miss one.
+ * Except a heading beside a bearing or a clock direction [246]: "unknown vehicle, bearing 060, 300
+ * metres" says where the thing is, and no word says it moves. The offline model read that angle as
+ * "moving east" too, every time, and the map drew an arrow nobody had said. So with a bearing or a
+ * clock direction in the words and no compass word, the model's heading is left out.
  * Returns the intent to place with, and what changed, for the evidence.
  */
 export function compassChecked(intent: Intent, transcript: string, placeAlone: boolean): { intent: Intent; why: string | null } {
   const words = compassWordsSaid(transcript);
-  if (words.length === 0) return { intent, why: null };
+  if (words.length === 0) {
+    if (intent.track_heading && (clockSaid(transcript) || bearingInWords(transcript))) {
+      return { intent: { ...intent, track_heading: null }, why: `no compass word, and the angle said is where it is: moving not said (read ${intent.track_heading})` };
+    }
+    return { intent, why: null };
+  }
   const by = (role: CompassRole) => words.filter((w) => w.role === role).map((w) => w.dir);
   const backed = (d: Direction | null | undefined) => d != null && words.some((w) => w.dir === d && w.role === "unclear");
   const going = by("going");
