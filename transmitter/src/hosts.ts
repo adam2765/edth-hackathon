@@ -7,14 +7,6 @@ async function json(url: string) {
   const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(2500) });
   return await res.json();
 }
-/**
- * The coordinator the person connected to, found at a new address: nothing answers at the old one
- * any more, but a ready host with the same id does (the computer moved network or was renamed).
- */
-export function movedTo(found: FoundHost[], serverUrl: string, connectedId: string | null): FoundHost | undefined {
-  if (!connectedId || found.some((h) => h.url === serverUrl)) return undefined;
-  return found.find((h) => h.id === connectedId && h.ready);
-}
 // Metro gives the phone a bootstrap host; that host browses LAN advertisements.
 // USB loopback and remembered hosts also work, without a native discovery module.
 export async function discoverHosts(candidates: Array<string | null | undefined>): Promise<FoundHost[]> {

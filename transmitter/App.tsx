@@ -12,7 +12,8 @@ import { CoordinatorError, loadSaved, writeSaved, type Saved } from "./src/missi
 import { positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Resolution, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button } from "./src/ui/controls";
-import { discoverHosts, movedTo, serverOrigin, type FoundHost } from "./src/hosts";
+import { movedTo } from "./src/follow";
+import { discoverHosts, serverOrigin, type FoundHost } from "./src/hosts";
 import { searchNearby } from "./src/search";
 import { fmtTime, type Reach, type StepResult } from "./src/ui/model";
 import { ScenarioCard } from "./src/ui/ScenarioCard";

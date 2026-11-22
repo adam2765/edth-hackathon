@@ -55,7 +55,7 @@ describe("the coordinator on the local network", () => {
 });
 
 describe("the phone following its coordinator", async () => {
-  const { movedTo } = await import("../transmitter/src/hosts");
+  const { movedTo } = await import("../transmitter/src/follow.js");
   const missions = { stored: true as const, missions: [] };
   const host = (id: string, url: string, ready = true) => ({ id, name: id, url, ready, missions });
   const renamed = "http://Alexs-MacBook-Pro-7.local:3117";
