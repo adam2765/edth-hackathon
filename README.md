@@ -178,7 +178,7 @@ On the command post, use **Start mission**; the phone follows the newest running
 **Stop mission** ends reporting and keeps the log for replay. Starting/stopping servers
 and starting/stopping missions are separate actions.
 
-Hosts lists reachable coordinators discovered through the USB/Metro host and LAN advertisements. Tap Connect beside the server you want. Manual host override,
+Hosts lists reachable coordinators discovered through the USB/Metro host, LAN advertisements and, on an iPhone, the phone's own search of the local network. Tap Connect beside the server you want. Manual host override,
 scenarios and test settings are under Developer tools. The phone records audio; voice-to-text runs on the coordinator. The mission supplies the area. Replay controls open through **Replay**.
 
 Local inference is the default; install Ollama, whisper.cpp and ffmpeg on the host once. No AI model is installed on the phone. Advanced developers can

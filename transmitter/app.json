@@ -14,7 +14,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Sends reports to the coordinator when it runs on a computer on the same network."
+        "NSLocalNetworkUsageDescription": "Sends reports to the coordinator when it runs on a computer on the same network.",
+        "NSBonjourServices": ["_voicetomap._tcp"]
       }
     },
     "android": {
