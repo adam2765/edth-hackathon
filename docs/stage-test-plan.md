@@ -332,7 +332,7 @@ Things that will happen on stage at least once. Each is done once in pass 4, by 
 Ten minutes before, at the venue.
 
 1. The Mac is on power. On the cable, its Wi-Fi is off, to show offline. On the phone's hotspot, the phone's mobile data is off instead.
-2. The servers are up in offline mode ([setup.md](setup.md)): the coordinator, Ollama with `ministral-3:3b`, and Whisper. Nothing else is using Ollama: no second coordinator, no eval.
+2. The servers are up in offline mode ([setup.md](setup.md)): the coordinator, Ollama with `ministral-3:3b`, and Whisper. Nothing else is using Ollama: no second coordinator, no eval. The map's corner says "Map saved on this computer" [239]. If it says "Base map not available", the map was not fetched on this Mac: with internet, run `npm run basemap -- vincennes`, then Start again; the units draw on a plain background meanwhile.
 3. The phone reaches the Mac, on the cable or the hotspot. Reopen the app after any change of link. The phone's language is English.
 4. Every other mission is ended. Then a fresh one: Vincennes, start point Château de Vincennes, roster ALPHA 1, BRAVO 2, CHARLIE 3.
 5. CHARLIE 3 is marked Drone team.

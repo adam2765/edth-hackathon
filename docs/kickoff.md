@@ -83,7 +83,7 @@ Checked on Friday night, 20 November.
 | One speaker's path, end to end, on the live site: Vincennes and central Kyiv | The live site keeps no reports, so its receiver is empty. |
 | Shared map, call signs, replay; missions that open, are joined and end | A run with two or three real phones and a projector |
 | Native app on an iPhone, with speech-to-text on the phone | The Android microphone ([handoff](handoff-android-microphone.md)) |
-| Offline mode: intent on the Mac through Ollama, no key needed | The offline network, HTTPS and the offline map |
+| Offline mode: intent on the Mac through Ollama, no key needed; the map, saved on the Mac by `npm run basemap` (22 Nov) | The offline network and HTTPS |
 | Crossings, distance and compass direction, same-name streets in two towns | Grid references, spoken coordinates, nicknames that are on no map |
 | Unit tests for the resolver, and two scripted scenarios | The evaluation harness; real Ukrainian speech; an error figure from a field walk |
 | A third area: Izium, a town near the front, built on Saturday night with its own 9-step script ([gazetteer.md](gazetteer.md#izium-added-saturday-21-november)) | The pitch: story, deck, video |

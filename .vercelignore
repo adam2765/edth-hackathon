@@ -10,6 +10,9 @@
 /public/ort
 /public/tts
 
+# the saved base map for offline mode (npm run basemap); the hosted site uses OpenFreeMap
+/public/basemap
+
 # local copy of the voice model, and the record of reports
 /models
 /.data
