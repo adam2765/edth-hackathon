@@ -4,7 +4,7 @@ import { pinnedLanguage } from "@/lib/providers/extractor";
 import { biasTerms, loadGazetteer } from "@/lib/geo/gazetteer";
 import { withTrackNumber, type KnownTrack } from "@/lib/geo/tracks";
 import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/reports/clips";
-import { AREAS, DEFAULT_AREA, isAreaId, speechHints, type AreaId } from "@/lib/geo/areas";
+import { AREAS, DEFAULT_AREA, isAreaId, speechHints, whisperPrompt, WHISPER_PROMPT_PLACES, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { missionRoster } from "@/lib/reports/mission";
 import { readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
@@ -26,9 +26,9 @@ const AREA_DATA = Object.fromEntries(
     const gazetteer = loadGazetteer(id);
     // The report words first, so the 100 always hold them.
     const words = AREAS[id].speechWords;
-    return [id, { gazetteer, bias: [...words, ...biasTerms(gazetteer, 100 - words.length)] }];
+    return [id, { gazetteer, bias: [...words, ...biasTerms(gazetteer, 100 - words.length)], places: biasTerms(gazetteer, WHISPER_PROMPT_PLACES) }];
   }),
-) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[] }>;
+) as Record<AreaId, { gazetteer: GazetteerFeature[]; bias: string[]; places: string[] }>;
 
 const NO_WORDS: Record<string, string> = {
   // Bangs, rain or a phone held away gave empty transcripts in the noise tests: say what helps [192].
@@ -201,9 +201,11 @@ export async function POST(req: Request) {
       const s = performance.now();
       // A speaker whose language is not the area's gets phrases in their own language first [190].
       // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
-      // On a radio net, the roster's call signs go first, so Voxtral hears them [205]. Whisper here takes no prompt [195].
+      // On a radio net, the roster's call signs go first, so Voxtral hears them [205].
+      // Whisper here gets a short prompt instead: the roster and ten place names, none in Cyrillic [247].
       const hints = [...roster, ...speechHints(area, bias, pinned)].slice(0, 100);
-      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", hints, { language: pinned });
+      const prompt = whisperPrompt(roster, AREA_DATA[area.id].places);
+      const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", hints, { language: pinned, prompt });
       timings.stt = Math.round(performance.now() - s);
       transcript = r.text;
       sttLanguage = r.language;
