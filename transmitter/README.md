@@ -121,7 +121,7 @@ for them itself: `modules/coordinator-search` is a small local Expo module (iOS 
 looks for the `_voicetomap._tcp` service each coordinator advertises, listed under
 `NSBonjourServices` in `app.json`. The phone verifies each candidate. The module is native, so
 an iPhone needs one rebuild to get it (`npm run build`); an older build, and Android, find
-coordinators through the addresses they already know [247].
+coordinators through the addresses they already know [248].
 
 ## Speech-to-text on the coordinator
 

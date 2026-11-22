@@ -88,6 +88,29 @@ export function speechHints(area: Area, areaHints: string[], speaker: "en" | "fr
   return [...SPEAKER_PHRASES[speaker], ...areaHints].slice(0, 100);
 }
 
+/**
+ * Place names in the offline Whisper prompt [247]. Ten fixed a real voice's "Château de Vonsen";
+ * thirty did not, nor did the 100 Voxtral gets. Whisper reads only the end of a long prompt.
+ */
+export const WHISPER_PROMPT_PLACES = 10;
+/** Call signs in the offline Whisper prompt, at most. */
+const WHISPER_PROMPT_CALLSIGNS = 10;
+const CYRILLIC = /[Ѐ-ӿ]/;
+
+/**
+ * The prompt for offline Whisper [247]: the roster's call signs, then the area's likeliest place
+ * names, most useful first as `biasTerms` gives them, ending in a full stop. Whisper copies the
+ * prompt's style: without the full stop it dropped the transcript's, and the local model then read
+ * "Je suis à la mairie de Vincennes" as ambiguous. No report words: a prompt word can turn up in
+ * the transcript, and "Track 2" there would be a track. null where the names are in Cyrillic:
+ * with Izium's names, turbo wrote an English report in Cyrillic [195].
+ */
+export function whisperPrompt(roster: string[], places: string[]): string | null {
+  const names = places.slice(0, WHISPER_PROMPT_PLACES);
+  if (!names.length || names.some((n) => CYRILLIC.test(n))) return null;
+  return `${[...roster.slice(0, WHISPER_PROMPT_CALLSIGNS), ...names].join(", ")}.`;
+}
+
 export const DEFAULT_AREA: AreaId = "vincennes";
 
 export function isAreaId(x: unknown): x is AreaId {
