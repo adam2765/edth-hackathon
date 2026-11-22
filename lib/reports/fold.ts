@@ -58,6 +58,11 @@ export interface UnitState {
   kind: TrackKind | null;
   /** For a unit whose kind is drone or drone team: the track the command post sent it to look at [235]. */
   task: { n: number; ts: number; by: string } | null;
+  /**
+   * Its latest report asked something with no choices ("How far east is it?") and nothing has
+   * closed it yet: the operator asks it by radio, or closes it [238].
+   */
+  prompt: { reportId: string; ts: number; question: string } | null;
 }
 
 /**
@@ -147,6 +152,10 @@ export interface FeedItem {
   answer: { ts: number; choice: string | null; name: string | null; by: string | null } | null;
   /** The mission ended while the question was open, so it can no longer be answered. */
   expired: boolean;
+  /** What the report asked, with choices or without; absent when it asked nothing. */
+  question?: string | null;
+  /** The same unit reported again while the question was open, so it is closed and cannot be answered [237]. */
+  overtaken?: boolean;
   /** For a radio report: how its sender was found [202]. */
   sender?: Sender;
 }
@@ -336,10 +345,23 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
     if (!u) {
-      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null, kind: null, task: null };
+      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null, kind: null, task: null, prompt: null };
       units.set(callsign, u);
     }
     return u;
+  };
+
+  /**
+   * A question the unit has moved past: its own later report closes it, and an answer that comes
+   * after would place it from where it was before [237].
+   */
+  const overtake = (reportId: string) => {
+    const item = feed.get(reportId);
+    if (item && !item.answer && !item.expired && !item.overtaken) {
+      item.overtaken = true;
+      item.outcome = `${item.outcome} Overtaken by a later report.`;
+    }
+    for (const t of tracks.values()) if (t.pendingReport === reportId) t.pendingReport = null;
   };
 
   const move = (u: UnitState, p: UnitPosition, ts: number) => {
@@ -527,14 +549,17 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
 
     if (e.kind === "end") {
       if (mission) mission.ended = e.ts;
-      // Questions still open can no longer be answered.
+      // Questions still open, with choices or without, can no longer be answered.
       for (const u of units.values()) {
-        const item = u.pending ? feed.get(u.pending.reportId) : undefined;
-        if (item) {
-          item.expired = true;
-          item.outcome = `${item.outcome} Not answered before the mission ended.`;
+        for (const id of [u.pending?.reportId, u.prompt?.reportId]) {
+          const item = id ? feed.get(id) : undefined;
+          if (item) {
+            item.expired = true;
+            item.outcome = `${item.outcome} Not answered before the mission ended.`;
+          }
         }
         u.pending = null;
+        u.prompt = null;
         u.task = null;
       }
       for (const t of tracks.values()) {
@@ -696,6 +721,12 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       const seen = e.track ? seeTrack(e, e.track) : null;
       // A held radio report the operator gave to this unit leaves the tray [203].
       if (e.sender?.held) held.delete(e.sender.held);
+      // Whatever the unit says next overtakes a question with no choices it was asked [237, 238].
+      if (u.prompt) {
+        overtake(u.prompt.reportId);
+        u.prompt = null;
+      }
+      const asked = u.pending?.reportId ?? null;
       if (e.position && !seen) {
         move(u, e.position, e.ts);
         u.street = streetAfter(u.street, r.candidates.find((c) => c.id === r.evidence.feature_id));
@@ -705,6 +736,9 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       } else if (r.status === "resolved" && !seen) {
         u.pending = null;
       }
+      // A question with choices the unit has moved past, by a new place or a new question, is closed [237].
+      if (asked && u.pending?.reportId !== asked) overtake(asked);
+      if (r.status === "unresolved" && r.question) u.prompt = { reportId: e.id, ts: e.ts, question: r.question };
       feed.set(e.id, {
         kind: "report",
         id: e.id,
@@ -719,6 +753,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         candidates: r.status === "ambiguous" ? r.candidates : [],
         answer: null,
         expired: false,
+        question: r.question ?? null,
         track: seen ? seen.track.n : null,
         ...(e.sender ? { sender: e.sender } : {}),
       });
@@ -736,6 +771,19 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     const chosen = e.choice ? (item?.candidates.find((c) => c.id === e.choice) ?? null) : null;
     // A newer fix since the question beats a late answer to it.
     const reportTs = item?.ts ?? e.ts;
+    // A question with no choices, closed by the command post: nothing moves [238].
+    if (item?.status === "unresolved") {
+      if (u.prompt?.reportId === e.report_id) u.prompt = null;
+      item.answer = { ts: e.ts, choice: null, name: null, by: e.by ?? null };
+      item.outcome = `Closed by ${e.by ?? e.callsign}: ${item.question ?? item.outcome}`;
+      continue;
+    }
+    // An answer to a question the unit had moved past moves nothing; the coordinator now refuses one [237].
+    if (item?.overtaken) {
+      item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null, by: e.by ?? null };
+      item.outcome = `${e.choice ? `${chose} ${chosen?.name ?? e.choice}.` : none} The unit had reported again, so nothing moved.`;
+      continue;
+    }
     if (e.track) {
       // The answer places the track; the speaker stays where they are.
       const t = tracks.get(e.track.n);
