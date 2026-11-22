@@ -10,6 +10,8 @@
   max-width: calc(100% - 20px);
   /* The box itself lets clicks through to the map; only its buttons and field take them. */
   pointer-events: none;
+  /* Grows with the command post's panels on a large screen [245]; 1 where the page sets no --z. */
+  zoom: var(--z, 1);
 }
 
 .row {
@@ -31,6 +33,16 @@
 .out {
   font-weight: 500;
   color: #f2b33d;
+}
+
+/* The grid under the pointer where the tools are folded away [245]: one line at the map's bottom
+   left, level with the map's credits and above the page's sheet or bar, as on a chart. */
+.edge {
+  position: absolute;
+  left: 12px;
+  bottom: calc((var(--sheet-h, 0px) + 2px) / var(--z, 1));
+  z-index: 1;
+  zoom: var(--z, 1);
 }
 
 .row {

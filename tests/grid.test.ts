@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
-import { readGrid, toGrid, toUtm } from "../lib/geo/grid";
+import { readGrid, shortGrid, toGrid, toUtm, typedGrid } from "../lib/geo/grid";
 import { resolve } from "../lib/geo/resolver";
 import { resolveReport } from "../lib/geo/tracks";
 import { positionFromReport } from "../lib/reports/position";
@@ -111,5 +111,26 @@ describe("a grid in a report [223]", () => {
     expect(r.pin).toBeUndefined();
     expect(r.track?.label).toBe("grid DQ 586 101");
     expect(distanceM(r.track!.placement!.pin!, CASTLE)).toBeLessThan(100);
+  });
+});
+
+describe("a grid on the command post [245]", () => {
+  it("writes a point's grid as it is said: the square and six figures", () => {
+    expect(shortGrid(CASTLE)).toBe("DQ 586 101");
+    expect(shortGrid({ lat: 50.450099, lon: 30.523404 })).toBe("UA 241 916");
+  });
+
+  it("reads a grid typed into the place search, with or without its square and zone", () => {
+    for (const typed of ["586 101", "586101", "DQ 586 101", "dq 586 101", "31U DQ 586 101", "31UDQ586101"]) {
+      const g = typedGrid(typed, VINCENNES)!;
+      expect(g, typed).not.toBeNull();
+      expect(shortGrid(g.pin), typed).toBe("DQ 586 101");
+      expect(g.radius_m, typed).toBe(71);
+    }
+    expect(typedGrid(" DQ 5860 1012 ", VINCENNES)).toMatchObject({ text: "DQ 5860 1012", radius_m: 7 });
+  });
+
+  it("leaves a place's name alone, and a grid too wide to place anything in", () => {
+    for (const typed of ["", "12 rue de Paris", "Bérault", "château 2", "58 10", "586 10", "DQ", "586 101 north"]) expect(typedGrid(typed, VINCENNES), typed).toBeNull();
   });
 });

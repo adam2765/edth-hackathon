@@ -231,6 +231,29 @@ export function toGrid(p: LatLon, figures: 6 | 8 | 10 = 8): string {
   return `${u.zone}${band} ${squareOf(u.zone, u.easting, u.northing)} ${e} ${n}`;
 }
 
+/**
+ * The grid of a point as it is said on the radio inside one's own area [245]: the square and six
+ * figures, "DQ 586 101", a 100 m cell. The zone is left out, as a speaker leaves it out.
+ */
+export function shortGrid(p: LatLon): string {
+  return toGrid(p, 6).replace(/^\S+ /, "");
+}
+
+/**
+ * A grid typed into a search box [245]: "586 101", "DQ 586 101", "31U DQ 5860 1012". All of what
+ * was typed must be the grid, with six figures or more: "12 rue de Paris" stays a street, and
+ * "58 10" is a whole square kilometre, too wide to place anything in.
+ */
+export function typedGrid(text: string, centre: LatLon): GridRead | null {
+  const lead = /^(?:\d{1,2}\s*[A-Za-z]\s*)?(?:[A-Za-z]{2}\s*)?/;
+  const t = text.trim();
+  const digits = t.replace(lead, "");
+  if (!/^\d[\d\s]*$/.test(digits)) return null;
+  const n = digits.replace(/\s/g, "").length;
+  if (n < 6 || n % 2) return null;
+  return readGrid(`grid ${t}`, centre);
+}
+
 /** Box of the map on screen. */
 export interface Bounds {
   west: number;

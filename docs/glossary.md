@@ -25,7 +25,7 @@
 | Answer heard | A short spoken answer to a unit's open question ("two", "the metro station"), read in code as one of the choices. It moves nothing: the Decisions list shows the choice picked, and the operator confirms [246] |
 | Overtaken | A question the unit has moved past by reporting again: it is closed, leaves the Decisions list, and an answer to it is refused [241] |
 | Recon done | The command post ends a drone's task: the line goes, and the drone is free to send again. Only a person ends a task [234] |
-| Placed by hand (a unit) | A unit the operator put on the map at the command post, because the app did not place it or placed it wrongly: a click, a dragged dot or a place by name, then a confirm. One `fix` line in the log; no model is involved. The units list says "placed by CP" until the unit's next report [243] |
+| Placed by hand (a unit) | A unit the operator put on the map at the command post, because the app did not place it or placed it wrongly: a click, a dragged dot, a place by name or a typed grid [245], then a confirm. One `fix` line in the log; no model is involved. The units list says "placed by CP" until the unit's next report [243] |
 | Plot | A change to a track made by hand at the command post: place, change, move, gone or back. One `plot` line in the log; no model is involved |
 | Request (for recon) | A unit asking by radio for a drone to look at a track: "send the drone", "request eyes on", «envoyez le drone», «потрібна пташка». Read from the words in code and cut out before the model reads the rest. It waits in the command post's Recon requests tray until a person sends a drone or declines [234] |
 | Session | The code's word for a mission: one code, one append-only log |

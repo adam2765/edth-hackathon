@@ -276,7 +276,7 @@ Adam's work [223, 229 to 233], sorted by whether a soldier would say it, with wh
 | A distance from a grid: "drone 200 metres north of grid 586 101" | Sometimes | **Wrong:** read as about a track that does not exist | No. A gap, in [known-gaps.md](known-gaps.md) |
 | Mils: "1600 mils, 400 metres" | Yes, by mortar and artillery observers | Right: "bearing 090" | No: one more number format to explain |
 | Clock directions: "contact at 2 o'clock" | Yes, but from the way the speaker faces [224] | **Wrong** with "contact": read as the speaker moving | No |
-| The grid lines, the ruler and the grid box on the map page [232] | The operator's tools. The phone hears nothing back [208], and the command post's own map does not have them | | Not on stage. Use the grid box to check that a spoken grid landed in the right cell |
+| The grid lines, the ruler and the grid box on the map page and the command post [232, 245] | The operator's tools. The phone hears nothing back [208] | | Not on stage. To check that a spoken grid landed in the right cell, read the grid after the unit's position on the command post [245], or the grid box on the map page |
 
 The six-figure grids of the stage places, from `toGrid`: town hall and church DQ 588 106, castle DQ 586 101, château metro DQ 588 103, Vincennes station DQ 584 106, Bérault DQ 581 104.
 
