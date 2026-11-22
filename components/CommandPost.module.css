@@ -742,6 +742,29 @@
   color: var(--text);
 }
 
+/* Placing a unit by hand: as quiet as the kind beside it, and filled while its tool is open. */
+.unitMove {
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.unitMove:hover:not(:disabled),
+.unitMove:focus-visible {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.unitMove[aria-pressed="true"] {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
 /* ---------- tracks: what the units have seen ---------- */
 /* The track's standard symbol, on a light tile: its colours are drawn for a light map. */
 .trackSym {
@@ -1573,6 +1596,15 @@
 
 .draftMarker svg {
   display: block;
+}
+
+/* A unit being placed by hand: its dot, in its colour, a little larger than on the map. */
+.draftUnit {
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid #fff;
 }
 
 /* The track picked on the map: the same blue as a picked report. */

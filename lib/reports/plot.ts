@@ -1,14 +1,14 @@
 /**
- * Tracks placed and changed by hand at the command post: checking what the page sent, where a
- * click or a picked place puts the track, how that point is named, and the next track number.
- * Pure, so it is tested without a server. No model is involved anywhere here: the position comes
- * from a person, a click on the map or a place from the gazetteer picked by name.
+ * Tracks placed and changed by hand at the command post, and a unit placed by hand [243]: checking
+ * what the page sent, where a click or a picked place puts it, how that point is named, and the
+ * next track number. Pure, so it is tested without a server. No model is involved anywhere here:
+ * the position comes from a person, a click on the map or a place from the gazetteer picked by name.
  */
 import { AREAS, type AreaId } from "../geo/areas";
 import { bboxHalfDiagonalM, bearingDeg, distanceM, nearestPointOnLines } from "../geo/geo";
 import { AFFILIATIONS, TRACK_KINDS } from "../geo/trackKinds";
 import type { Affiliation, GazetteerFeature, TrackKind } from "../geo/types";
-import type { LogEntry, PlotAction, UnitPosition } from "./types";
+import { callsignOf, type LogEntry, type PlotAction, type UnitPosition } from "./types";
 
 /** The circles a person can give a track they place, in metres. */
 export const PLOT_RADII = [25, 50, 100, 250] as const;
@@ -110,6 +110,25 @@ export function parsePlot(body: unknown, action: PlotAction, n: number | null): 
   const what = parseWhat(b);
   if (typeof what === "string") return { ok: false, error: what };
   return { ok: true, input: { action: "place", ...what, where, radius_m, note } };
+}
+
+/** A unit placed by hand [243]: which unit, where, how sure, and where the information came from. */
+export type FixInput = { callsign: string; where: PlotWhere; radius_m: number; note: string | null };
+
+/**
+ * Checks what the command post sent to `POST /api/sessions/<code>/units/position`: a call sign, and
+ * a point or a place as for a track. Shapes only: whether the unit is on the roster is checked
+ * against the log.
+ */
+export function parseFix(body: unknown): { ok: true; input: FixInput } | { ok: false; error: string } {
+  if (!body || typeof body !== "object") return { ok: false, error: "Expected a JSON object." };
+  const b = body as Record<string, unknown>;
+  if (typeof b.callsign !== "string" || !b.callsign.trim()) return { ok: false, error: "Send `callsign`: the unit." };
+  const where = parseWhere(b);
+  if (typeof where === "string") return { ok: false, error: where };
+  const radius_m = parseRadius(b.radius_m);
+  if (typeof radius_m === "string") return { ok: false, error: radius_m };
+  return { ok: true, input: { callsign: callsignOf(b.callsign), where, radius_m, note: parseNote(b.note) } };
 }
 
 const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
