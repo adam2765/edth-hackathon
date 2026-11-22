@@ -2,10 +2,12 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { matchCallsign } from "../lib/geo/callsigns";
+import { splitRequest } from "../lib/geo/requests";
 import type { Candidate, Resolution } from "../lib/geo/types";
 import { colourMap, foldLog, UNIT_COLOURS } from "../lib/reports/fold";
 import { missionRoster, startPosition, toLastPosition } from "../lib/reports/mission";
-import { afterCallsign, farMove, findSender, REPLY_WINDOW_MS } from "../lib/reports/radio";
+import { afterCallsign, farMove, findSender, REPLY_WINDOW_MS, withoutClosing } from "../lib/reports/radio";
 import {
   addToRoster,
   createMission,
@@ -82,6 +84,16 @@ describe("who sent a radio report", () => {
     expect(f.kind === "held" && f.question).toBe("Heard “Alpha”. Which unit sent this: ALPHA 1 or ALPHA 2?");
   });
 
+  it("a call sign at the end: held with that one unit to confirm, never given to it unasked [237]", () => {
+    // A sign-off and speaking to a unit look the same, so a person says which.
+    const f = findSender("At the château, Alpha 1, over.", [mission], at(10));
+    expect(f).toMatchObject({ kind: "held", reason: "which", heard: "Alpha 1", candidates: ["ALPHA 1"] });
+    expect(f.kind === "held" && f.question).toBe("Heard “Alpha 1” at the end. Was that ALPHA 1?");
+    expect(findSender("Push up to the station and hold the north entrance, Bravo 2.", [mission], at(10))).toMatchObject({ kind: "held", candidates: ["BRAVO 2"] });
+    // No pause before it: no suggestion either.
+    expect(findSender("Linking up alongside Bravo 2.", [mission], at(10))).toMatchObject({ kind: "held", reason: "none", candidates: [] });
+  });
+
   it("a call sign not on the roster checks in: held, never a new unit", () => {
     const f = findSender("Charlie 3, checking in", [mission], at(10));
     expect(f).toMatchObject({ kind: "held", reason: "unknown", read: "CHARLIE 3", candidates: [] });
@@ -136,6 +148,49 @@ describe("the words the model reads", () => {
     expect(afterCallsign("The second one", null)).toBe("The second one");
     expect(afterCallsign("Alphabet soup", "Alpha")).toBe("Alphabet soup");
     expect(afterCallsign("Alpha 1.", "Alpha 1")).toBe("Alpha 1.");
+  });
+
+  it("are the words before a call sign said last, as a sign-off [237]", () => {
+    expect(afterCallsign("At the town hall, Alpha 1, over.", "Alpha 1")).toBe("At the town hall");
+    expect(afterCallsign("Track 1 is hostile. Charlie 3", "Charlie 3")).toBe("Track 1 is hostile");
+    expect(afterCallsign("Moving towards the town hall, this is Bravo 2, over and out", "Bravo 2")).toBe("Moving towards the town hall");
+    expect(afterCallsign("Contact, bearing 060, 300 metres, from Alpha 2, standing by.", "Alpha 2")).toBe("Contact, bearing 060, 300 metres");
+    expect(afterCallsign("Біля школи, Сокіл, прийом.", "Сокіл")).toBe("Біля школи");
+    // A call sign at the start with only "over" after it has nothing before it: as before.
+    expect(afterCallsign("Alpha 1, over.", "Alpha 1")).toBe("over.");
+  });
+
+  it("stop before the words that close a transmission [237]", () => {
+    // Left in, the offline model read "at Vincennes station, over." as no position (22 Nov).
+    expect(afterCallsign("Alpha 1, at Vincennes station, over.", "Alpha 1")).toBe("at Vincennes station");
+    expect(afterCallsign("Alpha 1, at Vincennes station over", "Alpha 1")).toBe("at Vincennes station");
+    expect(afterCallsign("Bravo 2, moving towards the town hall, over and out.", "Bravo 2")).toBe("moving towards the town hall");
+    expect(afterCallsign("Charlie 3, Track 1 is hostile. Out.", "Charlie 3")).toBe("Track 1 is hostile.");
+    expect(afterCallsign("Alpha 1, at the church. Thank you.", "Alpha 1")).toBe("at the church.");
+    expect(afterCallsign("Сокіл, біля школи, прийом.", "Сокіл")).toBe("біля школи");
+    // "out" with no pause before it is part of the report.
+    expect(afterCallsign("Alpha 1, moving out", "Alpha 1")).toBe("moving out");
+    expect(afterCallsign("Alpha 1, the bridge is out.", "Alpha 1")).toBe("the bridge is out.");
+    expect(withoutClosing("crossing over the bridge")).toBe("crossing over the bridge");
+  });
+
+  it("leave a request for recon and its track readable after a sign-off", () => {
+    // The unit the operator is asked to confirm, and what is read once they do.
+    const sender = (said: string) => {
+      const m = matchCallsign(said, ["ALPHA 1", "BRAVO 2", "CHARLIE 3"]);
+      if (m.kind !== "ask" || !m.signoff || m.candidates.length !== 1) throw new Error(`no sign-off in "${said}"`);
+      return { callsign: m.candidates[0], split: splitRequest(afterCallsign(said, m.heard)) };
+    };
+    expect(sender("Unknown vehicle at the town hall, send the drone, Alpha 1, out.")).toEqual({
+      callsign: "ALPHA 1",
+      split: { text: "Unknown vehicle at the town hall", request: { words: "send the drone", n: null }, only: false },
+    });
+    // The call sign goes before the request clause is cut, so the track number is still read.
+    expect(sender("Send the drone to Track 2. Alpha 1, over")).toMatchObject({ callsign: "ALPHA 1", split: { request: { n: 2 }, only: true } });
+    expect(sender("Request eyes on Track 2, Charlie 3.")).toMatchObject({ callsign: "CHARLIE 3", split: { request: { n: 2 }, only: true } });
+    // "eyes on Charlie 3" could be about Charlie 3, so this one waits for the operator: with
+    // "request eyes on", the call sign goes first.
+    expect(matchCallsign("Track 2, request eyes on, Charlie 3.", ["ALPHA 1", "BRAVO 2", "CHARLIE 3"]).kind).toBe("unassigned");
   });
 });
 

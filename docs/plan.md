@@ -298,7 +298,7 @@ flowchart LR
     classDef todo stroke-dasharray: 5 5
 ```
 
-Track C is built [236]: in local mode both maps read the copy saved on the Mac by `npm run basemap -- <area>`, and with no saved copy and no internet they still draw the units on a plain background. How it works is in [architecture.md](architecture.md#the-map-with-no-internet). Not yet checked on the stage Mac with its Wi-Fi off. The saved copy is not in git, so each computer fetches its own, one run an area.
+Track C is built [239]: in local mode both maps read the copy saved on the Mac by `npm run basemap -- <area>`, and with no saved copy and no internet they still draw the units on a plain background. How it works is in [architecture.md](architecture.md#the-map-with-no-internet). Not yet checked on the stage Mac with its Wi-Fi off. The saved copy is not in git, so each computer fetches its own, one run an area.
 
 | Track | Item | Size |
 |---|---|---|
@@ -317,7 +317,7 @@ A, B and C can run in parallel.
 
 Things already found:
 
-- **No PMTiles needed.** Vincennes is 154 tiles with a margin for panning (Kyiv 210, Izium 253), so a plain folder of files does. OpenFreeMap allows an offline download of up to 3,000 tiles or 50 MB, 4 requests at a time [236].
+- **No PMTiles needed.** Vincennes is 154 tiles with a margin for panning (Kyiv 210, Izium 253), so a plain folder of files does. OpenFreeMap allows an offline download of up to 3,000 tiles or 50 MB, 4 requests at a time [239].
 - **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, turbo gets no names at all: on the scenario clips they gained nothing and twice put a word in the transcript [195].
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].

@@ -1,6 +1,6 @@
 # Open questions
 
-Seven questions are for the team to settle; seventeen are for Lysk's mentors. When one is answered, record the answer in [DECISIONS.md](../DECISIONS.md) and remove it here.
+Six questions are for the team to settle; seventeen are for Lysk's mentors. When one is answered, record the answer in [DECISIONS.md](../DECISIONS.md) and remove it here.
 
 ## For the team
 
@@ -8,11 +8,10 @@ To settle at the Saturday 08:00 kickoff ([kickoff.md](kickoff.md)) where we can.
 
 1. **Priority for Saturday.** The shared map and replay are built, so the old choice is gone. Now: local mode (mandatory for the demo) against runs with real phones, evidence, and the pitch. A proposal is in [work-split.md](work-split.md).
 2. **Who owns the pitch.** One person on presentation and pitch from Saturday midday, or shared. Pre-selection starts on Saturday evening ([work-split.md](work-split.md#role-4-evidence-then-pitch)).
-3. **Demo area.** Vincennes, central Kyiv, or Izium, the town near the front built on Saturday night ([gazetteer.md](gazetteer.md#izium-added-saturday-21-november)). Izium is a real town under attack and the repo is public: the same section says what that means for a demo. Lysk may also test somewhere else: a new area is one command and about a minute once we know where ([gazetteer.md](gazetteer.md#adding-an-area)).
-4. **Deploy access.** Connect the Vercel project to GitHub so pushes deploy, or keep CLI deploys from Alex's account.
-5. **Mistral key.** One shared team key, or each person their own.
-6. **Licence.** The repo is public with no licence file. The hackathon's FAQ says all IP stays with the team, and that a partner company may set other terms for its own challenge; Lysk's are unknown (question 15 below).
-7. **The command post's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Decision 1, who answers an open question, is settled: the command post can [178]. Several of the rest wait on question 1 below.
+3. **Deploy access.** Connect the Vercel project to GitHub so pushes deploy, or keep CLI deploys from Alex's account.
+4. **Mistral key.** One shared team key, or each person their own.
+5. **Licence.** The repo is public with no licence file. The hackathon's FAQ says all IP stays with the team, and that a partner company may set other terms for its own challenge; Lysk's are unknown (question 15 below).
+6. **The command post's open decisions.** The Saturday-night review left a list for Alex ([receiver-review.md](receiver-review.md)). Decision 1, who answers an open question, is settled: the command post can [178]. Several of the rest wait on question 1 below.
 
 ## For Lysk
 

@@ -7,7 +7,7 @@
  *   - a report that would move a unit farther than 15 m/s allows [188] asks the operator first.
  * Pure; safe to import on the client.
  */
-import { matchCallsign, type CallsignOptions } from "../geo/callsigns";
+import { beforeSignOff, matchCallsign, onlyClosers, type CallsignOptions } from "../geo/callsigns";
 import { distanceM } from "../geo/geo";
 import type { LastPosition } from "../geo/types";
 import { reachM } from "../geo/voices";
@@ -35,7 +35,9 @@ export function findSender(transcript: string, entries: LogEntry[], now: number,
   if (m.kind === "unit") return { kind: "unit", callsign: m.callsign, sender: { heard: m.heard, how: m.how }, why: m.why };
   if (m.kind === "ask") {
     const which = m.candidates.length === 1 ? `Was that ${m.candidates[0]}?` : `Which unit sent this: ${m.candidates.join(" or ")}?`;
-    return { kind: "held", reason: "which", heard: m.heard, read: null, candidates: m.candidates, question: `Heard “${m.heard}”. ${which}`, why: m.why };
+    // At the end, a call sign may be a sign-off or who is spoken to [237]: the operator says which.
+    const where = m.signoff ? " at the end" : "";
+    return { kind: "held", reason: "which", heard: m.heard, read: null, candidates: m.candidates, question: `Heard “${m.heard}”${where}. ${which}`, why: m.why };
   }
   if (m.read) {
     const question = `${m.read} is not on the roster. Add it, or give the report to a unit.`;
@@ -62,6 +64,10 @@ export function findSender(transcript: string, entries: LogEntry[], now: number,
  * model read "Charlie 3, checking in, at the town hall." as a sighting of something else. The log
  * keeps all the words. `heard` is the call sign as the reader rebuilt it ("Alpha-1" is "Alpha 1"),
  * so it is found word by word. The whole transcript when there is no call sign, or it is not found.
+ *
+ * A call sign said last, as a sign-off [237], leaves the words before it: "At the town hall, Alpha
+ * 1, over" is "At the town hall". It is told by what follows the call sign: nothing, or only
+ * closing words.
  */
 export function afterCallsign(transcript: string, heard: string | null): string {
   if (!heard) return transcript;
@@ -70,7 +76,29 @@ export function afterCallsign(transcript: string, heard: string | null): string 
   const m = new RegExp(`(?<![\\p{L}\\p{N}])${words.join("[^\\p{L}\\p{N}]*")}(?![\\p{L}\\p{N}])`, "u").exec(transcript);
   if (!m) return transcript;
   const rest = transcript.slice(m.index + m[0].length).replace(/^[^\p{L}\p{N}]+/u, "");
-  return rest || transcript;
+  if (onlyClosers(rest)) {
+    const before = beforeSignOff(transcript.slice(0, m.index));
+    if (before) return before;
+  }
+  return withoutClosing(rest) || rest || transcript;
+}
+
+/** "over", and after a pause "out", "standing by", «прийом» and Whisper's "Thank you." for trailing silence. */
+const CLOSING =
+  /(?:(?<=[,.;:!?…—–]\s*)(?:over and out|over|out|standing by|listening|thank you|thanks|termin[ée]|à vous|parlez|merci|прийом|приём|прием|кінець зв['’ʼ]?язку|конец связи|дякую)|(?<![\p{L}\p{N}])over(?: and out)?)[\s.!?,]*$/iu;
+
+/**
+ * The words without the ones that close a transmission [237]: "at Vincennes station, over." is "at
+ * Vincennes station". They say nothing about a place, and left in, the offline model read "at
+ * Vincennes station, over" as no position at all. "out" and the rest go only after a pause, so
+ * "moving out" keeps its words. "over" goes with or without one, since Whisper often writes no
+ * comma before it; "crossing over" at the very end loses its last word. Empty when nothing else
+ * was said.
+ */
+export function withoutClosing(text: string): string {
+  let out = text;
+  while (CLOSING.test(out)) out = out.replace(CLOSING, "").replace(/[\s,;:—–-]+$/u, "");
+  return out === text ? text : out.trim();
 }
 
 export interface FarMove {

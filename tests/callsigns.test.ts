@@ -30,7 +30,10 @@ describe("call signs read from the words", () => {
   it("takes the command post's own call signs from the options", () => {
     expect(unit(matchCallsign("Lysk, this is Alpha 2.", ROSTER, { station: ["LYSK"] }))).toBe("ALPHA 2 exact");
     expect(unit(matchCallsign("Lysk, this is Alpha 2.", ROSTER))).toBe("ALPHA 2 exact"); // "this is" alone finds it
-    expect(unit(matchCallsign("Lysk, Alpha 2.", ROSTER))).toBe("unassigned -");
+    // Not known as the command post, so "Alpha 2" is not read as following it. It is the last
+    // thing said, though, so the operator is asked whether it was ALPHA 2 [237].
+    expect(matchCallsign("Lysk, Alpha 2.", ROSTER)).toMatchObject({ kind: "ask", candidates: ["ALPHA 2"], signoff: true });
+    expect(unit(matchCallsign("Lysk, Alpha 2, at the church.", ROSTER))).toBe("unassigned -");
   });
 
   it("treats the command post speaking as no report from a unit", () => {
@@ -83,6 +86,60 @@ describe("call signs read from the words", () => {
     expect(unit(m("Alpha one, two hundred metres east of the church."))).toBe("ALPHA 1 exact");
     expect(unit(m("Сокіл, два кілометри на північ від школи."))).toBe("СОКІЛ exact");
     expect(unit(m("Alpha one two, at the church.", ["ALPHA 12"]))).toBe("ALPHA 12 exact");
+  });
+
+  it("reads a call sign at the end as a sign-off to confirm, when nothing at the start named a sender [237]", () => {
+    // Always a question with the one unit it may be: it may also be who is spoken to.
+    expect(m("At the town hall, Alpha 1.")).toMatchObject({ kind: "ask", candidates: ["ALPHA 1"], heard: "Alpha 1", signoff: true });
+    expect(unit(m("Moving towards the town hall, Alpha 1, over."))).toBe("ask ALPHA 1");
+    expect(unit(m("Track 1 is hostile. Charlie 3 out."))).toBe("ask CHARLIE 3");
+    expect(unit(m("Send the drone to Track 2, Alpha 1, over"))).toBe("ask ALPHA 1");
+    expect(unit(m("Moving towards the town hall - Alpha 1 - over"))).toBe("ask ALPHA 1");
+    expect(unit(m("At the church, Charlie 3. Thank you."))).toBe("ask CHARLIE 3"); // Whisper's words for trailing silence
+    expect(unit(m("At the church, Alpha won, over and out."))).toBe("ask ALPHA 1");
+    expect(unit(m("Contact, bearing 060, 300 metres, from Alpha 2, standing by."))).toBe("ask ALPHA 2");
+    expect(unit(m("Base, at the town hall, Alpha 1."))).toBe("ask ALPHA 1");
+    expect(unit(m("Біля школи, Сокіл, прийом."))).toBe("ask СОКІЛ");
+    // The same question for an order that ends with who it is for: the reader cannot tell, a person can.
+    expect(unit(m("Push up to the station and hold the north entrance, Bravo 2."))).toBe("ask BRAVO 2");
+    expect(unit(m("Go ahead, Alpha 1."))).toBe("ask ALPHA 1");
+    // "this is" within the first words is the start rule's: a unit, not a question.
+    expect(unit(m("At the town hall, this is Bravo 2."))).toBe("BRAVO 2 exact");
+    // A call sign at the start is not a sign-off.
+    expect(m("Alpha 1, at the town hall.")).toMatchObject({ kind: "unit", callsign: "ALPHA 1" });
+  });
+
+  it("does not take a call sign at the end that the sentence is about", () => {
+    for (const said of [
+      "I'm at the church with Bravo 2.",
+      "Two vehicles near Charlie 3",
+      "I can see Alpha 2, over",
+      "Moving to join Bravo 2.",
+      "Holding at checkpoint Charlie 3",
+      "Je suis avec Bravo 2",
+      "Стою біля Сокола",
+    ])
+      expect(unit(m(said)), said).toBe("unassigned -");
+    // No pause written before it: part of the sentence, whatever the words are. A list of words
+    // that tie a call sign in can never be complete ("linking up alongside Bravo 2").
+    for (const said of ["Track 1 is hostile Charlie 3 out", "Send the drone to Track 2 Alpha 1 over", "Linking up alongside Bravo 2.", "Cannot raise Charlie 3, over.", "About 200 metres from Alpha 2, over."])
+      expect(unit(m(said)), said).toBe("unassigned -");
+    // A question, or words that speak to someone: the call sign is who is spoken to.
+    expect(unit(m("Are you still at the church, Bravo 2? Over."))).toBe("unassigned -");
+    expect(unit(m("Say again your position, Alpha 1."))).toBe("unassigned -");
+    // The command post signs off: it is speaking to the unit named first.
+    expect(m("Alpha 1, move to the station and report, Base out.")).toMatchObject({ kind: "unassigned", station: true });
+    expect(unit(m("Alpha 1 to Base, over."))).toBe("ALPHA 1 exact");
+    // The number has to be said: "Charlie" alone may be a checkpoint or a phase line.
+    expect(unit(m("Holding short, Charlie."))).toBe("unassigned -");
+    expect(unit(m("At the château, Alpha."))).toBe("unassigned -");
+    // The start wins, whatever the end says.
+    expect(unit(m("Alpha 1, I see a vehicle, Bravo 2 out."))).toBe("ALPHA 1 exact");
+    expect(unit(m("Bravo 2 is at the church, Alpha 1."))).toBe("BRAVO 2 exact");
+    // Not the last thing said.
+    expect(unit(m("At the town hall, Alpha 1, moving north."))).toBe("unassigned -");
+    // Not on the roster.
+    expect(unit(m("At the town hall, Delta 4, out."))).toBe("unassigned -");
   });
 
   it("names only roster entries: an empty roster never gives a unit", () => {
