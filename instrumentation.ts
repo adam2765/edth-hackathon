@@ -23,7 +23,7 @@ export async function register() {
   const { checkLocalTranscriber } = await import("./lib/providers/transcriber");
   // Speech readiness is checked live by /api/health, so a later speech-server start can recover.
   void checkLocalTranscriber();
-  // The default area last: Ollama keeps the last prompt and one more, so its first report starts warm [253].
+  // The default area last, so its prompt is the one loaded when the first report comes [254].
   const areas = [...(Object.keys(AREAS) as (keyof typeof AREAS)[]).filter((id) => id !== DEFAULT_AREA), DEFAULT_AREA];
   void warmUpExtractor(areas.map((id) => AREAS[id].place)).then(setReady);
 }

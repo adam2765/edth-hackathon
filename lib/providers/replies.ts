@@ -140,7 +140,7 @@ class ChatJsonReplyReader implements ReplyReader {
       { role: "system", content: replyPrompt() },
       { role: "user", content: replyMessage(reply, question) },
     ];
-    // Ollama through its own endpoint, at the same context as extraction, so the model is not reloaded [253].
+    // Ollama through its own endpoint, at the same context as extraction, so the model is not reloaded [254].
     const native = this.provider === "ollama";
     const res = await fetch(native ? `${this.baseUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
       method: "POST",

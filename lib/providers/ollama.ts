@@ -1,5 +1,5 @@
 /**
- * Ollama's own chat endpoint, for local mode [253]. Ollama maps its OpenAI-compatible
+ * Ollama's own chat endpoint, for local mode [254]. Ollama maps its OpenAI-compatible
  * /v1/chat/completions onto the same handler, but that endpoint takes no context size, so the
  * server's default applied. With 4,096 tokens, Ollama cut the 4,560-token extraction prompt to
  * 2,051 without an error: it keeps the first 5 tokens and the end, and drops the rules between.

@@ -239,7 +239,7 @@ class ChatJsonExtractor implements IntentExtractor {
       { role: "system", content: systemPrompt(opts.place) },
       { role: "user", content: text },
     ];
-    // Ollama through its own endpoint, which takes the context size [253].
+    // Ollama through its own endpoint, which takes the context size [254].
     const native = this.provider === "ollama";
     const res = await fetchRetrying(native ? `${this.baseUrl}/api/chat` : `${this.baseUrl}/chat/completions`, () => ({
       method: "POST",
@@ -290,9 +290,9 @@ export function getExtractor(): IntentExtractor {
 
 /**
  * Loads the local model and each place's prompt before the first report, so no speaker waits for that.
- * Measured on the M1 Pro at 8,192 tokens [253]: 15 s for the first report after a load, 11 s for
- * an area's whole prompt, then 2 to 3 s a report while the area's prompt is still cached. Ollama
- * keeps the last prompt and one more, so with three areas the first one warmed is evicted.
+ * Measured on the M1 Pro at 8,192 tokens [254]: 15 s for the first report after a load, 11 s for
+ * an area's whole prompt, then 2 to 3 s a report while the area's prompt is kept. Ollama kept the
+ * last area's prompt and two more in RAM (about 470 MiB each), so all three areas started warm.
  */
 export async function warmUpExtractor(places: string[]): Promise<boolean> {
   const extractor = getExtractor();

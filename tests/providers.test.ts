@@ -53,7 +53,7 @@ describe("provider mode", () => {
     expect(url).toBe("http://127.0.0.1:3118/inference");
   });
 
-  it("sends the same schema request to Ollama on this computer, with a context the whole prompt fits in [253]", async () => {
+  it("sends the same schema request to Ollama on this computer, with a context the whole prompt fits in [254]", async () => {
     vi.stubEnv("PROVIDER_MODE", "local");
     const reply = { kind: "position", landmark_text: "the town hall", landmark_name: null, landmark_name_lemma: null, landmark_category: "town_hall", relation: "at", distance_m: null, direction: null, language: "en", confidence: 0.9 };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: { role: "assistant", content: JSON.stringify(reply) } })));
@@ -76,7 +76,7 @@ describe("provider mode", () => {
     expect(longest / 3 + 100 + 400).toBeLessThan(LOCAL_NUM_CTX);
   });
 
-  it("reads replies to a question with Ollama at the same context, so the model is not reloaded [253]", async () => {
+  it("reads replies to a question with Ollama at the same context, so the model is not reloaded [254]", async () => {
     vi.stubEnv("PROVIDER_MODE", "local");
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: { content: JSON.stringify({ kind: "pick", choice: 2 }) } })));
     vi.stubGlobal("fetch", fetchMock);
@@ -90,7 +90,7 @@ describe("provider mode", () => {
     expect(JSON.parse(init.body as string).options).toEqual({ temperature: 0, num_predict: 60, num_ctx: LOCAL_NUM_CTX });
   });
 
-  it("starts Ollama from the launcher at the context the requests name [253]", async () => {
+  it("starts Ollama from the launcher at the context the requests name [254]", async () => {
     const { readFileSync } = await import("node:fs");
     const { LOCAL_NUM_CTX } = await import("../lib/providers/ollama");
     expect(readFileSync("scripts/launcher/supervisor.mjs", "utf8")).toContain(`OLLAMA_CONTEXT_LENGTH: '${LOCAL_NUM_CTX}'`);

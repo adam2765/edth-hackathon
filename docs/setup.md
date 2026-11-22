@@ -9,7 +9,7 @@ Agents never read `.env` files or print keys. Setup does not push or deploy the 
 | Needed for | Tools |
 |---|---|
 | Everyone | Git, Node.js 24.3+ and npm; a current browser |
-| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB on disk; about 4 GB of RAM once running, with the 8,192-token context and the areas' prompts kept [253]); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB on disk; about 4 GB of RAM once running, with the 8,192-token context and the areas' prompts kept [254]); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
 | Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
 | iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
@@ -88,9 +88,10 @@ address override, scenarios, test clips and timings. The area comes from the mis
 Voice-to-text is on the coordinator, with no phone provider/model controls.
 
 Android USB uses reverse forwarding; Start restores it without launching the app. On an
-iPhone the app reaches the host’s `.local` name and also searches the local network for
-coordinators itself; after Connect it follows that coordinator to a new address, so a Mac
-that macOS renamed, or that moved to another network, is found again. iPhone builds still need Mac/Xcode and
+iPhone the app reaches the host’s `.local` name. Both phones also search the local network for
+coordinators themselves; after Connect the app follows that coordinator to a new address, so a Mac
+that macOS renamed, or that moved to another network, is found again. An Android phone off the
+cable needs a release build: `transmitter/README.md`, "An Android phone off the cable". iPhone builds still need Mac/Xcode and
 signing; free provisioning expires after seven days. Windows and physical-phone deployment
 paths need validation on the relevant hardware. Offline inference works without internet,
 and so does the map for an area saved with `npm run basemap -- <area>`. The map's corner says
@@ -130,7 +131,7 @@ OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
 The coordinator asks Ollama for a context of 8,192 tokens on every call, so the extraction
 prompt (about 4,560 tokens) is never cut, however Ollama was started. Starting Ollama at the same
 size saves one reload of the model at the first report. At 4,096, Ollama cut the prompt to
-2,051 tokens without an error, and `.run/launcher.log` said `truncating input prompt` (decision 253).
+2,051 tokens without an error, and `.run/launcher.log` said `truncating input prompt` (decision 254).
 
 On PowerShell set the corresponding `$env:` variables first. Native builds remain available
 in transmitter with `npm run android` or `npm run ios` (Mac only). For iOS set

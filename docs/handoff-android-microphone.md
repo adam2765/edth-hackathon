@@ -112,7 +112,7 @@ Do not decode the AAC file into PCM on the phone. That needs a decoder module, w
   OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
   ```
 
-  The prompt was about 2,200 tokens when this was written; on 22 Nov it is about 4,560, and at 4,096 Ollama cut it in the middle (decision 253). The coordinator now asks for 8,192 on every call; starting Ollama at the same size saves a reload. Do not use the 8B model.
+  The prompt was about 2,200 tokens when this was written; on 22 Nov it is about 4,560, and at 4,096 Ollama cut it in the middle (decision 254). The coordinator now asks for 8,192 on every call; starting Ollama at the same size saves a reload. Do not use the 8B model.
 - **Connect the phone to the Mac over the cable:**
 
   ```bash
@@ -182,7 +182,7 @@ OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
 ```
 
 These settings disable cloud features, keep the model loaded between reports, and set
-the context to 8,192 tokens, the size the coordinator asks for (decision 253). Use the 3B model, not the 8B model.
+the context to 8,192 tokens, the size the coordinator asks for (decision 254). Use the 3B model, not the 8B model.
 
 ### Terminal 2: download and check the model
 

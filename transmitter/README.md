@@ -107,6 +107,27 @@ trusted, and in Developer Mode.
 
 Android phones are not covered yet: use the root README's steps.
 
+### An Android phone off the cable
+
+A development build loads its code from Metro through the cable, so it stops working when
+unplugged. Off the cable, install a release build: it carries its code inside [253].
+
+1. Put the phone and the Mac on one network that lets them reach each other. The venue Wi-Fi
+   does not; the phone's own hotspot, with the Mac joined, does.
+2. Build it in `transmitter/`, with Android Studio's JDK. Only `arm64-v8a`, which every recent
+   phone uses, so whisper.rn compiles once instead of four times:
+
+   ```bash
+   npx expo prebuild --platform android --no-install
+   cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a
+   ```
+
+3. Install `android/app/build/outputs/apk/release/app-release.apk` with
+   `adb install -r <file>`, or copy the file to the phone and open it.
+4. Open the app. Setup → Hosts lists the coordinator it finds on the network. If none shows,
+   type `http://<the Mac's address>:3117` under Host override; `ipconfig getifaddr en0` gives
+   the address. If macOS asks, allow incoming connections for `node`.
+
 ## Which coordinator it talks to
 
 A development build loads its code from the computer running the dev server, so it knows that
@@ -116,12 +137,12 @@ computer's address. It sends reports to the coordinator on that same computer, p
 shows whether it answers (re-checked every 5 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
 Setup → Hosts lists discovered reachable coordinators. A manual override remains in
-Developer tools. The Metro/USB host browses LAN advertisements, and an iPhone also browses
-for them itself: `modules/coordinator-search` is a small local Expo module (iOS only) that
-looks for the `_voicetomap._tcp` service each coordinator advertises, listed under
-`NSBonjourServices` in `app.json`. The phone verifies each candidate. The module is native, so
-an iPhone needs one rebuild to get it (`npm run build`); an older build, and Android, find
-coordinators through the addresses they already know [248].
+Developer tools. The Metro/USB host browses LAN advertisements, and the phone also browses
+for them itself: `modules/coordinator-search` is a small local Expo module that looks for the
+`_voicetomap._tcp` service each coordinator advertises. On iOS it uses `NetServiceBrowser`, with
+the type listed under `NSBonjourServices` in `app.json`; on Android it uses `NsdManager`. The
+phone verifies each candidate. The module is native, so a phone needs one rebuild to get it;
+an older build finds coordinators through the addresses it already knows [248, 253].
 
 ## Speech-to-text on the coordinator
 
