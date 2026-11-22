@@ -222,7 +222,15 @@ describe("Whisper on this computer in offline mode (decision 195)", () => {
   const reply = (body: object, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status }));
   const formOf = (fetchMock: ReturnType<typeof vi.fn>) => (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
 
-  it("listens for the device's language, with no prompt", async () => {
+  it("sends the prompt it is given, and only that [247]", async () => {
+    const fetchMock = reply({ text: " Alpha 1 at the Château de Vincennes." });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getTranscriber } = await providers();
+    await getTranscriber().transcribe(clip, "audio/mp4", ["Bérault", "Château de Vincennes"], { language: "en", prompt: "ALPHA 1, Bérault" });
+    expect(formOf(fetchMock).get("prompt")).toBe("ALPHA 1, Bérault");
+  });
+
+  it("listens for the device's language, with no prompt when none is given", async () => {
     // Plain json names no language: the device's is kept, and the server skips scoring every language.
     const fetchMock = reply({ text: " Я біля Центральної районної лікарні." });
     vi.stubGlobal("fetch", fetchMock);
