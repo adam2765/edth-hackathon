@@ -19,9 +19,11 @@ export async function register() {
   }
   console.log("[providers] Offline mode: speech-to-text through Whisper and extraction through Ollama on this computer; no key needed.");
   const { warmUpExtractor } = await import("./lib/providers/extractor");
-  const { AREAS } = await import("./lib/geo/areas");
+  const { AREAS, DEFAULT_AREA } = await import("./lib/geo/areas");
   const { checkLocalTranscriber } = await import("./lib/providers/transcriber");
   // Speech readiness is checked live by /api/health, so a later speech-server start can recover.
   void checkLocalTranscriber();
-  void warmUpExtractor(Object.values(AREAS).map((a) => a.place)).then(setReady);
+  // The default area last, so its prompt is the one loaded when the first report comes [254].
+  const areas = [...(Object.keys(AREAS) as (keyof typeof AREAS)[]).filter((id) => id !== DEFAULT_AREA), DEFAULT_AREA];
+  void warmUpExtractor(areas.map((id) => AREAS[id].place)).then(setReady);
 }

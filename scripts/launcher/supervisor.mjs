@@ -166,7 +166,7 @@ async function start() {
     }, 'Whisper model readiness', 240_000);
     const url = (env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
     if (!['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw new Error('Local mode needs Ollama on this server.');
-    await launch('ollama', root, ['ollama', 'serve'], { OLLAMA_HOST: new URL(url).host, OLLAMA_NO_CLOUD: '1', OLLAMA_KEEP_ALIVE: light ? '30s' : '-1', OLLAMA_CONTEXT_LENGTH: '4096' });
+    await launch('ollama', root, ['ollama', 'serve'], { OLLAMA_HOST: new URL(url).host, OLLAMA_NO_CLOUD: '1', OLLAMA_KEEP_ALIVE: light ? '30s' : '-1', OLLAMA_CONTEXT_LENGTH: '8192' }); // LOCAL_NUM_CTX in lib/providers/ollama.ts [254]
     await waitFor(() => fetch(`${url}/api/version`, { signal: AbortSignal.timeout(1000) }).then((r) => r.ok).catch(() => false), 'Ollama');
   }
   await launch('coordinator', root, [String(config.port)]);
