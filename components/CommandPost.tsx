@@ -7,7 +7,7 @@
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { shortGrid, type GridRead } from "@/lib/geo/grid";
@@ -18,6 +18,7 @@ import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, 
 import { PLOT_RADII, PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
+import { anchorFor, arrangeTracks, moveNextTo, parseOrders, parseTrackView, previewMove, TRACK_GROUPS, TRACK_HIDES, TRACK_SORTS, withSaved, type LaneOrders, type TrackHide, type TrackView } from "@/lib/reports/lanes";
 import { COMMAND_POST, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import DecisionQueue from "./DecisionQueue";
@@ -196,6 +197,42 @@ const TRACK_SYMBOL_SIZE = 24;
 /** The dots that flow along a unit's arrow [238]: pixels from one to the next, and how far from the unit's marker the first one shows. */
 const FLOW_DOT_GAP = 14;
 const FLOW_DOT_SKIP = 12;
+
+/**
+ * The lanes' order and the tracks' sort, groups and filter, kept in this browser only [259]: two
+ * operators can each keep their own, and nothing goes into the mission's log. The order is kept for
+ * each mission; the sort, groups and filter for every mission.
+ */
+const LANES_EVENT = "v2m-cp-lanes";
+const TRACK_VIEW_KEY = "v2m-cp-tracks";
+const orderKey = (session: string) => `v2m-cp-order:${session}`;
+const lanesStore = {
+  get(key: string): string | null {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string | null) {
+    try {
+      if (value == null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, value);
+    } catch {}
+    window.dispatchEvent(new Event(LANES_EVENT));
+  },
+  subscribe(cb: () => void) {
+    window.addEventListener(LANES_EVENT, cb);
+    window.addEventListener("storage", cb);
+    return () => {
+      window.removeEventListener(LANES_EVENT, cb);
+      window.removeEventListener("storage", cb);
+    };
+  },
+};
+
+/** A strip being dragged within its own list [259]: the lane, its key, its list, and where it would land. */
+type LaneDrag = { lane: "units" | "tracks"; key: string; list: string; to: number };
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /** The computer is set to show less motion: then nothing on the map moves by itself [238]. */
@@ -394,6 +431,33 @@ export default function CommandPost() {
   const [reportsOpen, setReportsOpen] = useState(false);
   /** On a phone the lists share one place under the map, one at a time [258]. */
   const [tab, setTab] = useState<"units" | "tracks" | "reports">("units");
+  // The lanes' order on this screen, and the tracks' sort, groups and filter [259].
+  const ordersRaw = useSyncExternalStore(lanesStore.subscribe, () => (session ? lanesStore.get(orderKey(session)) : null), () => null);
+  const orders = useMemo(() => parseOrders(ordersRaw), [ordersRaw]);
+  const trackViewRaw = useSyncExternalStore(lanesStore.subscribe, () => lanesStore.get(TRACK_VIEW_KEY), () => null);
+  const trackView = useMemo(() => parseTrackView(trackViewRaw), [trackViewRaw]);
+  /** Changes part of the view, from what is saved now: two changes in one moment both hold. */
+  const updateTrackView = useCallback((change: (v: TrackView) => Partial<TrackView>) => {
+    const now = parseTrackView(lanesStore.get(TRACK_VIEW_KEY));
+    lanesStore.set(TRACK_VIEW_KEY, JSON.stringify({ ...now, ...change(now) }));
+  }, []);
+  const saveOrders = useCallback(
+    (o: LaneOrders) => {
+      if (session) lanesStore.set(orderKey(session), o.units.length || o.tracks.length ? JSON.stringify(o) : null);
+    },
+    [session],
+  );
+  /** The tracks' sort, groups and filter, open under their one-line summary. */
+  const [viewOpen, setViewOpen] = useState(false);
+  /** The track groups folded under their headings, as "group:id". */
+  const [folded, setFolded] = useState<string[]>([]);
+  const [drag, setDrag] = useState<LaneDrag | null>(null);
+  /** Where a press on a strip started, until it moves far enough to be a drag or ends as a click. */
+  const press = useRef<{ lane: LaneDrag["lane"]; key: string; list: string; y: number; ul: HTMLUListElement; scroller: HTMLElement; started: boolean; cancelled: boolean; to: number } | null>(null);
+  /** A drag just ended: the click that follows it is not a click on the strip. */
+  const swallowClick = useRef(false);
+  /** The strip moved with the keys: it keeps the cursor after the list is drawn again. */
+  const refocus = useRef<string | null>(null);
   /**
    * The Decisions card's side of the map, chosen away from each decision as it opens, or the place
    * the operator dragged it to, in pixels from the map's top left, with the map's size then [258].
@@ -606,6 +670,116 @@ export default function CommandPost() {
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - knownAt(u) > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
+
+  // ---------- the lanes: units and tracks in the order this screen keeps [259] ----------
+  const unitKeys = useMemo(() => withSaved(view.units.map((u) => u.callsign), orders.units), [view.units, orders.units]);
+  const arranged = useMemo(() => arrangeTracks(view.tracks, trackView, orders.tracks, isOld), [view.tracks, trackView, orders.tracks, isOld]);
+  /** Moves a strip next to a neighbour in its own list and keeps that order. A track moved by hand puts the list in "My order". */
+  const moveStrip = useCallback(
+    (lane: LaneDrag["lane"], key: string, anchor: string, side: "before" | "after") => {
+      if (lane === "units") saveOrders({ ...orders, units: moveNextTo(unitKeys, key, anchor, side) });
+      else {
+        saveOrders({ ...orders, tracks: moveNextTo(arranged.order, Number(key), Number(anchor), side) });
+        updateTrackView(() => ({ sort: "mine" }));
+      }
+    },
+    [orders, unitKeys, arranged.order, saveOrders, updateTrackView],
+  );
+  /** Alt+↑ and Alt+↓ move the strip with the cursor one place within its list. */
+  const moveByKey = (e: ReactKeyboardEvent, lane: LaneDrag["lane"], key: string, list: string[]) => {
+    if (!e.altKey || e.metaKey || e.ctrlKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const i = list.indexOf(key);
+    const next = list[e.key === "ArrowUp" ? i - 1 : i + 1];
+    if (i < 0 || next == null) return;
+    refocus.current = `${lane}:${key}`;
+    moveStrip(lane, key, next, e.key === "ArrowUp" ? "before" : "after");
+  };
+  useEffect(() => {
+    if (!refocus.current) return;
+    const el = document.querySelector<HTMLElement>(`[data-lane-key="${CSS.escape(refocus.current)}"] > button`);
+    refocus.current = null;
+    if (el && document.activeElement !== el) el.focus();
+  }, [unitKeys, arranged]);
+  /** A press on a strip with a mouse or pen: it becomes a drag once it moves 6 px up or down. Touch scrolls the list instead. */
+  const pressStrip = (e: ReactPointerEvent<HTMLElement>, lane: LaneDrag["lane"], key: string, list: string) => {
+    const ul = e.currentTarget.closest("ul");
+    if (e.button !== 0 || e.pointerType === "touch" || !ul) return;
+    press.current = { lane, key, list, y: e.clientY, ul, scroller: ul.closest<HTMLElement>("[data-lane-scroll]") ?? ul, started: false, cancelled: false, to: -1 };
+  };
+  // The lists a drag can land in, and the move it makes, for the listeners below.
+  const listKeys = useRef<Map<string, string[]>>(new Map());
+  const moveRef = useRef(moveStrip);
+  useEffect(() => {
+    const lists = new Map<string, string[]>([["units", unitKeys]]);
+    for (const s of arranged.sections) lists.set(s.id, s.tracks.map((t) => String(t.n)));
+    listKeys.current = lists;
+    moveRef.current = moveStrip;
+  }, [unitKeys, arranged, moveStrip]);
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const p = press.current;
+      if (!p || p.cancelled) return;
+      if (!p.started) {
+        if (Math.abs(e.clientY - p.y) < 6) return;
+        p.started = true;
+      }
+      // Where it lands: past the middle of each other strip in its list.
+      const self = `${p.lane}:${p.key}`;
+      let to = 0;
+      for (const li of p.ul.querySelectorAll<HTMLElement>(":scope > li[data-lane-key]")) {
+        if (li.dataset.laneKey === self) continue;
+        const r = li.getBoundingClientRect();
+        if (e.clientY > r.top + r.height / 2) to++;
+      }
+      // Near the top or bottom of a long list, it scrolls.
+      const box = p.scroller.getBoundingClientRect();
+      if (e.clientY < box.top + 24) p.scroller.scrollBy(0, -12);
+      else if (e.clientY > box.bottom - 24) p.scroller.scrollBy(0, 12);
+      if (to !== p.to) {
+        p.to = to;
+        setDrag({ lane: p.lane, key: p.key, list: p.list, to });
+      }
+    };
+    const onUp = () => {
+      const p = press.current;
+      press.current = null;
+      if (!p?.started) return;
+      swallowClick.current = true;
+      window.setTimeout(() => (swallowClick.current = false), 0);
+      setDrag(null);
+      if (p.cancelled) return;
+      const landing = anchorFor(listKeys.current.get(p.list) ?? [], p.key, p.to);
+      if (landing) moveRef.current(p.lane, p.key, landing.anchor, landing.side);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !press.current?.started) return;
+      // Escape only drops the strip back: it does not also step back on the map.
+      e.preventDefault();
+      e.stopPropagation();
+      press.current.cancelled = true;
+      setDrag(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, []);
+  /** A list's keys as drawn: with the dragged strip where it would land. */
+  const asDrawn = (list: string, keys: string[]) => (drag && drag.list === list ? previewMove(keys, drag.key, drag.to) : keys);
+  /** The click at the end of a drag lands on the strip: it is not a click on it. */
+  const swallowDragClick = (e: { stopPropagation(): void; preventDefault(): void }) => {
+    if (!swallowClick.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  const toggleHide = (h: TrackHide) => updateTrackView((v) => ({ hide: v.hide.includes(h) ? v.hide.filter((x) => x !== h) : [...v.hide, h] }));
   // Things on the map move only while the clock on screen runs [238]: a live mission that has not
   // ended, or a replay that is playing. A paused replay and an ended mission are one moment, held.
   const motion = !reducedMotion && (mode === "live" ? ended == null : playing);
@@ -2553,6 +2727,11 @@ export default function CommandPost() {
         <section className={`${styles.section} ${styles.unitsSection}`} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
+            {orders.units.length ? (
+              <button type="button" className={`${styles.unpinBtn} ${styles.resetBtn}`} onClick={() => saveOrders({ ...orders, units: [] })} title="Put the units back in the order they joined" aria-label="Reset the units' order">
+                Reset
+              </button>
+            ) : null}
           </h2>
           {view.units.length === 0 ? (
             <p className={styles.empty}>
@@ -2573,8 +2752,10 @@ export default function CommandPost() {
                       : `No mission with the code “${session}”. Pick one from Missions.`}
             </p>
           ) : (
-            <ul className={styles.units}>
-              {view.units.map((u) => {
+            <ul className={styles.units} onClickCapture={swallowDragClick}>
+              {asDrawn("units", unitKeys).map((callsign) => {
+                const u = view.units.find((x) => x.callsign === callsign);
+                if (!u) return null;
                 const silent = isSilent(u);
                 const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - knownAt(u)) : null);
                 // A unit whose question waits: its strip opens the question [240].
@@ -2583,13 +2764,16 @@ export default function CommandPost() {
                 // A strip opens to its whole line and what can be done to the unit [258].
                 const open = openUnit === u.callsign || moving;
                 return (
-                  <li key={u.callsign}>
+                  <li key={u.callsign} data-lane-key={`units:${u.callsign}`} data-dragging={(drag?.lane === "units" && drag.key === u.callsign) || undefined}>
                     <button
                       type="button"
                       className={styles.unit}
                       data-tone={st.tone}
                       data-open={open || undefined}
                       aria-expanded={asks != null ? undefined : open}
+                      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                      onPointerDown={(e) => pressStrip(e, "units", u.callsign, "units")}
+                      onKeyDown={(e) => moveByKey(e, "units", u.callsign, unitKeys)}
                       onClick={() => {
                         if (asks != null) return focusOn(decisions[asks], asks);
                         setOpenUnit(open ? null : u.callsign);
@@ -2649,66 +2833,175 @@ export default function CommandPost() {
           <section className={`${styles.section} ${styles.tracksSection}`} aria-labelledby="tracks-h">
             <h2 id="tracks-h" className={styles.h2}>
               Tracks <span className={styles.count}>{view.tracks.length}</span>
+              {trackView.sort === "mine" && orders.tracks.length ? (
+                <button
+                  type="button"
+                  className={`${styles.unpinBtn} ${styles.resetBtn}`}
+                  onClick={() => {
+                    saveOrders({ ...orders, tracks: [] });
+                    updateTrackView(() => ({ sort: "number" }));
+                  }}
+                  title="Put the tracks back in order by number"
+                  aria-label="Reset the tracks' order"
+                >
+                  Reset
+                </button>
+              ) : null}
             </h2>
             {view.tracks.length === 0 ? <p className={styles.empty}>What the units see shows here.</p> : null}
-            <ul className={`${styles.units} ${styles.tracks}`}>
-              {/* Tracks marked gone go last: they are off the map and kept for the record. */}
-              {[...view.tracks].sort((a, b) => Number(a.gone != null) - Number(b.gone != null) || a.n - b.n).map((t) => {
-                const old = isOld(t);
-                const st = trackStatus(t, old);
-                return (
-                  <li key={t.n}>
-                    <button
-                      type="button"
-                      className={styles.unit}
-                      data-tone={st.tone}
-                      data-selected={picked === t.n || undefined}
-                      onClick={() => flyToTrack(t)}
-                      title={t.position && t.gone == null ? "Show on the map" : "Show its card"}
-                    >
-                      {/* The same standard symbol as on the map. Drawn by milsymbol from a code this page builds. */}
-                      <span className={styles.trackSym} aria-hidden="true" dangerouslySetInnerHTML={symbols ? { __html: trackSvg(symbols, t, 18) } : undefined} />
-                      <span className={styles.unitMain}>
-                        <span className={styles.unitTop}>
-                          {/* "T1" in a thin column, as the map labels it. */}
-                          <span className={styles.unitName}>
-                            <span className={styles.longName}>Track </span>
-                            <span className={styles.shortName}>T</span>
-                            {t.n}
-                          </span>
-                          {t.seenTs && effNow ? <span className={styles.unitTime}>{atEnd ? fmtTime(t.seenTs) : fmtAgo(effNow - t.seenTs)}</span> : null}
-                        </span>
-                        <span className={styles.unitStatus}>
-                          {/* Whose it is: the symbol's frame says it too, so only the picked track's strip has the word. */}
-                          <span className={`${styles.pill} ${styles.affPill}`} data-status={t.affiliation}>
-                            {AFFILIATION_LABEL[t.affiliation]}
-                          </span>
-                          {t.gone != null ? (
-                            <span className={styles.pill} data-status="silent">
-                              Gone
-                            </span>
-                          ) : t.pendingReport ? (
-                            <span className={styles.pill} data-status="ask">
-                              Awaiting answer
-                            </span>
-                          ) : old ? (
-                            <span className={styles.pill} data-status="silent">
-                              Old sighting
-                            </span>
-                          ) : null}
-                          {st.main}
-                          {t.pendingReport || t.gone != null ? null : <GridTag at={t.position} />}
-                        </span>
-                        <span className={styles.trackWhere}>
-                          {st.sub}
-                          {t.seenTs && !atEnd ? ` · ${fmtTime(t.seenTs)}` : null}
-                        </span>
-                      </span>
+            {/* Sort, groups and filter: on this screen and in this list only; the map shows every track [259]. */}
+            {/* One line says how the list is drawn; it opens to chips for the sort, the groups and what shows. */}
+            {view.tracks.length ? (
+              <button
+                type="button"
+                className={styles.viewBtn}
+                aria-expanded={viewOpen}
+                aria-controls="track-view"
+                data-hiding={arranged.hidden > 0 || undefined}
+                onClick={() => setViewOpen((o) => !o)}
+                title="Sort, group and filter this list"
+              >
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3.5 10V2M1.5 4l2-2 2 2M8.5 2v8M6.5 8l2 2 2-2" />
+                </svg>
+                <span className={styles.viewText}>
+                  {TRACK_SORTS.find((s) => s.id === trackView.sort)?.label}
+                  {trackView.group !== "none" ? ` · by ${TRACK_GROUPS.find((g) => g.id === trackView.group)?.label.toLowerCase()}` : null}
+                </span>
+                {arranged.hidden ? <span className={styles.viewHidden}>{arranged.hidden} hidden</span> : null}
+                <span className={styles.foldMark} aria-hidden="true">
+                  {viewOpen ? "▴" : "▾"}
+                </span>
+              </button>
+            ) : null}
+            {view.tracks.length && viewOpen ? (
+              <div id="track-view" className={styles.viewPanel}>
+                <div className={styles.viewRow} role="group" aria-labelledby="track-sort-h">
+                  <span id="track-sort-h" className={styles.viewLabel}>
+                    Sort
+                  </span>
+                  {TRACK_SORTS.map((s) => (
+                    <button key={s.id} type="button" aria-pressed={trackView.sort === s.id} onClick={() => updateTrackView(() => ({ sort: s.id }))}>
+                      {s.label}
                     </button>
-                  </li>
+                  ))}
+                </div>
+                <div className={styles.viewRow} role="group" aria-labelledby="track-group-h">
+                  <span id="track-group-h" className={styles.viewLabel}>
+                    Group
+                  </span>
+                  {TRACK_GROUPS.map((g) => (
+                    <button key={g.id} type="button" aria-pressed={trackView.group === g.id} onClick={() => updateTrackView(() => ({ group: g.id }))}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.viewRow} role="group" aria-labelledby="track-show-h">
+                  <span id="track-show-h" className={styles.viewLabel}>
+                    Show
+                  </span>
+                  {TRACK_HIDES.map((h) => (
+                    <button key={h.id} type="button" data-hide={h.id} aria-pressed={!trackView.hide.includes(h.id)} onClick={() => toggleHide(h.id)}>
+                      {h.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div className={styles.trackLists} data-lane-scroll="">
+              {arranged.sections.map((s) => {
+                const keys = s.tracks.map((t) => String(t.n));
+                const foldId = `${trackView.group}:${s.id}`;
+                const isFolded = s.label != null && folded.includes(foldId);
+                return (
+                  <div key={s.id} className={styles.trackGroup}>
+                    {s.label ? (
+                      <h3 className={styles.groupHead}>
+                        <button type="button" className={styles.foldBtn} aria-expanded={!isFolded} onClick={() => setFolded((f) => (isFolded ? f.filter((x) => x !== foldId) : [...f, foldId]))}>
+                          {s.label} <span className={styles.count}>{s.tracks.length}</span>
+                          <span className={styles.foldMark} aria-hidden="true">
+                            {isFolded ? "▸" : "▾"}
+                          </span>
+                        </button>
+                      </h3>
+                    ) : null}
+                    {isFolded ? null : (
+                      <ul className={`${styles.units} ${styles.tracks}`} onClickCapture={swallowDragClick}>
+                        {/* Tracks marked gone go last in every sort: they are off the map and kept for the record. */}
+                        {asDrawn(s.id, keys).map((k) => {
+                          const t = s.tracks.find((x) => String(x.n) === k);
+                          if (!t) return null;
+                          const old = isOld(t);
+                          const st = trackStatus(t, old);
+                          return (
+                            <li key={t.n} data-lane-key={`tracks:${t.n}`} data-dragging={(drag?.lane === "tracks" && drag.key === k) || undefined}>
+                              <button
+                                type="button"
+                                className={styles.unit}
+                                data-tone={st.tone}
+                                data-selected={picked === t.n || undefined}
+                                aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                                onPointerDown={(e) => pressStrip(e, "tracks", k, s.id)}
+                                onKeyDown={(e) => moveByKey(e, "tracks", k, keys)}
+                                onClick={() => flyToTrack(t)}
+                                title={t.position && t.gone == null ? "Show on the map" : "Show its card"}
+                              >
+                                {/* The same standard symbol as on the map. Drawn by milsymbol from a code this page builds. */}
+                                <span className={styles.trackSym} aria-hidden="true" dangerouslySetInnerHTML={symbols ? { __html: trackSvg(symbols, t, 18) } : undefined} />
+                                <span className={styles.unitMain}>
+                                  <span className={styles.unitTop}>
+                                    {/* "T1" in a thin column, as the map labels it. */}
+                                    <span className={styles.unitName}>
+                                      <span className={styles.longName}>Track </span>
+                                      <span className={styles.shortName}>T</span>
+                                      {t.n}
+                                    </span>
+                                    {t.seenTs && effNow ? <span className={styles.unitTime}>{atEnd ? fmtTime(t.seenTs) : fmtAgo(effNow - t.seenTs)}</span> : null}
+                                  </span>
+                                  <span className={styles.unitStatus}>
+                                    {/* Whose it is: the symbol's frame says it too, so only the picked track's strip has the word. */}
+                                    <span className={`${styles.pill} ${styles.affPill}`} data-status={t.affiliation}>
+                                      {AFFILIATION_LABEL[t.affiliation]}
+                                    </span>
+                                    {t.gone != null ? (
+                                      <span className={styles.pill} data-status="silent">
+                                        Gone
+                                      </span>
+                                    ) : t.pendingReport ? (
+                                      <span className={styles.pill} data-status="ask">
+                                        Awaiting answer
+                                      </span>
+                                    ) : old ? (
+                                      <span className={styles.pill} data-status="silent">
+                                        Old sighting
+                                      </span>
+                                    ) : null}
+                                    {st.main}
+                                    {t.pendingReport || t.gone != null ? null : <GridTag at={t.position} />}
+                                  </span>
+                                  <span className={styles.trackWhere}>
+                                    {st.sub}
+                                    {t.seenTs && !atEnd ? ` · ${fmtTime(t.seenTs)}` : null}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
                 );
               })}
-            </ul>
+              {arranged.hidden ? (
+                <p className={styles.hiddenNote}>
+                  {arranged.hidden === 1 ? "1 track" : `${arranged.hidden} tracks`} hidden in this list only.{" "}
+                  <button type="button" className={styles.linkBtn} onClick={() => updateTrackView(() => ({ hide: [] }))}>
+                    Show all
+                  </button>
+                </p>
+              ) : null}
+            </div>
           </section>
 
         {/* The reports, newest first: folded to the newest one, or the whole history [258]. */}
