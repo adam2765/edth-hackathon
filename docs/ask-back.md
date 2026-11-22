@@ -1,8 +1,8 @@
 # Asking back by voice
 
-Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
+Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. Since 22 Nov a short spoken answer is heard: the unit says "two" or "the metro station", and the command post shows that choice already picked, for the operator to confirm [243].
 
-Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199].
+Status, 22 November: **the code layer is built; the model layer is measured, not built.** A short answer that picks one choice is read in code (`lib/geo/replies.ts`) and waits for the operator's confirm ([below](#built-the-code-reader)). The model reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199]. The other kinds of reply ("say again", "disregard", "by the church") are still read as a report.
 
 ## What a reply can be
 
@@ -32,7 +32,7 @@ The difference only matters where the two readings draw different maps. Asked wh
 
 Code alone cannot list every way of saying these things ("hang on", "scratch that", "the one by the big roundabout"), and a model alone gets some of the shortest replies wrong (below). So:
 
-1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Not built yet.
+1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Built on 22 Nov for picks only [243]; the radio words are not read yet.
 2. **The reply reader for the rest:** a model call of its own, apart from the extraction prompt, that gets who the question is about, the question, the numbered choices and the reply, and returns a kind and a choice number. Code keeps the choice only if it was offered, and the place comes from the stored choice, so no model makes a coordinate.
 3. **Code checks where a miss is costly:** a pick of a reply that names its own subject or a movement asks again; a disregard needs the word itself.
 
@@ -65,9 +65,37 @@ Local, every round:
 - **Every costly miss is a form code can catch,** before or after the model: a number or a yes checked against how many choices there are; a reply whose words fit more than one choice; a reply that says "I", "je" or "я" to a question about a track. So the three layers hold.
 - **Offline is as good as hosted** (93% against 92%) and slower: 3.4 s median against 0.4 s. That is the time added to a spoken answer, or the wait for a suggestion on the operator's screen. Code settles the `fast` replies at once.
 
+## Built: the code reader
+
+Since 22 November [243]. While a unit's question with choices is open, a radio report from that unit is checked in code before anything else (`readPick` in `lib/geo/replies.ts`). It is an answer when every word is one of these, or a filler:
+
+| Form | Examples |
+|---|---|
+| A number or an ordinal | "two", "2", "number one", "the second one", "numéro deux", "le premier", "другий", "the last one" |
+| Words that name one choice and no other: part of its name, its town, or its kind | "the metro station", "le château", "Saint-Mandé", "Montreuil", "на вулиці" |
+| The nearer or the farther one, when one choice is nearer by 50 m and a fifth | "the closer one", "la plus proche", "та, що ближче" |
+| Yes, to a single choice | "yes", "affirm", "oui", "так точно" |
+
+Anything else is read as a report, as before: "two blocks east", "two enemy vehicles", "not the castle", "the castle, moving north". A reply that says who it is about ("I'm at the castle", "je suis…", "я біля…") stands on its own and is never read here. A word that is in every choice's name tells nothing: "Rue de Fontenay", when all three crossings are on it, and "Château de Vincennes", when both choices have that name. "One second" is a wait, not the second choice.
+
+An answer heard is not a report. It is a `reply` line in the log, it moves nothing, and the question stays open. The Decisions list shows the words and the choice already picked, with "BRAVO 2 said “the metro station”. Choose 1, Château de Vincennes (metro station)?". Enter confirms, as an ordinary answer by the command post; Escape steps back, and the choice is not picked again by itself. No model reads the words, so nothing is added to the wait: in one offline check the answer took 3 ms, where the report before it took 12 s.
+
+Measured on the reply eval's 124 cases, in `tests/replyPick.test.ts`, so `npm test` keeps it:
+
+| What | Result |
+|---|---|
+| Picks tagged `fast` | 33 of 33 |
+| Other picks (`tail`, `trap`) | 14 of 25 |
+| Wrong picks | none |
+| Read into the 66 replies that are not picks | none |
+
+The reader was written with these cases in view, so the first two rows say what it covers, not how it does on words it has not seen.
+
+Not built: choosing without the operator's confirm. A mentor called that an optional switch (22 Nov), and Alex left it out. Not read here: the radio words (say again, wait one, disregard), "none", a correction, and every reply that needs a reading ("the one by the big roundabout"). A phone that names its call sign, and a held report the operator gives to a unit, are read as reports as before.
+
 ## Open
 
-- **Who asks back.** Heard third hand on 21 November: the speakers have radios, and a live operator is on the other end. If the mentors confirm it, the question goes to the operator, who asks it over the radio, and the reader at most suggests a choice on the command post for the operator to confirm. A wrong suggestion then costs a click, not a wrong marker. The command post can already answer for a unit [178], and since decision 208 the phone leaves every question to it.
+- **Who asks back: settled.** A Lysk mentor confirmed on 22 November that the operator asks back over the radio, that a clarification should then be taken in automatically, and that the operator confirms every entry. So the reader suggests and the operator confirms: a wrong suggestion costs a click, not a wrong marker.
 - The Ukrainian and French replies were written without a native speaker, like the other cases [known gaps](known-gaps.md).
 - All replies are typed; none went through speech-to-text.
 - Follow-ups to the prompts that have no choices ("How far east is it?", "Where is it?") are not in the eval yet. For a track they lose the track today: "by the church" in reply to "Where is it?" is read as a new report about the speaker (from reading the code, not run).

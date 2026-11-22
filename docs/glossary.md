@@ -22,6 +22,7 @@
 | Join | A phone entering a mission with a call sign and its own device id. The transmitter no longer joins: it picks a mission and sends its code, like a radio tuned to a net [208] |
 | Local mode | Running the whole pipeline on a laptop with no internet ([plan.md](plan.md#local-mode)) |
 | Mission | A run of the demo or an exercise: a code (`vincennes-1`), a name, an area, an optional start point, open or ended. One log. The code calls it a session |
+| Answer heard | A short spoken answer to a unit's open question ("two", "the metro station"), read in code as one of the choices. It moves nothing: the Decisions list shows the choice picked, and the operator confirms [243] |
 | Overtaken | A question the unit has moved past by reporting again: it is closed, leaves the Decisions list, and an answer to it is refused [241] |
 | Recon done | The command post ends a drone's task: the line goes, and the drone is free to send again. Only a person ends a task [234] |
 | Plot | A change to a track made by hand at the command post: place, change, move, gone or back. One `plot` line in the log; no model is involved |

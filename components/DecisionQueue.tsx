@@ -28,9 +28,23 @@ function fmtWait(ms: number): string {
   return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
 }
 
+/**
+ * The answer heard for a question, when the coordinator read one from the unit's words [243]:
+ * the words without their last full stop, and the choice with its kind, since two choices can
+ * have one name ("Château de Vincennes (metro station)").
+ */
+function heardOf(d: Decision): { ts: number; choice: string; n: number; said: string; what: string } | null {
+  const h = d.kind === "question" ? d.item.heard : undefined;
+  if (!h || d.kind !== "question") return null;
+  const c = d.item.candidates.find((x) => x.id === h.choice);
+  const what = c ? `${h.name}${c.town ? ` (${c.town})` : ""} (${c.category.replace("_", " ")})` : h.name;
+  return { ts: h.ts, choice: h.choice, n: h.n, said: h.words.replace(/[\s.!?…]+$/u, ""), what };
+}
+
 function tagOf(d: Decision): string {
   switch (d.kind) {
     case "question":
+      if (d.item.heard) return `Heard: ${d.item.heard.n}`;
       return d.item.track != null ? `Track ${d.item.track}: which?` : "Which one?";
     case "prompt":
       return "No choices";
@@ -45,6 +59,8 @@ function tagOf(d: Decision): string {
 function shortTagOf(d: Decision): string {
   switch (d.kind) {
     case "question":
+      // An answer was heard: it only needs the confirm.
+      if (d.item.heard) return `Heard ${d.item.heard.n}`;
       return d.item.track != null ? `T${d.item.track}?` : "Which?";
     case "prompt":
       return "Ask";
@@ -59,6 +75,8 @@ function shortTagOf(d: Decision): string {
 function lineOf(d: Decision): string {
   switch (d.kind) {
     case "question":
+      if (d.item.heard) return `“${heardOf(d)!.said}”: choice ${d.item.heard.n}. Confirm it.`;
+      return d.item.question ?? d.item.outcome;
     case "prompt":
       return d.item.question ?? d.item.outcome;
     case "held":
@@ -88,8 +106,11 @@ function optionLabel(o: DecisionOption): string {
 /** The confirm, asked once more before anything is saved. */
 function confirmOf(o: DecisionOption, d: Decision): { text: string; label: string; danger: boolean } {
   const who = d.callsign ?? "";
+  const heard = heardOf(d);
   switch (o.kind) {
     case "choice":
+      // The choice the unit was heard to say: the confirm shows its words, so the operator checks them.
+      if (o.choice && heard?.choice === o.choice) return { text: `${who} said “${heard.said}”. Choose ${heard.n}, ${heard.what}?`, label: "Choose", danger: false };
       return o.choice
         ? { text: `Choose ${o.name} for ${who}?`, label: "Choose", danger: false }
         : { text: `None of these, for ${who}? The question closes and nothing moves.`, label: "None of these", danger: false };
@@ -115,6 +136,8 @@ export default function DecisionQueue(props: {
   focused: Decision | null;
   /** The option picked in the open decision, waiting for its confirm. */
   selection: DecisionOption | null;
+  /** The pick is the answer the coordinator heard, not the operator's own [243]. */
+  heardPick?: boolean;
   roster: string[];
   tracks: TrackState[];
   units: UnitState[];
@@ -143,12 +166,16 @@ export default function DecisionQueue(props: {
   }, [focused?.id]);
   // A pick: the confirm button takes the cursor, so Enter confirms after a click as after a key. The
   // whole card stays in view when it fits, and the confirm row always does.
+  const heardPick = props.heardPick === true;
   useEffect(() => {
     if (!selection) return;
+    // An answer heard arrives by itself: it does not take the cursor out of a field being typed in.
+    const at = document.activeElement;
+    if (heardPick && at instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName)) return;
     confirmRef.current?.querySelector("button")?.focus({ preventScroll: true });
     openRef.current?.scrollIntoView({ block: "nearest" });
     confirmRef.current?.scrollIntoView({ block: "nearest" });
-  }, [selection]);
+  }, [selection, heardPick]);
 
   return (
     <section className={`${styles.section} ${styles.decisionSection}`} aria-labelledby="decisions-h">
@@ -215,6 +242,12 @@ export default function DecisionQueue(props: {
                 </span>
                 <span className={styles.said}>{transcript ? `“${transcript}”` : "(no words heard)"}</span>
                 {question ? <span className={styles.heldQuestion}>{question}</span> : null}
+                {heardOf(d) ? (
+                  // What the unit said in answer, read in code [243]. Its choice is picked below; nothing is saved without the confirm.
+                  <span className={styles.heardAnswer}>
+                    Heard at {fmtTime(heardOf(d)!.ts)}: “{heardOf(d)!.said}”. That is choice {heardOf(d)!.n}, {heardOf(d)!.what}.
+                  </span>
+                ) : null}
                 {h?.audio && props.session ? (
                   <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(props.session)}/audio/${encodeURIComponent(h.audio)}`}>
                     The recording.

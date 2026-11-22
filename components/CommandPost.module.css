@@ -1872,6 +1872,17 @@
   line-height: 1.35;
 }
 
+/* An answer heard for the open question: what the unit said, and the choice it is read as. */
+.heardAnswer {
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent-2);
+  border-radius: 4px;
+  background: var(--panel-2);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 /* ---------- big screens: a projector or a wall screen, read from across the room ---------- */
 /* The same pixels are a smaller share of a bigger picture, so the header, the side panel and the
    replay bar are drawn larger. The map itself is not scaled; CommandPost.tsx enlarges its labels. */

@@ -1,6 +1,6 @@
 /**
  * The shared record: a mission's opening, every unit that joins, every report and every answer to
- * a question, what the command post did to a track by hand, radio reports held for the operator
+ * a question, an answer heard and waiting for a confirm, what the command post did to a track by hand, radio reports held for the operator
  * and what the operator did with them, and the mission's end, as one append-only log per session. The coordinator writes it; the command post reads it and rebuilds
  * the map from it, live or up to any moment for a replay.
  * A mission is what the code calls a session: one code, one log. Safe to import on the client.
@@ -189,6 +189,32 @@ export interface AnswerEntry {
   by?: string;
 }
 
+/** How a spoken answer named its choice [243]: its number, its name or kind, the nearer one, or "yes" to a single choice. */
+export type HeardHow = "number" | "name" | "nearest" | "yes";
+
+/**
+ * What a unit said while its question was open, read in code as an answer that picks one of the
+ * choices [243]: "two", "the metro station". It is not a report and moves nothing. The command post
+ * shows the choice already picked, and the operator confirms it with an `answer`.
+ */
+export interface ReplyEntry {
+  kind: "reply";
+  id: string;
+  session: string;
+  callsign: string;
+  ts: number;
+  clientTs: number | null;
+  /** The report whose question it answers. */
+  report_id: string;
+  transcript: string;
+  language: string | null;
+  /** The choice heard: the id of one of that question's candidates. */
+  choice: string;
+  how: HeardHow;
+  /** For a radio report: how its sender was found [202]. */
+  sender?: Sender;
+}
+
 /** The name the command post writes under in the log. One for now: there are no logins. */
 export const COMMAND_POST = "CP";
 
@@ -321,7 +347,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | ReplyEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -386,6 +412,21 @@ export interface TaskReply {
 export interface UnitReply {
   /** Null when the unit already had that kind: nothing was written. */
   entry: UnitEntry | null;
+}
+
+/**
+ * The `heard` field of the report reply: the words were taken as an answer to the unit's open
+ * question, and wait for the command post's confirm [243]. The reply's `report_id` is then the id
+ * of the `reply` entry, so a phone knows its words were saved.
+ */
+export interface HeardReply {
+  /** The report whose question the words answer. */
+  question: string;
+  /** The choice heard: its candidate id, its number on the operator's screen, and its name. */
+  choice: string;
+  n: number;
+  name: string;
+  how: HeardHow;
 }
 
 /** The `request` field of the report reply: the request read from the words, as saved [234]. */

@@ -7,9 +7,12 @@
 import type { Area } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
 import { affiliationSaid, kindSaid, resolveReport, trackNumberSaid, type KnownTrack } from "@/lib/geo/tracks";
-import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
+import { readPick, type PickHow } from "@/lib/geo/replies";
+import type { Candidate, Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { readVoices } from "@/lib/geo/voices";
 import { getExtractor } from "@/lib/providers/extractor";
+import { foldLog } from "./fold";
+import type { LogEntry } from "./types";
 
 /** The resolution saved with a call that was only a request: nothing to place, and no question [234]. */
 export const REQUEST_ONLY: Resolution = {
@@ -17,6 +20,29 @@ export const REQUEST_ONLY: Resolution = {
   candidates: [],
   evidence: { rule: "request_only", detail: "only a request for recon; nothing to place" },
 };
+
+/**
+ * The resolution sent back when the words were taken as an answer to the unit's open question
+ * [243]: nothing is placed by them, and no new question is asked. The command post confirms.
+ */
+export const ANSWER_HEARD: Resolution = {
+  status: "unresolved",
+  candidates: [],
+  evidence: { rule: "answer_heard", detail: "heard as an answer to the unit's open question; the command post confirms the choice" },
+};
+
+/**
+ * A few words that answer a unit's open question, and are not a report [243]: "two", "the metro
+ * station". Null when the unit has no open question with choices, or the words are not one of the
+ * closed forms `readPick` reads: they are then read as a report, as before. `words` are the words
+ * after the sender's call sign.
+ */
+export function answerHeard(entries: LogEntry[], callsign: string, words: string, now: number): { report_id: string; candidate: Candidate; n: number; how: PickHow } | null {
+  const pending = foldLog(entries, now).units.find((u) => u.callsign === callsign)?.pending;
+  if (!pending) return null;
+  const pick = readPick(words, pending.candidates);
+  return pick ? { report_id: pending.reportId, candidate: pending.candidates[pick.choice - 1], n: pick.choice, how: pick.how } : null;
+}
 
 export interface ReadInput {
   area: Area;

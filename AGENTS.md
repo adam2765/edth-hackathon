@@ -28,6 +28,7 @@ lib/geo/blocks.ts           "two blocks east": the count read from the words, th
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
 lib/geo/callsigns.ts        the sender's call sign, read from a radio report's words, at the start or last as a sign-off, and matched against a roster
 lib/geo/requests.ts         a request for recon ("send the drone"), read from the words and cut out before the model reads them
+lib/geo/replies.ts          a short spoken answer to an open question ("two", "the metro station"), read in code as a pick for the operator to confirm
 lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Decisions list
 lib/reports/decisions.ts    what waits on the operator, oldest first, and what each one offers; safe on the client
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
