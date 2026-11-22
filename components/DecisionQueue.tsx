@@ -6,7 +6,7 @@
  * where they spend their time: one decision open at a time, the rest one line each, and keys for
  * all of it (CommandPost.tsx listens for them). Nothing is saved without a confirm.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { describeTrack } from "@/lib/geo/trackKinds";
 import { optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
 import type { TrackState, UnitState } from "@/lib/reports/fold";
@@ -132,6 +132,8 @@ function sameOption(a: DecisionOption | null, b: DecisionOption): boolean {
 }
 
 export default function DecisionQueue(props: {
+  /** More at the end of the heading: the card's Unpin, once it was dragged [258]. */
+  head?: ReactNode;
   decisions: Decision[];
   focused: Decision | null;
   /** The option picked in the open decision, waiting for its confirm. */
@@ -179,8 +181,10 @@ export default function DecisionQueue(props: {
 
   return (
     <section className={`${styles.section} ${styles.decisionSection}`} aria-labelledby="decisions-h">
-      <h2 id="decisions-h" className={styles.h2}>
+      {/* The heading is where the card is dragged from, over the map [258]. */}
+      <h2 id="decisions-h" className={styles.h2} title={decisions.length ? "Drag to move the card" : "Questions, radio reports the coordinator is not sure of and requests for recon come here, oldest first."}>
         Decisions <span className={styles.count} data-waiting={decisions.length ? "" : undefined}>{decisions.length}</span>
+        {decisions.length === 0 ? <span className={styles.deckIdle}>Nothing waits</span> : null}
         {canEdit && decisions.length ? (
           // The keys for each option are on its button; these are the rest.
           <span className={styles.keysHint} title="Keys: ↑ ↓ or J K to move, 1 to 9 to pick, N for none, Enter to confirm, Esc to step back">
@@ -188,10 +192,9 @@ export default function DecisionQueue(props: {
             <kbd>↓</kbd> move · <kbd>Enter</kbd> confirm
           </span>
         ) : null}
+        {props.head}
       </h2>
-      {decisions.length === 0 ? (
-        <p className={styles.empty}>Nothing waits for you. Questions, radio reports the coordinator is not sure of and requests for recon come here, oldest first.</p>
-      ) : (
+      {decisions.length === 0 ? null : (
         <ol className={styles.decisions}>
           {decisions.map((d) => {
             const wait = now - d.ts;
