@@ -75,3 +75,11 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - Three rounds miss rare hosted flakes: `a-two-places-10` was 3 of 3 in the side-word baseline but pins 1 to 6 times in 20 on that same prompt.
 - Accepted by Alex with the costs ("Keep it"; on the hosted cost: "Forget hosted mode"). Baselines saved from the two runs above (`eval:baseline`), so they now hold all 119 cases [187].
 - Next: `a-compass-6` on hosted, if hosted matters again; a thing with both a way and a heading (`t-compass-heading`) on the 3B model; the example names, as before.
+
+## 2026-11-22, finding: offline prompt cut by Ollama [ollama:ministral-3:3b]
+
+- Seen in `.run/launcher.log` on 22 Nov: `truncating input prompt limit=2051 prompt=4556 keep=5 new=2051` for the warm-up and every report. The launcher started Ollama at 4,096 tokens; the extraction prompt is 4,556. Ollama kept the first 5 tokens and the last 2,046, so the model never saw the place or the first rules [253].
+- Not a prompt change: same prompt `300d5e0a2d`, full corpus, `--resolve --repeat 3`, on a private Ollama.
+- At 4,096 (the cut prompt, `results/ollama_ministral-3_3b-2026-11-22-11-12-cut-at-4096.jsonl`): 174 of 357 (49%), outcomes 339 of 357, 6 wrong pins (`a-two-places-5` and `-9` new), median 3.7 s. Worst tags: two-places 6 of 30, adversarial 24 of 105, compass-only 3 of 21, track 33 of 129.
+- With `num_ctx` 8,192 on every call (`results/ollama_ministral-3_3b-2026-11-22-11-31.jsonl`): 237 of 357 (66%), outcomes 333 of 357, 9 wrong pins, median 2.5 s. The same as the baseline, case by case. Replies: 345 of 372, no regression.
+- So the baselines were taken on the whole prompt (their median, 3.4 s, is too fast for a cut prompt), and the prompt has been over 4,095 tokens since `2fc3bd9` (21 Nov 11:05). Anything seen live through an Ollama started at 4,096, with `docs/setup.md` from 21 Nov 11:06 or the launcher from 21 Nov 19:57, was on the cut prompt: read those observations again before tuning for them.
