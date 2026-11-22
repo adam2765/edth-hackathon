@@ -1,8 +1,8 @@
 # Asking back by voice
 
-Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
+Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. Since 22 Nov a short spoken answer is heard: the unit says "two" or "the metro station", and the command post shows that choice already picked, for the operator to confirm [251].
 
-Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199].
+Status, 22 November: **the code layer is built; the model layer is measured, not built.** A short answer that picks one choice is read in code (`lib/geo/replies.ts`) and waits for the operator's confirm ([below](#built-the-code-reader)). The model reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199]. The other kinds of reply ("say again", "disregard", "by the church") are still read as a report.
 
 ## What a reply can be
 
@@ -32,7 +32,7 @@ The difference only matters where the two readings draw different maps. Asked wh
 
 Code alone cannot list every way of saying these things ("hang on", "scratch that", "the one by the big roundabout"), and a model alone gets some of the shortest replies wrong (below). So:
 
-1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Not built yet.
+1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Built on 22 Nov for picks only [251]; the radio words are not read yet.
 2. **The reply reader for the rest:** a model call of its own, apart from the extraction prompt, that gets who the question is about, the question, the numbered choices and the reply, and returns a kind and a choice number. Code keeps the choice only if it was offered, and the place comes from the stored choice, so no model makes a coordinate.
 3. **Code checks where a miss is costly:** a pick of a reply that names its own subject or a movement asks again; a disregard needs the word itself.
 
@@ -65,9 +65,63 @@ Local, every round:
 - **Every costly miss is a form code can catch,** before or after the model: a number or a yes checked against how many choices there are; a reply whose words fit more than one choice; a reply that says "I", "je" or "я" to a question about a track. So the three layers hold.
 - **Offline is as good as hosted** (93% against 92%) and slower: 3.4 s median against 0.4 s. That is the time added to a spoken answer, or the wait for a suggestion on the operator's screen. Code settles the `fast` replies at once.
 
+## Built: the code reader
+
+Since 22 November [251]. While a unit's question with choices is open, a radio report from that unit is checked in code before anything else (`readPick` in `lib/geo/replies.ts`). It is an answer when every word is one of these, or a filler:
+
+| Form | Examples |
+|---|---|
+| A number or an ordinal | "two", "2", "number one", "the second one", "numéro deux", "le premier", "другий", "the last one" |
+| Words that name one choice and no other: part of its name, its town, or its kind | "the metro station", "le château", "Saint-Mandé", "Montreuil", "на вулиці" |
+| The nearer or the farther one, when one choice is nearer by 50 m and a fifth | "the closer one", "la plus proche", "та, що ближче" |
+| Yes, to a single choice | "yes", "affirm", "oui", "так точно" |
+
+Anything else is read as a report, as before: "two blocks east", "two enemy vehicles", "not the castle", "the castle, moving north". A reply that says who it is about ("I'm at the castle", "je suis…", "я біля…") stands on its own and is never read here. A word that is in every choice's name tells nothing: "Rue de Fontenay", when all three crossings are on it, and "Château de Vincennes", when both choices have that name. Nor does the kind they all are, said alone: "Лікарня", when every choice is one. "One second" is a wait, not the second choice, and "les deux" is both.
+
+An answer heard is not a report. It is a `reply` line in the log, it moves nothing, and the question stays open. The Decisions list shows the words and the choice already picked, with "BRAVO 2 said “the metro station”. Choose 1, Château de Vincennes (metro station)?". Enter confirms, as an ordinary answer by the command post; Escape steps back, and the choice is not picked again by itself. No model reads the words, so nothing is added to the wait: in one offline check the answer took 3 ms, where the report before it took 12 s.
+
+Measured on the reply eval's 124 cases, in `tests/replyPick.test.ts`, so `npm test` keeps it:
+
+| What | Result |
+|---|---|
+| Picks tagged `fast` | 33 of 33 |
+| Other picks (`tail`, `trap`) | 14 of 25 |
+| Wrong picks | none |
+| Read into the 66 replies that are not picks | none |
+
+The reader was written with these cases in view, so the first two rows say what it covers, not how it does on words it has not seen.
+
+For that, an agent that had not seen the reader wrote 80 more replies from the rule alone, 50 of them to make it pick wrongly (`evals/replies.heldout.cases.json`, 22 Nov). On the first run:
+
+| What | Result |
+|---|---|
+| Clear picks | 24 of 29 right, 5 read as nothing, none wrong |
+| Replies that are not picks | 41 of 44 read as nothing, **3 picked wrongly** |
+| Ambiguous, by the writer's own mark | 7: no pick of the other choice |
+
+The three wrong picks: "Les deux." (both) read as choice 2; "Лікарня." read as the one choice with that word in its name, though it is the question's own word; "У парку." (a park) read as Парковий міст. All three are fixed, with four of the five misses ("à vous" and «приём» for over, "la seconde", "le 2ème"), and the 80 cases now run in `npm test` as a guard. So they are no longer unseen: the honest number for unseen words is the first run's, 3 wrong picks in 44 replies built to cause one.
+
+A second round followed the same day, by another agent that had seen neither the reader nor the first round (`evals/replies.heldout2.cases.json`): 110 replies, 57 of them on ten questions of its own, with choices the reader had never met (two schools named by number, a bell tower of the Near Caves and one of the Far Caves, a street in two towns). Seven of its replies came out the same as in round one. On the first run, with round one's fixes in:
+
+| What | Result |
+|---|---|
+| Clear picks | 31 of 39 right, 8 read as nothing, none wrong |
+| Replies that are not picks | 56 of 61 read as nothing, **5 picked wrongly** |
+| Ambiguous, by the writer's own mark | 10: **1 picked the other choice** |
+
+The six wrong picks: «Да нет.» (Russian for no) read as yes; "Yes, the impasse." read as yes to Rue des Quatre Ruelles, though it names another street; "Au 2, avenue de la République." read as choice 2, from a house number; «ближня» read as the nearer choice, though the other one is named Ближніх печер; «перша» and «перша гімназія» read as the first in the list, though Гімназія №1 is the third. Five of the six were on the new questions. All six are fixed, and the 110 run in `npm test`.
+
+What the two rounds say:
+
+- **A plain answer is read right or not at all.** Of 68 clear picks, 55 were read right, 13 as nothing, none wrongly.
+- **An odd reply is sometimes read as a pick:** 8 of 105 replies built to cause that, 7% in the first round and 8% in the second. The first round's fixes did not bring the second round's rate down, so a third round would most likely find more.
+- **It is a suggestion, and has to stay one.** A wrong pick shows a wrong choice already picked, with the unit's words beside it. The operator's confirm is the check, which is one more reason not to build choosing without it.
+
+Not built: choosing without the operator's confirm. A mentor called that an optional switch (22 Nov), and Alex left it out. Not read here: the radio words (say again, wait one, disregard), "none", a correction, and every reply that needs a reading ("the one by the big roundabout"). A phone that names its call sign, and a held report the operator gives to a unit, are read as reports as before.
+
 ## Open
 
-- **Who asks back.** Heard third hand on 21 November: the speakers have radios, and a live operator is on the other end. If the mentors confirm it, the question goes to the operator, who asks it over the radio, and the reader at most suggests a choice on the command post for the operator to confirm. A wrong suggestion then costs a click, not a wrong marker. The command post can already answer for a unit [178], and since decision 208 the phone leaves every question to it.
+- **Who asks back: settled.** A Lysk mentor confirmed on 22 November that the operator asks back over the radio, that a clarification should then be taken in automatically, and that the operator confirms every entry. So the reader suggests and the operator confirms: a wrong suggestion costs a click, not a wrong marker.
 - The Ukrainian and French replies were written without a native speaker, like the other cases [known gaps](known-gaps.md).
 - All replies are typed; none went through speech-to-text.
 - Follow-ups to the prompts that have no choices ("How far east is it?", "Where is it?") are not in the eval yet. For a track they lose the track today: "by the church" in reply to "Where is it?" is read as a new report about the speaker (from reading the code, not run).

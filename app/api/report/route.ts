@@ -7,12 +7,12 @@ import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/rep
 import { AREAS, DEFAULT_AREA, isAreaId, speechHints, whisperPrompt, WHISPER_PROMPT_PLACES, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { missionRoster } from "@/lib/reports/mission";
-import { readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
+import { ANSWER_HEARD, answerHeard, readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
 import { splitRequest, type Split } from "@/lib/geo/requests";
 import { positionFromReport } from "@/lib/reports/position";
 import { afterCallsign, farMove, findSender, type SenderFound } from "@/lib/reports/radio";
-import { openMissionLog, reportContext, saveHeld, saveReport, saveRequest, type HeldInput, type ReportInput, type RequestInput } from "@/lib/reports/record";
-import { callsignGiven, callsignOf, sessionCode, type RequestReply, type Sender } from "@/lib/reports/types";
+import { openMissionLog, reportContext, saveHeld, saveReply, saveReport, saveRequest, type HeldInput, type ReportInput, type RequestInput } from "@/lib/reports/record";
+import { callsignGiven, callsignOf, sessionCode, type HeardReply, type RequestReply, type Sender } from "@/lib/reports/types";
 
 export const maxDuration = 30;
 
@@ -239,6 +239,27 @@ export async function POST(req: Request) {
       lastPosition = c.lastPosition;
       tracks = c.tracks;
       Object.assign(meta, { callsign, lastPosition });
+      // A few words that answer the unit's open question are not a report [251]: "two", "the metro
+      // station". They are kept as what was heard, and the command post confirms the choice. Nothing
+      // moves, and no model reads them. Anything else is read as a report, as before.
+      const answer = answerHeard(m.entries, callsign, afterCallsign(transcript, sender.heard), now);
+      if (answer) {
+        const lang = pinned ?? sttLanguage;
+        let saved: Awaited<ReturnType<typeof saveReply>> = null;
+        try {
+          saved = await saveReply({ session, callsign, clientTs, report_id: answer.report_id, transcript, language: lang, choice: answer.candidate.id, how: answer.how, sender });
+        } catch (err) {
+          console.error("keeping the answer heard failed", err);
+        }
+        // Not saved: the question closed meanwhile. The words go on as a report.
+        if (saved) {
+          timings.total = Math.round(performance.now() - t0);
+          const heardAs: HeardReply = { question: answer.report_id, choice: answer.candidate.id, n: answer.n, name: answer.candidate.name, how: answer.how };
+          const kept = await keep({ transcript, language: lang, resolution: ANSWER_HEARD, report_id: saved.id });
+          console.log(`[radio] ${callsign}: heard as an answer, choice ${answer.n} (${answer.how})`);
+          return NextResponse.json({ transcript, language: lang, intent: null, timings_ms: timings, clientTs, area: area.id, callsign, sender, resolution: ANSWER_HEARD, report_id: saved.id, heard: heardAs, ...kept });
+        }
+      }
       // The model reads the words after the call sign, with a request for recon cut out [234]; the log keeps them all.
       const heard = splitRequest(afterCallsign(transcript, sender.heard));
       if (heard.only && heard.request) {

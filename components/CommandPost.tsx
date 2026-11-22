@@ -590,8 +590,25 @@ export default function CommandPost() {
     return i >= 0 ? i : Math.min(focus?.index ?? 0, decisions.length - 1);
   }, [decisions, decisionAt, focus]);
   const focused: Decision | null = focusedAt >= 0 ? decisions[focusedAt] : null;
-  /** The option picked in the open decision, waiting for its confirm. */
-  const picking = selection && focused && selection.id === focused.id ? selection.option : null;
+  /**
+   * An answer the coordinator heard for the open question [251]: its choice is picked already, and
+   * waits for the confirm like any other pick. Nothing is saved until the operator confirms.
+   */
+  const heardFor = focused?.kind === "question" ? (focused.item.heard ?? null) : null;
+  const heardKey = focused && heardFor ? `${focused.id}:${heardFor.ts}` : null;
+  /** The answer heard that the operator stepped back from: it is not picked again by itself. */
+  const [heardOff, setHeardOff] = useState<string | null>(null);
+  const heardChoice = heardFor?.choice ?? null;
+  const heardName = heardFor?.name ?? "";
+  const heardOption = useMemo<DecisionOption | null>(() => (heardChoice ? { kind: "choice", choice: heardChoice, name: heardName } : null), [heardChoice, heardName]);
+  const ownPick = selection && focused && selection.id === focused.id ? selection.option : null;
+  /** The option picked in the open decision, waiting for its confirm: the operator's, or the answer heard. */
+  const picking = ownPick ?? (canEdit && heardKey !== heardOff ? heardOption : null);
+  /** Steps back from a pick; an answer heard then stays unpicked. */
+  const unpick = useCallback(() => {
+    setSelection(null);
+    if (heardKey) setHeardOff(heardKey);
+  }, [heardKey]);
 
   // ---------- the replay bar ----------
   // The missions opened in this area on the shown one's day, each a stretch from its start to its
@@ -1810,7 +1827,7 @@ export default function CommandPost() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
-        if (picking) setSelection(null);
+        if (picking) unpick();
         else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
         else if (activeTool) setTool(null);
         else setPicked(null);
@@ -1856,7 +1873,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2290,6 +2307,7 @@ export default function CommandPost() {
             decisions={decisions}
             focused={focused}
             selection={canEdit ? picking : null}
+            heardPick={canEdit && !ownPick && picking != null}
             roster={view.roster}
             tracks={view.tracks}
             units={view.units}
@@ -2299,7 +2317,7 @@ export default function CommandPost() {
             now={effNow}
             fmtTime={fmtTime}
             onFocus={(d) => focusOn(d, decisions.indexOf(d))}
-            onSelect={(o) => (o ? pick(o) : setSelection(null))}
+            onSelect={(o) => (o ? pick(o) : unpick())}
             onConfirm={() => void confirmPick()}
             onTask={sendTask}
             onTrack={(n) => {
@@ -2462,7 +2480,7 @@ export default function CommandPost() {
           {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
             {view.feed.map((f) => {
-              if (f.kind === "plot" || f.kind === "note" || f.kind === "request" || f.kind === "task") {
+              if (f.kind === "plot" || f.kind === "note" || f.kind === "request" || f.kind === "task" || f.kind === "reply") {
                 // Something the command post did to a track or a held report, or a request for recon
                 // and what was done about it [234]: one line, like a join.
                 const t = f.track != null ? view.tracks.find((x) => x.n === f.track) : undefined;
@@ -2481,7 +2499,7 @@ export default function CommandPost() {
                     >
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
                       <span className={styles.itemCall}>
-                        <span className={styles.itemDot} style={{ background: f.kind === "request" ? f.colour : CP_COLOUR }} aria-hidden="true" />
+                        <span className={styles.itemDot} style={{ background: f.kind === "request" || f.kind === "reply" ? f.colour : CP_COLOUR }} aria-hidden="true" />
                         {f.callsign}
                       </span>
                       <span className={styles.joinText}>{f.outcome}</span>

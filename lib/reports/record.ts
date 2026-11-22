@@ -18,6 +18,7 @@ import type {
   DismissEntry,
   EndEntry,
   FixEntry,
+  HeardHow,
   HeldEntry,
   HeldReason,
   JoinEntry,
@@ -27,6 +28,7 @@ import type {
   MissionListReply,
   MissionSummary,
   PlotEntry,
+  ReplyEntry,
   ReportEntry,
   RequestEntry,
   RequestReply,
@@ -541,6 +543,55 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     };
     await store.append(entry);
     return { ok: true, entry };
+  });
+}
+
+// ---- an answer heard for an open question ----
+
+export interface ReplyInput {
+  session: string;
+  callsign: string;
+  clientTs: number | null;
+  /** The report whose question the words answer. */
+  report_id: string;
+  transcript: string;
+  language: string | null;
+  /** The choice heard: a candidate id of that question. */
+  choice: string;
+  how: HeardHow;
+  sender?: Sender;
+}
+
+/**
+ * Keeps what a unit said as an answer heard for its open question [251]. It moves nothing: the
+ * command post confirms the choice. Null when that question is no longer the unit's open one, or
+ * the choice is not one of its own (answered, closed or overtaken while the clip was read, or the
+ * mission ended): the caller then reads the words as a report.
+ */
+export async function saveReply(input: ReplyInput, now = Date.now()): Promise<ReplyEntry | null> {
+  const store = getStore();
+  if (store.kind === "none") return null;
+  return withSessionLock(input.session, async () => {
+    const { entries } = await store.list(input.session);
+    if (!missionOf(entries) || endOf(entries)) return null;
+    const pending = foldLog(entries).units.find((u) => u.callsign === input.callsign)?.pending;
+    if (pending?.reportId !== input.report_id || !pending.candidates.some((c) => c.id === input.choice)) return null;
+    const entry: ReplyEntry = {
+      kind: "reply",
+      id: newEntryId(now),
+      session: input.session,
+      callsign: input.callsign,
+      ts: now,
+      clientTs: input.clientTs,
+      report_id: input.report_id,
+      transcript: input.transcript,
+      language: input.language,
+      choice: input.choice,
+      how: input.how,
+      ...(input.sender ? { sender: input.sender } : {}),
+    };
+    await store.append(entry);
+    return entry;
   });
 }
 

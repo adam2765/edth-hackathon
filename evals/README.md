@@ -113,6 +113,8 @@ The 3B model gives the same answer in every round, so its misses are not noise. 
 
 Checks the reply reader (`lib/providers/replies.ts`): what a unit's reply to an open question does, such as pick a choice, say none, say where instead, or ask to hear it again. Measured, not used by the app yet. The design and the latest scores are in [docs/ask-back.md](../docs/ask-back.md).
 
+The same cases also measure the code reader that is in the app (`readPick` in `lib/geo/replies.ts`, decision 251): `tests/replyPick.test.ts` runs it on every case, with no model, and fails on a wrong pick. Its counts are in [docs/ask-back.md](../docs/ask-back.md#built-the-code-reader). `replies.heldout.cases.json` holds 80 more replies, written on 22 Nov by an agent that had not seen the reader, for the same 15 questions: `expect` is `pick` or `none`, and `ambiguous` marks the ones a person could argue either way. `replies.heldout2.cases.json` is a second round by another agent, 110 replies, with ten `questions` of its own whose choices give `name`, `category`, `town` and `distance_m`. The same test runs both.
+
 ```bash
 npm run eval:replies                              # hosted Mistral
 PROVIDER_MODE=local npm run eval:replies          # the local model through Ollama

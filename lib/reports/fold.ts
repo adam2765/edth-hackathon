@@ -8,7 +8,7 @@ import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
 import { describeTrack, TRACK_KIND_NAME } from "../geo/trackKinds";
-import type { FixEntry, HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitEntry, UnitPosition } from "./types";
+import type { FixEntry, HeardHow, HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitEntry, UnitPosition } from "./types";
 
 /** The command post's colour in the feed: a slate grey no call sign is given. */
 export const CP_COLOUR = "#334155";
@@ -145,8 +145,9 @@ export interface FeedItem {
   /**
    * A report, a call sign joining, something the command post did to a track, or a note of what it
    * did with a held radio report (added a call sign, dismissed the report) or said a unit is [235].
+   * `reply`: what a unit said in answer to its open question, heard and waiting for a confirm [251].
    */
-  kind: "report" | "join" | "plot" | "note" | "request" | "task";
+  kind: "report" | "join" | "plot" | "note" | "request" | "task" | "reply";
   /** The report's or the join's id. */
   id: string;
   ts: number;
@@ -175,6 +176,12 @@ export interface FeedItem {
   overtaken?: boolean;
   /** Set with `overtaken` when it was a hand placement that closed the question, not a later report [243]. */
   byHand?: boolean;
+  /**
+   * For a question still open: what the unit said in answer, read in code as one of the choices
+   * [251]. Nothing has moved: the command post shows this choice picked, and the operator confirms.
+   * `n` counts from 1, as on the screen. The latest answer heard replaces an earlier one.
+   */
+  heard?: { ts: number; choice: string; n: number; name: string; words: string; how: HeardHow };
   /** For a radio report: how its sender was found [202]. */
   sender?: Sender;
 }
@@ -218,7 +225,7 @@ export function colourMap(entries: LogEntry[]): Map<string, string> {
   };
   for (const e of entries) {
     if (e.kind === "mission") (e.roster ?? []).forEach(give);
-    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "roster" || e.kind === "request" || e.kind === "unit" || e.kind === "fix") give(e.callsign);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "reply" || e.kind === "roster" || e.kind === "request" || e.kind === "unit" || e.kind === "fix") give(e.callsign);
   }
   return m;
 }
@@ -618,6 +625,37 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         answer: null,
         expired: false,
         track: null,
+      });
+      continue;
+    }
+
+    if (e.kind === "reply") {
+      // A few words heard as the answer to the unit's open question [251]. The unit spoke, so it was
+      // heard; it does not move, and the question stays open until the command post confirms.
+      const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
+      u.lastHeard = Math.max(u.lastHeard, e.ts);
+      const item = feed.get(e.report_id);
+      const at = item ? item.candidates.findIndex((c) => c.id === e.choice) : -1;
+      const chosen = at >= 0 ? item!.candidates[at] : null;
+      const open = !!item && !item.answer && !item.expired && !item.overtaken;
+      if (item && chosen && open) item.heard = { ts: e.ts, choice: e.choice, n: at + 1, name: chosen.name, words: e.transcript, how: e.how };
+      feed.set(e.id, {
+        kind: "reply",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.callsign,
+        colour: u.colour,
+        area: u.area,
+        transcript: e.transcript,
+        status: "resolved",
+        // The kind too: two choices can have one name. The question's own line says what was chosen in the end.
+        outcome: chosen ? `Said “${e.transcript}”: heard as choice ${at + 1}, ${chosen.name} (${chosen.category.replace("_", " ")}). The command post confirms.` : `Said “${e.transcript}”.`,
+        position: null,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: null,
+        ...(e.sender ? { sender: e.sender } : {}),
       });
       continue;
     }
