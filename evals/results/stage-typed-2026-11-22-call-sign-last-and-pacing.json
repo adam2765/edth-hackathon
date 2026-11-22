@@ -1,0 +1,271 @@
+{
+ "base": "http://localhost:3147",
+ "voices": [],
+ "repeat": 1,
+ "runs": [
+  {
+   "id": "A1",
+   "said": "Alpha 1, at Vincennes station.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Vincennes station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 4642
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1, I'm at Vincennes station.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, I'm at Vincennes station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 5048
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1 at the Vincennes station",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1 at the Vincennes station",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 5637
+  },
+  {
+   "id": "A1",
+   "said": "Alpha one, position Vincennes station.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha one, position Vincennes station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 5388
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1, at Vincennes station, over.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Vincennes station, over.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 5011
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1, now at Vincennes station.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, now at Vincennes station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 5692
+  },
+  {
+   "id": "C3",
+   "said": "Bravo 2, the metro station.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, the metro station.",
+   "sender": "BRAVO 2",
+   "got": "ambiguous; asks: Which station: Château de Vincennes, Vincennes, or Bérault? [Château de Vincennes / Vincennes / Bérault]",
+   "ms": 5187
+  },
+  {
+   "id": "G1",
+   "said": "At Vincennes station, Alpha 1.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "At Vincennes station, Alpha 1.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 2
+  },
+  {
+   "id": "G1",
+   "said": "At Vincennes station. Alpha 1.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "At Vincennes station. Alpha 1.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 2
+  },
+  {
+   "id": "G1",
+   "said": "I'm at Vincennes station, Alpha 1, over.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "I'm at Vincennes station, Alpha 1, over.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 1
+  },
+  {
+   "id": "G1",
+   "said": "At Vincennes station, Alpha 1 out.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "At Vincennes station, Alpha 1 out.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 1
+  },
+  {
+   "id": "G2",
+   "said": "Moving towards the town hall, Bravo 2, over.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Moving towards the town hall, Bravo 2, over.",
+   "sender": null,
+   "got": "held (which): Heard “Bravo 2” at the end. Was that BRAVO 2?",
+   "ms": 3
+  },
+  {
+   "id": "G2",
+   "said": "Moving towards the town hall. Bravo 2. Over.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Moving towards the town hall. Bravo 2. Over.",
+   "sender": null,
+   "got": "held (which): Heard “Bravo 2” at the end. Was that BRAVO 2?",
+   "ms": 2
+  },
+  {
+   "id": "G2",
+   "said": "Moving towards the town hall - Bravo 2, over.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Moving towards the town hall - Bravo 2, over.",
+   "sender": null,
+   "got": "held (which): Heard “Bravo 2” at the end. Was that BRAVO 2?",
+   "ms": 1
+  },
+  {
+   "id": "G3",
+   "said": "Unknown vehicle, bearing 060, 300 metres, send the drone, Alpha 1, out.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Unknown vehicle, bearing 060, 300 metres, send the drone, Alpha 1, out.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 1
+  },
+  {
+   "id": "G4",
+   "said": "Track 1 is hostile, Charlie 3.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Track 1 is hostile, Charlie 3.",
+   "sender": null,
+   "got": "held (which): Heard “Charlie 3” at the end. Was that CHARLIE 3?",
+   "ms": 1
+  },
+  {
+   "id": "G4",
+   "said": "Track 1 is hostile. Charlie 3.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Track 1 is hostile. Charlie 3.",
+   "sender": null,
+   "got": "held (which): Heard “Charlie 3” at the end. Was that CHARLIE 3?",
+   "ms": 1
+  },
+  {
+   "id": "G4",
+   "said": "Track 1 is hostile, Charlie 3, out.",
+   "how": "variant",
+   "pass": true,
+   "misses": [],
+   "transcript": "Track 1 is hostile, Charlie 3, out.",
+   "sender": null,
+   "got": "held (which): Heard “Charlie 3” at the end. Was that CHARLIE 3?",
+   "ms": 1
+  },
+  {
+   "id": "G6",
+   "said": "I'm at the church with Bravo 2.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "I'm at the church with Bravo 2.",
+   "sender": null,
+   "got": "held (none): No call sign heard. Which unit sent this?",
+   "ms": 4
+  },
+  {
+   "id": "G7",
+   "said": "Push up to Vincennes station and hold there, Bravo 2.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Push up to Vincennes station and hold there, Bravo 2.",
+   "sender": null,
+   "got": "held (which): Heard “Bravo 2” at the end. Was that BRAVO 2?",
+   "ms": 1
+  },
+  {
+   "id": "G8",
+   "said": "Send the drone to Track 2, Alpha 1, over.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Send the drone to Track 2, Alpha 1, over.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 1
+  },
+  {
+   "id": "G9",
+   "said": "Moving towards Avenue de Paris Alpha 1 over",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Moving towards Avenue de Paris Alpha 1 over",
+   "sender": null,
+   "got": "held (none): No call sign heard. Which unit sent this?",
+   "ms": 5
+  },
+  {
+   "id": "P1",
+   "said": "Alpha 1, at Mairie de Vincennes.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Mairie de Vincennes.",
+   "sender": null,
+   "got": "held (far): ALPHA 1 moved 461 m in 0 s. Is that right?",
+   "ms": 3423
+  },
+  {
+   "id": "P2",
+   "said": "Alpha 1, at Mairie de Vincennes.",
+   "how": "typed",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Mairie de Vincennes.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Mairie de Vincennes; ±31 m",
+   "ms": 2564
+  }
+ ]
+}
