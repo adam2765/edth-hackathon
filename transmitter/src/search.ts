@@ -3,7 +3,7 @@ import { requireOptionalNativeModule } from "expo";
 /** A coordinator the phone found on the local network: its advert's name, its id, and URLs to try. */
 export interface NearbyHost { name: string; id: string; urls: string[] }
 
-// iOS only (modules/coordinator-search). Optional, so Android and builds made before it still run:
+// iOS and Android (modules/coordinator-search). Optional, so builds made before it still run:
 // they find coordinators through the addresses they already know.
 const search = requireOptionalNativeModule<{
   start(): void;

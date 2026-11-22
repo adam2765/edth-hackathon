@@ -88,9 +88,10 @@ address override, scenarios, test clips and timings. The area comes from the mis
 Voice-to-text is on the coordinator, with no phone provider/model controls.
 
 Android USB uses reverse forwarding; Start restores it without launching the app. On an
-iPhone the app reaches the host’s `.local` name and also searches the local network for
-coordinators itself; after Connect it follows that coordinator to a new address, so a Mac
-that macOS renamed, or that moved to another network, is found again. iPhone builds still need Mac/Xcode and
+iPhone the app reaches the host’s `.local` name. Both phones also search the local network for
+coordinators themselves; after Connect the app follows that coordinator to a new address, so a Mac
+that macOS renamed, or that moved to another network, is found again. An Android phone off the
+cable needs a release build: `transmitter/README.md`, "An Android phone off the cable". iPhone builds still need Mac/Xcode and
 signing; free provisioning expires after seven days. Windows and physical-phone deployment
 paths need validation on the relevant hardware. Offline inference works without internet,
 and so does the map for an area saved with `npm run basemap -- <area>`. The map's corner says
