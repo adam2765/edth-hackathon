@@ -591,7 +591,7 @@ export default function CommandPost() {
   }, [decisions, decisionAt, focus]);
   const focused: Decision | null = focusedAt >= 0 ? decisions[focusedAt] : null;
   /**
-   * An answer the coordinator heard for the open question [246]: its choice is picked already, and
+   * An answer the coordinator heard for the open question [251]: its choice is picked already, and
    * waits for the confirm like any other pick. Nothing is saved until the operator confirms.
    */
   const heardFor = focused?.kind === "question" ? (focused.item.heard ?? null) : null;

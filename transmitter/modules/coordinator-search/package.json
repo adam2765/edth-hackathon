@@ -1,0 +1,6 @@
+{
+  "name": "coordinator-search",
+  "version": "1.0.0",
+  "description": "Finds coordinators on the local network (Bonjour, _voicetomap._tcp)",
+  "private": true
+}

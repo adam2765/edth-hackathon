@@ -318,7 +318,7 @@ A, B and C can run in parallel.
 Things already found:
 
 - **No PMTiles needed.** Vincennes is 154 tiles with a margin for panning (Kyiv 210, Izium 253), so a plain folder of files does. OpenFreeMap allows an offline download of up to 3,000 tiles or 50 MB, 4 requests at a time [239].
-- **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, turbo gets no names at all: on the scenario clips they gained nothing and twice put a word in the transcript [195].
+- **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, Whisper gets the roster and ten names, in Vincennes only: a real voice's "Château de Vincennes" came back "Château de Vonsen" with none, and thirty or more did not fix it [247]. Choosing the ten nearest the last position is still to do.
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].
 - **On the MacBook now:** Ollama 0.40.16 with `ministral-3:3b` and `ministral-3:8b`; whisper.cpp 1.9.5 (Homebrew) with large-v3-turbo; ffmpeg present; no local certificate tool.

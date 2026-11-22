@@ -6,7 +6,7 @@ The transmitter: it stands in for a field radio and sends spoken reports to the 
 
 Where this app differs from the Expo template advice below:
 
-- **Connection:** detect coordinators through the Metro/USB host and LAN discovery, show Connect per server, then automatically follow the newest running mission between reports. No mission picker or Join/Leave controls.
+- **Connection:** detect coordinators through the Metro/USB host, LAN discovery and, on iPhone, the phone's own Bonjour search (`modules/coordinator-search`, decision 248), show Connect per server, then automatically follow the newest running mission between reports. No mission picker or Join/Leave controls.
 - **One screen, no Expo Router** (decision 65). Ignore the routing section below unless the app grows a second screen.
 - **Transcription runs on the coordinator:** send compressed microphone/scenario audio. Do not restore phone model setup or transcription controls. The existing native dependencies are retained for installed-build compatibility.
 - **Native development build, not Expo Go** (decision 59): installed builds still include the existing native audio dependencies. Build locally with `LANG=en_US.UTF-8 npx expo run:ios` (CocoaPods fails without a UTF-8 locale, decision 66) or `npx expo run:android`, then `npx expo start --dev-client`. iOS builds need a Mac with Xcode.

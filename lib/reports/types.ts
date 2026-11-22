@@ -207,12 +207,12 @@ export interface AnswerEntry {
   by?: string;
 }
 
-/** How a spoken answer named its choice [246]: its number, its name or kind, the nearer one, or "yes" to a single choice. */
+/** How a spoken answer named its choice [251]: its number, its name or kind, the nearer one, or "yes" to a single choice. */
 export type HeardHow = "number" | "name" | "nearest" | "yes";
 
 /**
  * What a unit said while its question was open, read in code as an answer that picks one of the
- * choices [246]: "two", "the metro station". It is not a report and moves nothing. The command post
+ * choices [251]: "two", "the metro station". It is not a report and moves nothing. The command post
  * shows the choice already picked, and the operator confirms it with an `answer`.
  */
 export interface ReplyEntry {
@@ -434,7 +434,7 @@ export interface UnitReply {
 
 /**
  * The `heard` field of the report reply: the words were taken as an answer to the unit's open
- * question, and wait for the command post's confirm [246]. The reply's `report_id` is then the id
+ * question, and wait for the command post's confirm [251]. The reply's `report_id` is then the id
  * of the `reply` entry, so a phone knows its words were saved.
  */
 export interface HeardReply {

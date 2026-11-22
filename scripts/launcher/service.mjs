@@ -35,7 +35,7 @@ if (kind === 'coordinator') {
   });
   close = async () => {
     await new Promise((resolve) => { server.close(resolve); server.closeIdleConnections(); });
-    globalThis.voiceDirectory?.bonjour.destroy();
+    globalThis.voiceDirectory?.stop();
     await app.close();
   };
   server.listen(Number(args[0]), '0.0.0.0', () => process.send?.({ ready: true, id, port: server.address().port }));
