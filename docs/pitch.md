@@ -264,19 +264,18 @@ Light. The footer is the source line below, not the usual one.
 
 - **Eyebrow:** Evidence
 - **Title:** Tested the way we demo: line by line, with no internet.
-- **Four numbers:**
+- **Three numbers:**
 
   | Number | Label |
   |---|---|
   | 27/27 | stage lines placed right, spoken in three synthetic voices |
   | 0 | wrong units in 220 call-sign cases |
   | 84/84 | test calls read correctly: an effector request, or not |
-  | 581 | automated tests, run on every change |
 
 - **Under them:** Every stage line also passed typed, three times of three, on the laptop’s own model.
 - **Footer:** Appendix · Source: docs/stage-test-plan.md · 21 and 22 Nov
 
-**Notes:** All of this is the path we demo, on one laptop. 27 of 27: nine stage lines, each as a clip in three macOS voices, through Whisper large-v3-turbo and the 3B model. Clean synthetic voices in a silent room, so this is the easy case: say so if asked. Other lines scored 23 of 30; the French names Bérault and Mairie de Vincennes did not survive Whisper, so the script has neither. The call-sign reader never named a wrong unit in 220 cases. 84 of 84: test radio calls in four languages, some asking for an effector and some only sounding as if they did; the reader got every one right. Twenty of them were written separately, from the rules alone, by someone who had not seen the code, to check the reader was not fitted to its own examples. The small model is weaker on free wording, which is why the stage lines are tested one by one. [Add Alex’s own voice, 5 of 5 for each line, and the timed dress rehearsal, when done.]
+**Notes:** All of this is the path we demo, on one laptop. 27 of 27: nine stage lines, each as a clip in three macOS voices, through Whisper large-v3-turbo and the 3B model. Clean synthetic voices in a silent room, so this is the easy case: say so if asked. Other lines scored 23 of 30; the French names Bérault and Mairie de Vincennes did not survive Whisper, so the script has neither. The call-sign reader never named a wrong unit in 220 cases. 84 of 84: test radio calls in four languages; 48 ask for an effector (“Request eyes on”, “send our drone to track five”) and 36 only sound as if they do (“No need to send the drone”). The reader got every one right. Twenty of the 84, 12 requests and 8 that are not, were written separately, from the rules alone, by someone who had not seen the code, and scored before anyone looked at them: 20 of 20. The small model is weaker on free wording, which is why the stage lines are tested one by one. [Add Alex’s own voice, 5 of 5 for each line, and the timed dress rehearsal, when done.]
 
 Source: [stage-test-plan.md](stage-test-plan.md#results).
 
