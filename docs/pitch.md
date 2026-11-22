@@ -172,7 +172,7 @@ Dark. No footer.
 
 ### Part 4. Appendix, for questions
 
-These six slides come after the close and are not presented. Each one's footer starts with "Appendix ·". Their pictures are four of the twelve command post screenshots taken on 22 November at 10:15, in another session's worktree under `docs/images/pitch/`; they are not on `main` yet.
+These six slides come after the close and are not presented. Each one's footer starts with "Appendix ·". Their pictures are four of the twelve command post screenshots of 22 November, in [images/pitch/](images/pitch/) ([the pictures](#the-pictures)).
 
 #### 8. Asking back
 
@@ -215,7 +215,7 @@ Dark.
   - A standard APP-6 symbol: who saw it, when, ± metres.
   - Hostile only when the speaker says so.
   - A fresh track shows motion; an old one goes still.
-- **Picture:** on the right, the command post in Vincennes: Track 1, a hostile vehicle with its accuracy circle and heading arrow, 300 metres on bearing 060 from ALPHA 1, with a line from the drone team CHARLIE 3 that reported it hostile (`08-track-hostile.png`).
+- **Picture:** on the right, the command post in Vincennes: Track 1, a hostile vehicle with its accuracy circle, 300 metres on bearing 060 from ALPHA 1, with a line from the drone team CHARLIE 3 that reported it hostile (`08-track-hostile.png`).
 
 **Notes:** Lysk asked only for the speaker’s own position. A unit also reports what it sees, so the same pipeline turns those reports into tracks: a numbered symbol, who saw it, when, and how sure. A report about a track never moves the speaker. Nothing is marked hostile unless the speaker said so: in the picture CHARLIE 3 said “Track 1 is hostile”. The bearing is kept exact, 060 and not “north-east”. Motion on the map means one thing: the report is fresh. After ten minutes a track’s arrow stops flowing, because the way it was moving is what was said then, not what is known now. The operator can also place, move and close tracks by hand.
 
@@ -279,6 +279,37 @@ Light. The footer is the source line below, not the usual one.
 
 Source: [stage-test-plan.md](stage-test-plan.md#results).
 
+## The pictures
+
+Twelve pictures of the command post for the deck, in [images/pitch/](images/pitch/), taken on Sunday 22 November between 10:27 and 10:29 (frames 01 to 10), and at about 10:13 and 10:16 (frames 11 and 12). Each is 1920 × 1080, the size of a slide. Four are in the deck, on appendix slides 8 to 11; the rest are spare.
+
+| File | What it shows | Slide |
+|---|---|---|
+| `01-alpha-placed.png` | "Alpha 1, at Vincennes station.": the marker, its time and ±30 m | |
+| `02-bravo-question.png` | "Bravo 2, at the château.": the castle and the metro station numbered on the map, nothing moved, the question open in the Decisions list | 8 |
+| `03-operator-picks.png` | The operator picked 2: "Choose Château de Vincennes for BRAVO 2?" | |
+| `04-bravo-placed.png` | BRAVO 2 at the metro station, "CP answered" in the feed | |
+| `05-track-and-request.png` | "…unknown vehicle, bearing 060, 300 metres, send the drone.": Track 1 on its bearing line, and the request with "Send CHARLIE 3 · drone team · free" | |
+| `06-operator-sends.png` | The confirm: "Send CHARLIE 3, drone team, to look at Track 1?" | |
+| `07-drone-sent.png` | The blue line from CHARLIE 3 to Track 1 | 11 |
+| `08-track-hostile.png` | "Charlie 3, Track 1 is hostile.": the track turns hostile | 10 |
+| `09-bravo-moves.png` | "Bravo 2, moving towards the town hall.": the arrow, the path, "≈ Estimate" | |
+| `10-replay.png` | The replay at 10:28:34, before the track turned hostile, with the replay bar | |
+| `11-decisions-under-load.png` | 24 units, two tracks, and six decisions of four kinds waiting, the oldest one late | 9 |
+| `12-kyiv-ukrainian.png` | Kyiv: «Альфа 1, я біля Золотих воріт.» asks which of three, in Ukrainian; «Браво 2, я на Майдані Незалежності.» is placed | |
+
+What a reader should know about them:
+
+- **Frames 01 to 10 are one run of the stage script,** typed, through the offline model, in mission `vincennes-69` on a coordinator of its own. Every position has its grid after it [245], and Track 1 has no heading [246].
+- **Frames 05 to 10 were taken twice.** The first run, at about 10:10, drew Track 1 with an arrow and "moving east, as said", which nobody had said. That was fixed [246] and the frames taken again at 10:28. The deck took `07-drone-sent.png` and `08-track-hostile.png` from the first run, so its slides 10 and 11 still show the arrow until the files here are put in ([to fill in](#to-fill-in)).
+- **The run has BRAVO 2's move last,** after the three drone beats, not fourth as in [the demo script](demo-script.md#the-run). That order fills the 8-second wait the far guard needs after the operator's answer. It passed typed three times of three, and has not been spoken. The demo script and the stage script keep the tested order, with the wait.
+- **Frame 11 is staged.** Its reports are made up and were written straight to the log with canned places, by a script that is not kept; no model read them. It is the real screen with a made-up net.
+- **Frame 12 is two typed reports** through the offline model, in mission `kyiv-1`.
+- **The operator turned Follow units back on** after picking BRAVO 2's place. A pick switches it off, and without that click the track of frame 05 appears off the screen.
+- **Frame 11 is 692 KB,** over the 600 KB the other pictures keep to: with fewer colours the units' colours ran together.
+
+To take them again: run the coordinator in offline mode on a port of its own, open a mission in Vincennes with the start point Château de Vincennes and the roster ALPHA 1, BRAVO 2, CHARLIE 3, mark CHARLIE 3 a drone team, and send the lines as typed reports to `POST /api/report` (text, session, language, no call sign). Take each frame in headless Chrome at 1600 × 900 and 2× pixel density, about 4 s after the line, then reduce it to 1920 × 1080 and 240 colours without dithering. Do the operator's steps on the page: 2 then Enter, **Follow units**, **Send CHARLIE 3** then **Send**, and **Replay** with the bar dragged back.
+
 ## To fill in
 
 | What | Slides | Where it comes from |
@@ -289,7 +320,7 @@ Source: [stage-test-plan.md](stage-test-plan.md#results).
 | Seconds from speech to marker, timed | 4 | The dress rehearsal, pass 4 of [stage-test-plan.md](stage-test-plan.md#the-passes). 3 to 5 s is a short report [195]. |
 | The map system's name | 6 | The mentors, if they name one |
 | Video link | 7 | The backup video |
-| The four pictures, on `main` | 8 to 11 | They are in the deck. In the repo they wait for the session that took them to commit `docs/images/pitch/`. |
+| Two pictures, put in the deck again | 10, 11 | `08-track-hostile.png` and `07-drone-sent.png` were taken again at 10:28, after the fix of decision 246. The deck took its copies before that, with an arrow on Track 1 that the app no longer draws. Put in the files of [images/pitch/](images/pitch/) ([the pictures](#the-pictures)). |
 | Alex's own voice, and the dress rehearsal | 13 | Passes 3 and 4 of [stage-test-plan.md](stage-test-plan.md#the-passes) |
 
 Cut on 22 November, on purpose: the team slide (the names are on the cover), the live demo slide (the demo has its script), Lysk's three tests (Lysk knows them), and the questions we expect. The hosted-mode figures went with them.
@@ -301,7 +332,7 @@ Cut on 22 November, on purpose: the team slide (the names are on the cover), the
 - Headings in Oswald, text in Inter, spoken lines and call signs in JetBrains Mono. All three have Cyrillic, and all three travel in a PPTX file.
 - Type sizes on the 1920 × 1080 slide: 120 px for the cover title and big numbers, 72 px for slide titles, 44 px for card titles and statements, 32 px for text, 24 px for eyebrows, footers and small lines.
 - Colours: ink `#12181D`, panel `#1D272F`, paper `#EEEBE3`, card `#E1DCD0`, amber `#F2B33D`, dark amber for text on paper `#8A5600`, blue `#5B97F2`, dark blue for text on paper `#2557A8`.
-- Screenshots are 1920 × 1080, shown 1040 px wide beside a 560 px column of text. Retake them when the screen changes, then put them in the deck again.
+- Screenshots are 1920 × 1080, shown 1040 px wide beside a 560 px column of text. They are in [docs/images/pitch/](images/pitch/) ([the pictures](#the-pictures)). Retake them there when the screen changes, then put them in the deck again.
 
 ## Submitting
 
