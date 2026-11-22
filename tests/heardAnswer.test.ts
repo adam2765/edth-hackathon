@@ -66,6 +66,18 @@ describe("an answer heard, in the log", () => {
     const other = foldLog([MISSION, report("q", 10, "BRAVO 2", ASK), reply("a", 30, "BRAVO 2", "q", "way/1", "the park")]);
     expect(other.feed.find((f) => f.id === "q")?.heard).toBeUndefined();
   });
+
+  it("a unit placed by hand closes its question, answer heard or not [243]", () => {
+    const s = foldLog([
+      MISSION,
+      report("q", 10, "BRAVO 2", ASK),
+      reply("a", 30, "BRAVO 2", "q", station.id, "the metro"),
+      { kind: "fix", id: "f", session: S, ts: at(40), by: "CP", callsign: "BRAVO 2", position: AT_CASTLE },
+    ]);
+    expect(s.units.find((x) => x.callsign === "BRAVO 2")).toMatchObject({ position: AT_CASTLE, placedBy: "CP", pending: null });
+    expect(s.feed.find((f) => f.id === "q")).toMatchObject({ overtaken: true, byHand: true });
+    expect(decisionsOf(s)).toEqual([]);
+  });
 });
 
 describe("telling an answer from a report", () => {

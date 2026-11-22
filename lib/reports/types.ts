@@ -1,6 +1,6 @@
 /**
  * The shared record: a mission's opening, every unit that joins, every report and every answer to
- * a question, an answer heard and waiting for a confirm, what the command post did to a track by hand, radio reports held for the operator
+ * a question, an answer heard and waiting for a confirm, what the command post did to a track by hand, a unit it placed by hand, radio reports held for the operator
  * and what the operator did with them, and the mission's end, as one append-only log per session. The coordinator writes it; the command post reads it and rebuilds
  * the map from it, live or up to any moment for a replay.
  * A mission is what the code calls a session: one code, one log. Safe to import on the client.
@@ -157,6 +157,24 @@ export interface UnitEntry {
   by: string;
   callsign: string;
   unit_kind: TrackKind | null;
+}
+
+/**
+ * A person at the command post puts a unit at a place by hand [243]: the unit said where it is and
+ * the app did not place it, or placed it wrongly. A point clicked on the map or a gazetteer place
+ * picked by name, never a model's output. The unit itself was not heard.
+ */
+export interface FixEntry {
+  kind: "fix";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who did it: "CP". */
+  by: string;
+  callsign: string;
+  position: UnitPosition;
+  /** Where the information came from, as typed ("heard on the net", "by phone"). */
+  note?: string | null;
 }
 
 /** The operator dismisses a held report: noise, or not for this net [203]. It stays in the log. */
@@ -347,7 +365,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | ReplyEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | ReplyEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry | FixEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -427,6 +445,11 @@ export interface HeardReply {
   n: number;
   name: string;
   how: HeardHow;
+}
+
+/** `POST /api/sessions/<code>/units/position`: where a person at the command post put a unit [243]. */
+export interface FixReply {
+  entry: FixEntry;
 }
 
 /** The `request` field of the report reply: the request read from the words, as saved [234]. */

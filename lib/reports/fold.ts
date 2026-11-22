@@ -8,7 +8,7 @@ import type { AreaId } from "@/lib/geo/areas";
 import type { Affiliation, Candidate, Direction, Resolution, TrackKind } from "@/lib/geo/types";
 import { bearingDeg, distanceM } from "../geo/geo";
 import { describeTrack, TRACK_KIND_NAME } from "../geo/trackKinds";
-import type { HeardHow, HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitEntry, UnitPosition } from "./types";
+import type { FixEntry, HeardHow, HeldEntry, JoinEntry, LogEntry, PlotEntry, ReportEntry, RequestEntry, Sender, StartPoint, TaskEntry, TrackSighting, UnitEntry, UnitPosition } from "./types";
 
 /** The command post's colour in the feed: a slate grey no call sign is given. */
 export const CP_COLOUR = "#334155";
@@ -63,6 +63,20 @@ export interface UnitState {
    * closed it yet: the operator asks it by radio, or closes it [242].
    */
   prompt: { reportId: string; ts: number; question: string } | null;
+  /**
+   * Who put it where it is, when that was a person at the command post ("CP") and not the unit's
+   * own words [243]; null once its next report or answer places it.
+   */
+  placedBy: string | null;
+}
+
+/**
+ * When the command post last knew where a unit is: the last time it was heard, or the time a person
+ * placed it by hand when that is later [243]. A marker dims from this, so a unit just placed by
+ * hand is not drawn as silent. `lastHeard` stays the last time the unit itself was heard.
+ */
+export function knownAt(u: UnitState): number {
+  return u.placedBy && u.positionTs != null ? Math.max(u.lastHeard, u.positionTs) : u.lastHeard;
 }
 
 /**
@@ -155,8 +169,13 @@ export interface FeedItem {
   expired: boolean;
   /** What the report asked, with choices or without; absent when it asked nothing. */
   question?: string | null;
-  /** The same unit reported again while the question was open, so it is closed and cannot be answered [241]. */
+  /**
+   * The question is closed and cannot be answered: the same unit reported again while it was open
+   * [241], or a person at the command post placed the unit by hand [243].
+   */
   overtaken?: boolean;
+  /** Set with `overtaken` when it was a hand placement that closed the question, not a later report [243]. */
+  byHand?: boolean;
   /**
    * For a question still open: what the unit said in answer, read in code as one of the choices
    * [244]. Nothing has moved: the command post shows this choice picked, and the operator confirms.
@@ -206,7 +225,7 @@ export function colourMap(entries: LogEntry[]): Map<string, string> {
   };
   for (const e of entries) {
     if (e.kind === "mission") (e.roster ?? []).forEach(give);
-    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "reply" || e.kind === "roster" || e.kind === "request" || e.kind === "unit") give(e.callsign);
+    else if (e.kind === "report" || e.kind === "join" || e.kind === "answer" || e.kind === "reply" || e.kind === "roster" || e.kind === "request" || e.kind === "unit" || e.kind === "fix") give(e.callsign);
   }
   return m;
 }
@@ -274,6 +293,12 @@ export function unitKindWord(kind: TrackKind): string {
 /** What a person at the command post said a unit is, in words [235]. */
 function unitOutcome(e: UnitEntry): string {
   return e.unit_kind ? `${e.callsign} is a ${unitKindWord(e.unit_kind)}.` : `${e.callsign}: what it is, cleared.`;
+}
+
+/** A unit a person at the command post placed by hand, in words [243]. `moved` when it had a place of its own before. */
+function fixOutcome(e: FixEntry, moved: boolean): string {
+  const p = e.position;
+  return `${moved ? "Moved" : "Placed"} ${e.callsign} by hand: ${p.label} (±${p.radius_m} m).${e.note ? ` Source: ${e.note}.` : ""}`;
 }
 
 /** The drone a task is about, in words: "Track 1 (friendly drone team)", or "BRAVO 2 (drone team)" for a unit [235]. */
@@ -352,7 +377,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
   const unitFor = (callsign: string, a: AreaId): UnitState => {
     let u = units.get(callsign);
     if (!u) {
-      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null, kind: null, task: null, prompt: null };
+      u = { callsign, colour: colours.get(callsign) ?? UNIT_COLOURS[0], area: a, position: null, positionTs: null, trail: [], lastHeard: 0, pending: null, joined: null, device: null, atStart: false, street: null, kind: null, task: null, prompt: null, placedBy: null };
       units.set(callsign, u);
     }
     return u;
@@ -360,22 +385,26 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
 
   /**
    * A question the unit has moved past: its own later report closes it, and an answer that comes
-   * after would place it from where it was before [241].
+   * after would place it from where it was before [241]. `byHand` when a person at the command
+   * post placed the unit instead, which closes the unit's question the same way [243].
    */
-  const overtake = (reportId: string) => {
+  const overtake = (reportId: string, how = "Overtaken by a later report.", byHand = false) => {
     const item = feed.get(reportId);
     if (item && !item.answer && !item.expired && !item.overtaken) {
       item.overtaken = true;
-      item.outcome = `${item.outcome} Overtaken by a later report.`;
+      if (byHand) item.byHand = true;
+      item.outcome = `${item.outcome} ${how}`;
     }
     for (const t of tracks.values()) if (t.pendingReport === reportId) t.pendingReport = null;
   };
 
-  const move = (u: UnitState, p: UnitPosition, ts: number) => {
+  /** `by` is set when a person at the command post put the unit there, not its own words [243]. */
+  const move = (u: UnitState, p: UnitPosition, ts: number, by: string | null = null) => {
     if (u.position && u.positionTs != null && !u.atStart) u.trail = [...u.trail, { lat: u.position.lat, lon: u.position.lon, ts: u.positionTs }].slice(-TRAIL_MAX);
     u.atStart = false;
     u.position = p;
     u.positionTs = ts;
+    u.placedBy = by;
   };
 
   const placeTrack = (t: TrackState, p: UnitPosition, ts: number) => {
@@ -627,6 +656,42 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
         expired: false,
         track: null,
         ...(e.sender ? { sender: e.sender } : {}),
+      });
+      continue;
+    }
+
+    if (e.kind === "fix") {
+      // Only a unit the log already has: placing by hand never makes one [243].
+      const u = units.get(e.callsign);
+      if (!u) continue;
+      const moved = u.position != null && !u.atStart;
+      // The unit's own question about where it is, with choices or without, is settled by the place
+      // it was given. One about a track it reported stays open: this says nothing about the track.
+      for (const id of [u.pending?.reportId, u.prompt?.reportId]) {
+        if (!id || feed.get(id)?.track != null) continue;
+        overtake(id, `Closed: ${e.by} placed ${e.callsign} by hand.`, true);
+        if (u.pending?.reportId === id) u.pending = null;
+        if (u.prompt?.reportId === id) u.prompt = null;
+      }
+      // The unit was not heard: `lastHeard` stays, and `knownAt` takes the time of the placement.
+      move(u, e.position, e.ts, e.by);
+      // A point on the map says nothing about a street.
+      u.street = null;
+      feed.set(e.id, {
+        kind: "note",
+        id: e.id,
+        ts: e.ts,
+        callsign: e.by,
+        colour: CP_COLOUR,
+        area: u.area,
+        transcript: "",
+        status: "resolved",
+        outcome: fixOutcome(e, moved),
+        position: e.position,
+        candidates: [],
+        answer: null,
+        expired: false,
+        track: null,
       });
       continue;
     }

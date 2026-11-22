@@ -2,8 +2,8 @@
 
 /**
  * The command post: the shared map a person at the base watches and keeps. It opens and ends
- * missions, places and changes tracks by hand, and answers a unit's question when the unit cannot
- * tap. It polls the mission's log every second and rebuilds the picture with foldLog(), so the live
+ * missions, places and changes tracks by hand, places a unit by hand when the app did not or got it
+ * wrong [243], and answers a unit's question when the unit cannot tap. It polls the mission's log every second and rebuilds the picture with foldLog(), so the live
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
@@ -13,11 +13,11 @@ import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KIND_NAME, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
-import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
+import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
-import { COMMAND_POST, sessionCode, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
+import { COMMAND_POST, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
@@ -271,15 +271,17 @@ function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; 
 }
 
 /**
- * What the command post is doing on the map: placing a new track, moving one, or changing what one
- * is. `at` is where the track would go, once the map was clicked or a place picked; `label` is the
- * name the coordinator will give it, filled in when the answer comes.
+ * What the command post is doing on the map: placing a new track, moving one, changing what one
+ * is, or placing a unit. `at` is where the track or unit would go, once the map was clicked or a
+ * place picked; `label` is the name the coordinator will give it, filled in when the answer comes.
  */
 type Draft = { lat: number; lon: number; place?: string; label: string | null; minRadius?: number };
 type Tool =
   | { kind: "place"; what: TrackWhat; radius: number; at: Draft | null }
   | { kind: "move"; n: number; radius: number; at: Draft | null }
-  | { kind: "edit"; n: number; what: TrackWhat };
+  | { kind: "edit"; n: number; what: TrackWhat }
+  /** A unit placed by hand: the app did not place it, or placed it wrongly [243]. */
+  | { kind: "unit"; callsign: string; radius: number; at: Draft | null };
 
 /**
  * The decision open in the Decisions list [240]: by id, and where it stood in the list, so that
@@ -298,10 +300,10 @@ function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): 
   if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
   // A question with no choices waits for the operator too [242].
   if (u.prompt) return { tag: "Awaiting answer", text: u.prompt.question, tone: "ask" };
-  // On the roster, and no report from it yet [201].
-  if (u.lastHeard === 0) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const p = u.position;
-  const where = p ? `${p.label} · ±${p.radius_m} m` : "";
+  // On the roster, and no report from it yet [201]. One a person placed by hand has a place to show [243].
+  if (u.lastHeard === 0 && !p) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
+  const where = p ? `${p.label} · ±${p.radius_m} m${u.placedBy ? ` · placed by ${u.placedBy}` : ""}` : "";
   if (silent) {
     const last = p ? `Last at ${p.estimated ? "≈ " : ""}${where}` : "Never placed.";
     return { tag: "Silent", text: silentAtEnd ? `Silent for ${silentAtEnd} when the mission ended. ${last}` : last, tone: "silent" };
@@ -543,7 +545,8 @@ export default function CommandPost() {
   // units do not all read as silent for the hours since.
   const effNow = mode === "live" ? (ended ?? now) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
-  const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
+  // From when it was last heard, or placed by hand if that is later [243].
+  const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - knownAt(u) > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
   // Things on the map move only while the clock on screen runs [238]: a live mission that has not
@@ -1411,6 +1414,7 @@ export default function CommandPost() {
   /** The number a new track will most likely get; the coordinator gives the real one. */
   const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
   const tracksUrl = session ? `/api/sessions/${encodeURIComponent(session)}/tracks` : "";
+  const unitPositionUrl = session ? `/api/sessions/${encodeURIComponent(session)}/units/position` : "";
 
   useEffect(() => {
     if (!notice) return;
@@ -1439,6 +1443,18 @@ export default function CommandPost() {
     setFollow(false);
     setTool({ kind: "move", n: t.n, radius: PLOT_RADIUS_DEFAULT, at: null });
   }, []);
+
+  /** Places a unit by hand, or moves one the app placed wrongly [243]. The same button again closes the tool. */
+  const startUnitMove = useCallback(
+    (u: UnitState) => {
+      setPicked(null);
+      setToolError(null);
+      setNote("");
+      setFollow(false);
+      setTool((t) => (t?.kind === "unit" && t.callsign === u.callsign ? null : { kind: "unit", callsign: u.callsign, radius: PLOT_RADIUS_DEFAULT, at: null }));
+    },
+    [setPicked],
+  );
 
   /** Puts the track being placed or moved at a point, and asks the coordinator how it will name it. */
   const putDraft = useCallback(
@@ -1497,8 +1513,14 @@ export default function CommandPost() {
   const movingTrack = activeTool?.kind === "move" ? (full.tracks.find((t) => t.n === activeTool.n) ?? null) : null;
   const draftLooks: { affiliation: Affiliation; kind: TrackKind } | null = activeTool?.kind === "place" ? activeTool.what : movingTrack;
   const draftRadius = activeTool && activeTool.kind !== "edit" ? activeTool.radius : 0;
-  const draftColour = draftLooks ? AFFILIATION_COLOUR[draftLooks.affiliation] : "#475569";
-  const movingFrom = movingTrack?.position ?? null;
+  /** The unit being placed by hand [243]: its draft is its own dot, in its colour. */
+  const movingUnit = activeTool?.kind === "unit" ? (full.units.find((u) => u.callsign === activeTool.callsign) ?? null) : null;
+  const draftColour = movingUnit ? movingUnit.colour : draftLooks ? AFFILIATION_COLOUR[draftLooks.affiliation] : "#475569";
+  const movingFrom = (movingUnit ?? movingTrack)?.position ?? null;
+  /** A unit with a place of its own is moved; one never placed, or still at the start point, is placed. */
+  const unitVerb = movingUnit?.position && !movingUnit.atStart ? "Move" : "Place";
+  /** Its own open question about where it is closes with the placement; one about a track does not. */
+  const unitQuestionCloses = !!movingUnit && [movingUnit.pending?.reportId, movingUnit.prompt?.reportId].some((id) => id != null && full.feed.find((f) => f.id === id)?.track == null);
 
   // The draft's circle, and for a move a dashed line from where the track is now.
   useEffect(() => {
@@ -1512,20 +1534,29 @@ export default function CommandPost() {
     (map.getSource("draft") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
   }, [draft, draftRadius, draftColour, movingFrom, mapReady]);
 
-  // The draft's symbol: a marker that can be dragged to where the track is.
+  // The draft's symbol: a marker that can be dragged to where the track is. A unit's is its dot.
   const draftCode = draft && draftLooks ? trackSymbolCode(draftLooks.affiliation, draftLooks.kind) : "";
+  const draftDot = draft && movingUnit ? movingUnit.colour : "";
   useEffect(() => {
     const map = mapRef.current;
     const ml = mlRef.current;
-    if (!map || !ml || !mapReady || !draft || !draftCode || !symbols) return;
-    const s = new symbols.Symbol(draftCode, { size: Math.round(TRACK_SYMBOL_SIZE * screenScale()), civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
+    if (!map || !ml || !mapReady || !draft) return;
     const el = document.createElement("div");
-    el.className = styles.draftMarker;
-    el.innerHTML = s.asSVG();
+    let offset: [number, number] = [0, 0];
+    if (draftDot) {
+      el.className = `${styles.draftMarker} ${styles.draftUnit}`;
+      el.style.background = draftDot;
+    } else {
+      if (!draftCode || !symbols) return;
+      const s = new symbols.Symbol(draftCode, { size: Math.round(TRACK_SYMBOL_SIZE * screenScale()), civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
+      el.className = styles.draftMarker;
+      el.innerHTML = s.asSVG();
+      const { width, height } = s.getSize();
+      const a = s.getAnchor();
+      offset = [width / 2 - a.x, height / 2 - a.y];
+    }
     el.title = "Drag to where it is";
-    const { width, height } = s.getSize();
-    const a = s.getAnchor();
-    const m = new ml.Marker({ element: el, draggable: true, offset: [width / 2 - a.x, height / 2 - a.y] }).setLngLat([draft.lon, draft.lat]).addTo(map);
+    const m = new ml.Marker({ element: el, draggable: true, offset }).setLngLat([draft.lon, draft.lat]).addTo(map);
     // The circle follows while dragging; the name is asked for once it is dropped.
     m.on("drag", () => {
       const q = m.getLngLat();
@@ -1540,15 +1571,15 @@ export default function CommandPost() {
       m.remove();
       draftMarker.current = null;
     };
-  }, [draft, draftCode, draftRadius, draftColour, symbols, mapReady, putDraft]);
+  }, [draft, draftCode, draftDot, draftRadius, draftColour, symbols, mapReady, putDraft]);
 
   /** Sends a change to the coordinator. The log is read again at once, so the map shows it. */
-  const sendPlot = useCallback(async (url: string, method: "POST" | "PATCH", body: unknown): Promise<PlotReply | null> => {
+  const sendPlot = useCallback(async <T = PlotReply,>(url: string, method: "POST" | "PATCH", body: unknown): Promise<T | null> => {
     setBusy(true);
     setToolError(null);
     try {
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = (await res.json().catch(() => ({}))) as PlotReply & { error?: string };
+      const data = (await res.json().catch(() => ({}))) as T & { error?: string };
       if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
       pollNow.current();
       return data;
@@ -1564,6 +1595,16 @@ export default function CommandPost() {
     if (!activeTool || activeTool.kind === "edit" || !activeTool.at || busy) return;
     const at = activeTool.at;
     const where = at.place ? { place: at.place } : { lat: at.lat, lon: at.lon };
+    if (activeTool.kind === "unit") {
+      // A unit placed by hand [243]: the same point or place as a track, sent with its call sign.
+      const r = await sendPlot<FixReply>(unitPositionUrl, "POST", { callsign: activeTool.callsign, ...where, radius_m: activeTool.radius, note: note || null });
+      if (r) {
+        setNotice(`${activeTool.callsign} placed by hand: ${r.entry.position.label}`);
+        setNote("");
+        setTool(null);
+      }
+      return;
+    }
     if (activeTool.kind === "place") {
       const w = activeTool.what;
       const r = await sendPlot(tracksUrl, "POST", { affiliation: w.affiliation, kind: w.kind, count: w.count > 1 ? w.count : null, ...where, radius_m: activeTool.radius, note: note || null });
@@ -1582,7 +1623,7 @@ export default function CommandPost() {
         setPicked(activeTool.n);
       }
     }
-  }, [activeTool, busy, note, sendPlot, tracksUrl, setPicked]);
+  }, [activeTool, busy, note, sendPlot, tracksUrl, unitPositionUrl, setPicked]);
 
   const saveEdit = useCallback(async () => {
     if (activeTool?.kind !== "edit" || busy) return;
@@ -1788,7 +1829,7 @@ export default function CommandPost() {
           return;
         }
       }
-      if (!activeTool || activeTool.kind === "move") return;
+      if (!activeTool || activeTool.kind === "move" || activeTool.kind === "unit") return;
       const aff = AFFILIATIONS.find((a) => AFFILIATION_KEY[a] === e.key.toUpperCase());
       const kind = /^[1-9]$/.test(e.key) ? TRACK_KINDS[Number(e.key) - 1] : undefined;
       if (aff) setTool({ ...activeTool, what: { ...activeTool.what, affiliation: aff } });
@@ -1982,6 +2023,43 @@ export default function CommandPost() {
                     note={note}
                     onNote={setNote}
                     confirmLabel="Move"
+                    onConfirm={confirmDraft}
+                    onCancel={() => setTool({ ...activeTool, at: null })}
+                    busy={busy}
+                    error={toolError}
+                  />
+                ) : toolError ? (
+                  <p className={styles.error} role="alert">
+                    {toolError}
+                  </p>
+                ) : null
+              }
+            />
+          ) : activeTool?.kind === "unit" && movingUnit ? (
+            // A unit placed by hand [243]: the same circle, place search and confirm as a track moved by hand.
+            <TrackPalette
+              title={`${unitVerb} ${activeTool.callsign} by hand`}
+              what={DEFAULT_WHAT}
+              onWhat={() => {}}
+              showWhat={false}
+              radius={activeTool.radius}
+              onRadius={(radius) => setTool({ ...activeTool, radius })}
+              area={area}
+              onPlace={putPlace}
+              symbols={symbols}
+              onClose={() => setTool(null)}
+              hint={activeTool.at ? null : `Click the map where ${activeTool.callsign} is, or find a place. Esc to stop.`}
+              footer={
+                activeTool.at ? (
+                  <DraftCard
+                    symbols={symbols}
+                    dot={movingUnit.colour}
+                    title={`${unitVerb} ${activeTool.callsign}`}
+                    detail={`${unitVerb === "Move" ? "to " : ""}${activeTool.at.label ?? "naming the point…"} · ±${activeTool.radius} m${activeTool.at.place ? " or the place's size" : ""} · placed by ${COMMAND_POST}${unitQuestionCloses ? " · its open question closes" : ""}`}
+                    note={note}
+                    onNote={setNote}
+                    notePlaceholder="Source, if any: heard on the net, by phone"
+                    confirmLabel={unitVerb}
                     onConfirm={confirmDraft}
                     onCancel={() => setTool({ ...activeTool, at: null })}
                     busy={busy}
@@ -2219,7 +2297,7 @@ export default function CommandPost() {
             <ul className={styles.units}>
               {view.units.map((u) => {
                 const silent = isSilent(u);
-                const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - u.lastHeard) : null);
+                const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - knownAt(u)) : null);
                 // A unit whose question waits: its row opens the question [240].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 return (
@@ -2251,7 +2329,20 @@ export default function CommandPost() {
                         </span>
                       ) : null}
                     </button>
-                    <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask} />
+                    <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask}>
+                      {/* For a unit the app did not place, or placed wrongly: a person puts it there [243]. */}
+                      <button
+                        type="button"
+                        className={styles.unitMove}
+                        aria-pressed={activeTool?.kind === "unit" && activeTool.callsign === u.callsign}
+                        aria-label={`${u.position && !u.atStart ? "Move" : "Place"} ${u.callsign} by hand`}
+                        title="Put this unit on the map by hand"
+                        onClick={() => startUnitMove(u)}
+                        disabled={busy}
+                      >
+                        {u.position && !u.atStart ? "Move" : "Place"}
+                      </button>
+                    </UnitRecon>
                   </li>
                 );
               })}
@@ -2378,7 +2469,8 @@ export default function CommandPost() {
                 : f.expired
                   ? { tone: "none", tag: "Not answered" }
                   : f.overtaken
-                    ? { tone: "none", tag: "Overtaken" }
+                    ? // Closed by the unit's next report, or by a person placing the unit by hand [243].
+                      { tone: "none", tag: f.byHand ? "Closed" : "Overtaken" }
                     : f.status === "ambiguous"
                       ? { tone: "answered", tag: f.answer?.by ? `${f.answer.by} answered` : "Answered" }
                       : f.status === "unresolved" && f.answer
