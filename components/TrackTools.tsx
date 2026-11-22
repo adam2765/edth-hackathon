@@ -7,12 +7,13 @@
  * is a click on the map or a place picked by name, never a model's output.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import type { AreaId } from "@/lib/geo/areas";
+import { AREAS, type AreaId } from "@/lib/geo/areas";
+import { shortGrid, typedGrid, type GridRead } from "@/lib/geo/grid";
 import { AFFILIATION_LABEL, AFFILIATIONS, describeTrack, TRACK_KIND_NAME, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import type { TrackState } from "@/lib/reports/fold";
 import { PLOT_RADII } from "@/lib/reports/plot";
-import type { PlacesReply, StartPoint } from "@/lib/reports/types";
+import type { PlacesReply, StartPoint, UnitPosition } from "@/lib/reports/types";
 import styles from "./CommandPost.module.css";
 
 export type MilSymbol = typeof import("milsymbol").default;
@@ -56,14 +57,43 @@ export function describeWhat(w: TrackWhat): string {
   return describeTrack({ affiliation: w.affiliation, kind: w.kind, count: w.count > 1 ? w.count : null });
 }
 
-/** Finds places by name in the mission's area, for placing or moving a track at one. */
-function PlaceSearch({ area, onPick }: { area: AreaId; onPick: (p: StartPoint) => void }) {
+/**
+ * The six-figure grid of a position, as it is said on the radio [245], after the words that say
+ * where it is. Nothing for a position placed by a grid: its name is the grid already [228].
+ */
+export function GridTag({ at }: { at: Pick<UnitPosition, "lat" | "lon" | "label" | "estimated"> | null | undefined }) {
+  if (!at || at.label.startsWith("grid ")) return null;
+  return (
+    <>
+      {" · "}
+      <span className={styles.gridTag}>
+        {at.estimated ? "≈ " : ""}
+        {shortGrid(at)}
+      </span>
+    </>
+  );
+}
+
+/** "100 m cell" for a six-figure grid, "10 m cell" for eight. */
+function cellOf(g: GridRead): string {
+  const figures = g.text.replace(/^\d{1,2}[A-Z] /, "").replace(/\D/g, "").length;
+  return `${10 ** (5 - figures / 2)} m cell`;
+}
+
+/**
+ * Finds places by name in the mission's area, for placing or moving a track at one. A grid typed
+ * here, "586 101", is offered as a place too: its cell, read in code [245].
+ */
+function PlaceSearch({ area, onPick, onGrid }: { area: AreaId; onPick: (p: StartPoint) => void; onGrid?: (g: GridRead) => void }) {
   const [q, setQ] = useState("");
   const [found, setFound] = useState<{ key: string; places: StartPoint[] }>({ key: "", places: [] });
   const key = `${area}|${q.trim()}`;
+  const grid = onGrid ? typedGrid(q, AREAS[area].centre) : null;
+  const isGrid = grid != null;
   useEffect(() => {
     const term = q.trim();
-    if (!term) return;
+    // A grid is no place's name: nothing to look up.
+    if (!term || isGrid) return;
     const ctl = new AbortController();
     const t = setTimeout(async () => {
       try {
@@ -77,16 +107,29 @@ function PlaceSearch({ area, onPick }: { area: AreaId; onPick: (p: StartPoint) =
       clearTimeout(t);
       ctl.abort();
     };
-  }, [area, q]);
-  const places = q.trim() && found.key === key ? found.places : [];
+  }, [area, q, isGrid]);
+  const places = q.trim() && !isGrid && found.key === key ? found.places : [];
   return (
     <div className={styles.field}>
       <label className={styles.label} htmlFor="track-place">
-        Or find a place
+        {onGrid ? "Or find a place, or type a grid" : "Or find a place"}
       </label>
-      <input id="track-place" className={styles.input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Château, Bérault, mairie…" autoComplete="off" />
-      {places.length ? (
+      <input id="track-place" className={styles.input} value={q} onChange={(e) => setQ(e.target.value)} placeholder={onGrid ? "Château, Bérault, 586 101…" : "Château, Bérault, mairie…"} autoComplete="off" spellCheck={false} />
+      {grid || places.length ? (
         <ul className={styles.places}>
+          {grid ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  onGrid?.(grid);
+                  setQ("");
+                }}
+              >
+                Grid <span className={styles.gridTag}>{grid.text}</span> <span className={styles.muted}>· {cellOf(grid)}</span>
+              </button>
+            </li>
+          ) : null}
           {places.map((p) => (
             <li key={p.id}>
               <button
@@ -120,6 +163,8 @@ export function TrackPalette(props: {
   onRadius?: (r: number) => void;
   area?: AreaId;
   onPlace?: (p: StartPoint) => void;
+  /** Places it in the cell of a grid typed into the place search [245]. */
+  onGrid?: (g: GridRead) => void;
   /** Changing a track: only where it is is fixed, so whose, what and how many show. */
   showWhat?: boolean;
   hint?: ReactNode;
@@ -183,7 +228,7 @@ export function TrackPalette(props: {
       ) : props.onRadius ? (
         <RadiusPicker radius={props.radius ?? 50} onRadius={props.onRadius} />
       ) : null}
-      {props.area && props.onPlace ? <PlaceSearch area={props.area} onPick={props.onPlace} /> : null}
+      {props.area && props.onPlace ? <PlaceSearch area={props.area} onPick={props.onPlace} onGrid={props.onGrid} /> : null}
       {props.hint ? <p className={styles.hint}>{props.hint}</p> : null}
       {props.footer}
     </div>
@@ -215,6 +260,8 @@ export function DraftCard(props: {
   dot?: string;
   title: string;
   detail: string;
+  /** The grid of where it will go, after the detail [245]. */
+  grid?: string;
   note: string;
   onNote: (s: string) => void;
   notePlaceholder?: string;
@@ -230,7 +277,15 @@ export function DraftCard(props: {
         {props.dot ? <span className={styles.unitDot} style={{ background: props.dot }} aria-hidden="true" /> : props.what ? <Sym lib={props.symbols} what={props.what} size={22} /> : null}
         <div className={styles.draftText}>
           <strong>{props.title}</strong>
-          <span>{props.detail}</span>
+          <span>
+            {props.detail}
+            {props.grid ? (
+              <>
+                {" · "}
+                <span className={styles.gridTag}>{props.grid}</span>
+              </>
+            ) : null}
+          </span>
         </div>
       </div>
       <input
@@ -302,7 +357,8 @@ export function TrackCard(props: {
       </div>
       <p className={styles.cardLine}>{describeTrack(t)}</p>
       <p className={styles.hint}>
-        {p ? `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m` : "Not placed yet."} · {who}
+        {p ? `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m` : "Not placed yet."}
+        <GridTag at={p} /> · {who}
         {t.changed ? ` · changed by ${t.changed.by}` : ""}
         {t.note ? ` · source: ${t.note}` : ""}
       </p>

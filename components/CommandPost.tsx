@@ -10,19 +10,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
+import { shortGrid, type GridRead } from "@/lib/geo/grid";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEADING_DEG, TRACK_KIND_NAME, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
-import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
+import { PLOT_RADII, PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
 import { COMMAND_POST, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
+import MapTools from "./MapTools";
 import MissionPanel from "./MissionPanel";
-import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
+import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
@@ -385,6 +387,21 @@ export default function CommandPost() {
   const pollNow = useRef<() => void>(() => {});
   /** What a click on the map does; set below, read by the handler the map was given once. */
   const mapClick = useRef<(e: MapMouseEvent) => void>(() => {});
+  /** True while the grid tools' ruler is on: a click then measures, and places or picks nothing [245]. */
+  const measuring = useRef(false);
+  const setMeasuring = useCallback((on: boolean) => {
+    measuring.current = on;
+  }, []);
+  /** "Go to grid" moves the map away from the units: it stays there until "Follow units" [245]. */
+  const stopFollowing = useCallback(() => setFollow(false), []);
+  /** The replay bar lies over the bottom of the map, with the map's credits above it: the grid's figures stay above both [245]. */
+  const replayEl = useRef<HTMLDivElement>(null);
+  const coveredBelow = useCallback(() => {
+    const m = mapEl.current?.getBoundingClientRect();
+    if (!m) return 0;
+    const tops = [replayEl.current, mapEl.current?.querySelector(".maplibregl-ctrl-attrib")].map((el) => el?.getBoundingClientRect().top ?? m.bottom);
+    return Math.max(0, m.bottom - Math.min(...tops));
+  }, []);
   /** The track symbol being placed or moved: a marker that can be dragged. */
   const draftMarker = useRef<Marker | null>(null);
   // Motion on the map [238]. Where each unit and track is drawn while it slides to a new place,
@@ -1469,11 +1486,28 @@ export default function CommandPost() {
     map?.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 16), duration: 500 });
   }, []);
 
+  /**
+   * Puts it in the cell of a grid typed into the place search [245]: at the cell's centre, and no
+   * surer than the cell. The coordinator names the point; the grid shows beside the name.
+   */
+  const putGrid = useCallback(
+    (g: GridRead) => {
+      const cell = PLOT_RADII.find((r) => r >= g.radius_m) ?? PLOT_RADII[PLOT_RADII.length - 1];
+      setTool((t) => (t && t.kind !== "edit" ? { ...t, radius: Math.max(t.radius, cell) } : t));
+      putDraft(g.pin.lat, g.pin.lon);
+      const map = mapRef.current;
+      map?.easeTo({ center: [g.pin.lon, g.pin.lat], zoom: Math.max(map.getZoom(), 16), duration: 500 });
+    },
+    [putDraft],
+  );
+
   // A click on the map: where the track goes while placing or moving; otherwise it picks a track.
   useEffect(() => {
     mapClick.current = (e) => {
       const map = mapRef.current;
       if (!map) return;
+      // The ruler has this click [245].
+      if (measuring.current) return;
       if (activeTool && activeTool.kind !== "edit") {
         putDraft(e.lngLat.lat, e.lngLat.lng);
         return;
@@ -1942,6 +1976,21 @@ export default function CommandPost() {
 
       <main className={styles.mapCol}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
+        {/* The grid's lines, a ruler and "go to grid", behind one button, and the grid under the
+            pointer at the map's edge [232, 245]. A click here already places or picks, so it copies
+            nothing; while the ruler is on, a click only measures. Going to a grid stops following. */}
+        <MapTools
+          mapRef={mapRef}
+          ready={mapReady}
+          centre={AREAS[area].centre}
+          below="start-fill"
+          top="calc(110px / var(--z))"
+          covered={coveredBelow}
+          onMeasuring={setMeasuring}
+          scale={mapSize ? screenScale() : 1}
+          folded
+          onGo={stopFollowing}
+        />
         {/* Top left of the map: "Follow units", then the palette or the picked track's card. */}
         <div className={styles.dock}>
           {!follow ? (
@@ -1958,6 +2007,7 @@ export default function CommandPost() {
               onRadius={(radius) => setTool({ ...activeTool, radius })}
               area={area}
               onPlace={putPlace}
+              onGrid={putGrid}
               symbols={symbols}
               onClose={() => setTool(null)}
               hint={activeTool.at ? null : "Click the map where it is, or find a place. Keys: H S U C F for whose, 1 to 9 for what, Esc to stop."}
@@ -1968,6 +2018,7 @@ export default function CommandPost() {
                     what={activeTool.what}
                     title={`Track ${nextN} · ${describeWhat(activeTool.what)}`}
                     detail={`${activeTool.at.label ?? "Naming the point…"} · ±${activeTool.radius} m${activeTool.at.place ? " or the place's size" : ""} · placed by ${COMMAND_POST}`}
+                    grid={shortGrid(activeTool.at)}
                     note={note}
                     onNote={setNote}
                     confirmLabel="Place"
@@ -1993,6 +2044,7 @@ export default function CommandPost() {
               onRadius={(radius) => setTool({ ...activeTool, radius })}
               area={area}
               onPlace={putPlace}
+              onGrid={putGrid}
               symbols={symbols}
               onClose={() => setTool(null)}
               hint={activeTool.at ? null : `Click the map where Track ${activeTool.n} is now, or find a place. Esc to stop.`}
@@ -2003,6 +2055,7 @@ export default function CommandPost() {
                     what={movingTrack}
                     title={`Move Track ${activeTool.n} · ${describeTrack(movingTrack)}`}
                     detail={`to ${activeTool.at.label ?? "naming the point…"} · ±${activeTool.radius} m`}
+                    grid={shortGrid(activeTool.at)}
                     note={note}
                     onNote={setNote}
                     confirmLabel="Move"
@@ -2029,6 +2082,7 @@ export default function CommandPost() {
               onRadius={(radius) => setTool({ ...activeTool, radius })}
               area={area}
               onPlace={putPlace}
+              onGrid={putGrid}
               symbols={symbols}
               onClose={() => setTool(null)}
               hint={activeTool.at ? null : `Click the map where ${activeTool.callsign} is, or find a place. Esc to stop.`}
@@ -2039,6 +2093,7 @@ export default function CommandPost() {
                     dot={movingUnit.colour}
                     title={`${unitVerb} ${activeTool.callsign}`}
                     detail={`${unitVerb === "Move" ? "to " : ""}${activeTool.at.label ?? "naming the point…"} · ±${activeTool.radius} m${activeTool.at.place ? " or the place's size" : ""} · placed by ${COMMAND_POST}${unitQuestionCloses ? " · its open question closes" : ""}`}
+                    grid={shortGrid(activeTool.at)}
                     note={note}
                     onNote={setNote}
                     notePlaceholder="Source, if any: heard on the net, by phone"
@@ -2129,7 +2184,7 @@ export default function CommandPost() {
           ) : null}
         </div>
 
-        <div className={styles.replayBar}>
+        <div ref={replayEl} className={styles.replayBar}>
           <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} onClick={() => {
             if (replayOpen) goLive();
             setReplayOpen(!replayOpen);
@@ -2300,7 +2355,11 @@ export default function CommandPost() {
                             {st.tag}
                           </span>
                         </span>
-                        <span className={styles.unitStatus}>{st.text}</span>
+                        <span className={styles.unitStatus}>
+                          {st.text}
+                          {/* Its grid, to say on the radio [245]; not under a question, which says no place. */}
+                          {u.pending || u.prompt ? null : <GridTag at={u.position} />}
+                        </span>
                       </span>
                       {/* How long since it was last heard, then the time itself. An ended mission
                           has no "ago": the picture is the one at its end. */}
@@ -2376,7 +2435,10 @@ export default function CommandPost() {
                             </span>
                           ) : null}
                         </span>
-                        <span className={styles.unitStatus}>{st.main}</span>
+                        <span className={styles.unitStatus}>
+                          {st.main}
+                          {t.pendingReport || t.gone != null ? null : <GridTag at={t.position} />}
+                        </span>
                         <span className={styles.trackWhere}>{st.sub}</span>
                       </span>
                       {t.seenTs && effNow ? (
@@ -2486,7 +2548,10 @@ export default function CommandPost() {
                       </span>
                     </span>
                     <span className={styles.said}>{f.transcript ? `“${f.transcript}”` : "(no words heard)"}</span>
-                    <span className={styles.outcome}>{f.outcome}</span>
+                    <span className={styles.outcome}>
+                      {f.outcome}
+                      {open ? null : <GridTag at={f.position} />}
+                    </span>
                     {f.sender ? <span className={styles.heardLine}>{describeSender(f.sender)}</span> : null}
                   </button>
                 </li>

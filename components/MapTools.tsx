@@ -3,12 +3,13 @@
 /**
  * Grid tools on a map [232]: the MGRS grid under the pointer, the grid's lines, a ruler that gives
  * distance and bearing between two points, and a box to go to a grid. On the map page a click also
- * copies the grid under it. Used by the map page; ready for the command post's map.
+ * copies the grid under it. Used by the map page, and by the command post, where the tools are
+ * `folded` behind one button and the grid under the pointer is a line at the map's edge [245].
  */
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { GeoJSONSource, Map as MLMap, MapMouseEvent } from "maplibre-gl";
 import type { LatLon } from "@/lib/geo/geo";
-import { gridLines, gridSpacing, measureText, readGrid, toGrid, type GridLabels } from "@/lib/geo/grid";
+import { gridLines, gridSpacing, measureText, readGrid, shortGrid, toGrid, type GridLabels } from "@/lib/geo/grid";
 import styles from "./MapTools.module.css";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -25,10 +26,29 @@ interface Props {
   copyOnClick?: boolean;
   /** Pixels from the top of the map: under the zoom buttons. */
   top?: string;
+  /** Pixels at the bottom of the map that the page covers, such as a bar: the grid's figures stay above it. */
+  covered?: () => number;
+  /** Told when the ruler goes on or off, so the page's own clicks on the map can stand down. */
+  onMeasuring?: (on: boolean) => void;
+  /** How much larger the grid's figures are drawn, on a page that grows for a large screen. */
+  scale?: number;
+  /**
+   * For a page with its own work on the map [245]: the buttons wait behind one button, closed
+   * until asked for, and the grid under the pointer is one line at the map's bottom edge, in the
+   * six figures a grid is said in, there only while a pointer is on the map.
+   */
+  folded?: boolean;
+  /** Told when "Go" moves the map to a grid, so a page that keeps its units in view can let go. */
+  onGo?: () => void;
 }
 
-export default function MapTools({ mapRef, ready, centre, below, copyOnClick = false, top = "110px" }: Props) {
+/** The size of the grid's figures on the map, before `scale`. */
+const LABEL_SIZE = 12;
+
+export default function MapTools({ mapRef, ready, centre, below, copyOnClick = false, top = "110px", covered, onMeasuring, scale = 1, folded = false, onGo }: Props) {
   const [grid, setGrid] = useState("");
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
   const [lines, setLines] = useState(false);
   const [measuring, setMeasuring] = useState(false);
   const [measured, setMeasured] = useState("");
@@ -38,6 +58,7 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
   const measuringRef = useRef(measuring);
   const points = useRef<LatLon[]>([]);
   const centreRef = useRef(centre);
+  const coveredRef = useRef(covered);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redrawRef = useRef<() => void>(() => {});
   const clearRulerRef = useRef<() => void>(() => {});
@@ -47,6 +68,7 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
     linesRef.current = lines;
     measuringRef.current = measuring;
     centreRef.current = centre;
+    coveredRef.current = covered;
   });
 
   const say = (text: string) => {
@@ -72,7 +94,7 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
           type: "symbol",
           source: "mgrs",
           filter: ["==", "kind", "label"],
-          layout: { "text-field": ["get", "text"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-allow-overlap": true, "text-ignore-placement": true },
+          layout: { "text-field": ["get", "text"], "text-font": ["Noto Sans Regular"], "text-size": LABEL_SIZE, "text-allow-overlap": true, "text-ignore-placement": true },
           paint: { "text-color": "#1e3a5f", "text-halo-color": "#ffffff", "text-halo-width": 2 },
         },
         under,
@@ -83,21 +105,24 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
     }
 
     let hovering = false;
+    // Folded, the grid is written as it is said: the square and six figures [245].
+    const write = (p: LatLon) => (folded ? shortGrid(p) : toGrid(p));
     const showCentre = () => {
       const c = map.getCenter();
-      setGrid(toGrid({ lat: c.lat, lon: c.lng }));
+      setGrid(write({ lat: c.lat, lon: c.lng }));
     };
     /**
      * Where the grid's figures go [233]: along the bottom and up the left of the part of the map
-     * that nothing covers. The bottom is the map's padding, which keeps clear of the page's sheet.
-     * The left column starts at the top of these tools, which sit below the page's own buttons.
+     * that nothing covers. The bottom is the map's padding, which keeps clear of the page's sheet,
+     * or what the page says it covers [245]. The left column starts at the top of these tools,
+     * which sit below the page's own buttons.
      */
     const labelPlace = (): GridLabels => {
       const el = map.getContainer();
       const w = el.clientWidth;
       const h = el.clientHeight;
       const top = toolsRef.current ? toolsRef.current.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
-      const bottom = h - (map.getPadding().bottom ?? 0) - 12;
+      const bottom = h - Math.max(map.getPadding().bottom ?? 0, coveredRef.current?.() ?? 0) - 12;
       const left = 14;
       const at = (x: number, y: number) => map.unproject([x, y]);
       return {
@@ -126,16 +151,19 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
     };
     const onMove = (e: MapMouseEvent) => {
       hovering = true;
-      setGrid(toGrid({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
+      setOver(true);
+      setGrid(write({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
     };
     const onOut = () => {
       hovering = false;
+      setOver(false);
       showCentre();
     };
     // A tap also sends mouse events, so it counts as hovering, and a touch screen never sends
     // "mouseout". Without this the box would keep the tapped point while the map is dragged [233].
     const onTouch = () => {
       hovering = false;
+      setOver(false);
     };
     const onMoveEnd = () => {
       if (!hovering) showCentre();
@@ -177,7 +205,15 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
       map.off("moveend", onMoveEnd);
       map.off("click", onClick);
     };
-  }, [mapRef, ready, below, copyOnClick]);
+  }, [mapRef, ready, below, copyOnClick, folded]);
+
+  // The grid's figures grow with the page, and the lines are drawn again around them [245].
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !map.getLayer("mgrs-label")) return;
+    map.setLayoutProperty("mgrs-label", "text-size", Math.round(LABEL_SIZE * scale));
+    redrawRef.current();
+  }, [mapRef, ready, scale]);
 
   const toggleLines = () => {
     linesRef.current = !lines;
@@ -185,48 +221,93 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
     redrawRef.current();
     if (!lines && mapRef.current && !gridSpacing(mapRef.current.getZoom())) say("Zoom in to see the grid");
   };
-  const toggleMeasure = () => {
-    measuringRef.current = !measuring;
-    setMeasuring(!measuring);
-    setMeasured(measuring ? "" : "Click the first point");
-    clearRulerRef.current();
+  const setRuler = useCallback(
+    (on: boolean) => {
+      measuringRef.current = on;
+      setMeasuring(on);
+      setMeasured(on ? "Click the first point" : "");
+      clearRulerRef.current();
+      onMeasuring?.(on);
+    },
+    [onMeasuring],
+  );
+  const toggleMeasure = () => setRuler(!measuring);
+  // Folded away, the ruler goes off too: it takes the map's clicks, so it is never on unseen [245].
+  const toggleOpen = () => {
+    if (open && measuring) setRuler(false);
+    setOpen(!open);
   };
+
+  // Esc ends the ruler, as it ends a page's other tools, and the key goes no further [245].
+  useEffect(() => {
+    if (!measuring) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setRuler(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [measuring, setRuler]);
+
   const go = (e: FormEvent) => {
     e.preventDefault();
     const map = mapRef.current;
     const g = readGrid(`grid ${goto}`, centre);
     if (!g || !map) return say("Not a grid. Try DQ 586 101.");
+    onGo?.();
     map.flyTo({ center: [g.pin.lon, g.pin.lat], zoom: Math.max(map.getZoom(), 15) });
     (map.getSource("goto") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [g.pin.lon, g.pin.lat] } }] });
     say(`Grid ${g.text}`);
   };
 
   if (!grid) return null;
+  const shown = !folded || open;
   return (
-    <div ref={toolsRef} className={styles.tools} style={{ top }}>
-      <div className={styles.grid} title="MGRS grid of the point under the pointer, or of the map's centre">
-        {grid}
+    <>
+      <div ref={toolsRef} className={styles.tools} style={{ top }}>
+        {folded ? (
+          <div className={styles.row}>
+            <button type="button" className={styles.btn} aria-expanded={open} onClick={toggleOpen} title="Grid lines, a ruler and go to a grid">
+              Map tools <span aria-hidden="true">{open ? "▴" : "▾"}</span>
+            </button>
+          </div>
+        ) : (
+          <div className={styles.grid} title="MGRS grid of the point under the pointer, or of the map's centre">
+            {grid}
+          </div>
+        )}
+        {shown ? (
+          <>
+            <div className={styles.row}>
+              <button type="button" className={styles.btn} aria-pressed={lines} onClick={toggleLines} title="Show the 1 km grid">
+                {folded ? "Grid lines" : "Grid"}
+              </button>
+              <button type="button" className={styles.btn} aria-pressed={measuring} onClick={toggleMeasure} title="Distance and bearing between two points">
+                Measure
+              </button>
+            </div>
+            <form className={styles.row} onSubmit={go}>
+              <input className={styles.input} value={goto} onChange={(e) => setGoto(e.target.value)} placeholder="Go to grid" aria-label="Go to grid" spellCheck={false} />
+              <button type="submit" className={styles.btn}>
+                Go
+              </button>
+            </form>
+          </>
+        ) : null}
+        {measuring && measured ? <div className={styles.out}>{measured}</div> : null}
+        {note ? (
+          <div className={styles.out} role="status">
+            {note}
+          </div>
+        ) : null}
       </div>
-      <div className={styles.row}>
-        <button type="button" className={styles.btn} aria-pressed={lines} onClick={toggleLines} title="Show the 1 km grid">
-          Grid
-        </button>
-        <button type="button" className={styles.btn} aria-pressed={measuring} onClick={toggleMeasure} title="Distance and bearing between two points">
-          Measure
-        </button>
-      </div>
-      <form className={styles.row} onSubmit={go}>
-        <input className={styles.input} value={goto} onChange={(e) => setGoto(e.target.value)} placeholder="Go to grid" aria-label="Go to grid" spellCheck={false} />
-        <button type="submit" className={styles.btn}>
-          Go
-        </button>
-      </form>
-      {measuring && measured ? <div className={styles.out}>{measured}</div> : null}
-      {note ? (
-        <div className={styles.out} role="status">
-          {note}
+      {/* For the eye that follows the pointer, not for a screen reader: every position on the page has its grid in words. */}
+      {folded && over ? (
+        <div className={`${styles.grid} ${styles.edge}`} aria-hidden="true">
+          {grid}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
