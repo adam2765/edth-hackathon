@@ -1,6 +1,6 @@
 # Tracks
 
-A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [145]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
+A track is something on the map that is not a reporting unit: a vehicle, people, a drone, a team. A unit reports it by voice, the coordinator gives it a number, and the command post draws it with its standard symbol. Tracks are for reconnaissance only [234]: the app marks what was seen and asks when a report is unclear. It never works out anything between a unit and a track.
 
 Built on Saturday 21 November, steps 1 to 3 of five ([plan](plan.md#tracks-what-a-unit-sees)). Placing and editing tracks by hand at the command post followed the same day ([below](#placed-by-the-command-post)). The rules are in the [README](../README.md#tracks), the fields in [contracts.md](contracts.md#tracks), and the choices in DECISIONS.md [145 to 157, 160, 167, 177, 178, 180, 182]. This page shows what it looks like and how a report becomes a track.
 
@@ -182,7 +182,7 @@ A track on a street or along a river gets a circle of at least 150 m. "Track 1 m
 | after "coming from" | where it came from: neither | |
 | anywhere else | not clear: the model's reading stands | "Enemy vehicle to the **east**" |
 
-When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197].
+When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197]. While the sighting is fresh, light bands run along the arrow to its tip; on an old sighting the arrow is still ([below](#what-moves-on-the-map)) [238].
 
 ## A track's life
 
@@ -234,6 +234,45 @@ A unit's later report about the track brings a gone track back, and a placed tra
 
 The controls show only on a live mission that the coordinator keeps a record of: not in a replay, and not on an ended mission.
 
+## Recon requests and tasking
+
+A unit can ask for a drone to look at something, in the same radio call as a report or on its own, and a person at the command post sends one [234]. The app sends nothing by itself, picks no drone, and measures nothing between a drone and a track.
+
+**Asking.** The request words are read in code, in English, French, Ukrainian and Russian: "send the drone", "request eyes on", "need recon", "can we get a drone up", «envoyez le drone», «on a besoin d'un drone», «надішліть дрон», «потрібна пташка», «пришлите дрон», «нужна разведка». "Don't", «pas besoin» or «не» just before them means no request. "Drone up" on its own is not one ("enemy drone up north"), nor "getting eyes on", which is a reply.
+
+A request runs to the next comma or full stop, and is cut out before the model reads the rest (`splitRequest` in `lib/geo/requests.ts`). Left in, "send the drone" made "unknown vehicle" an unknown drone, because the word reader met "drone" first, and "Track 2, request eyes on" got "Where is it?". The extraction prompt is unchanged.
+
+| Said, after the call sign | What the model reads | The request |
+|---|---|---|
+| "unknown vehicle at Mairie de Vincennes, send the drone" | "unknown vehicle at Mairie de Vincennes": Track 2, an unknown vehicle | about Track 2, the track the report opened |
+| "Track 2, request eyes on" | nothing: the call is only a request, so nothing is placed and nothing asked | about Track 2 |
+| "send the drone to Track 3, over" | nothing | about Track 3 |
+| "send the drone" | nothing | names no track: the operator picks one |
+
+**The request.** Each request waits in the **Decisions** list, tagged "Recon", with the questions and held reports [240]. Opened, it shows who asked and when, the words, and the track. Under it is one button for each friendly drone or drone team track on the map, marked free or with the track it is looking at. The only free drone is offered first; with two free, or none, nothing is. Nothing is sent before a confirm: "Send Track 1, friendly drone team, to look at Track 2?" A busy drone can be sent instead: "Track 1 is looking at Track 3. Send it to Track 2 instead?" **Not now** declines, after a confirm, and nothing is sent. A request that names no track has a list of the mission's tracks to pick from. With no friendly drone or drone team on the map, it says to place one with Place track. The keys 1 to 9 and N do not apply to a request: its buttons are clicked. The screenshots below are from before the Decisions list, when requests had a tray of their own.
+
+<img src="images/tracks/cp-recon-request.png" alt="Two views of the Recon requests tray. Left: ALPHA 1 at 22:38:46, &quot;send the drone&quot;, Track 2, unknown vehicle, Mairie de Vincennes, with the button Send Track 1, drone team, free, and Not now. Right: the same request with the confirm, Send Track 1, friendly drone team, to look at Track 2?, Send and Cancel." width="800">
+
+**Sent.** A solid blue line runs from the drone to the track. The feed says "Sent Track 1 (friendly drone team) to look at Track 2. ALPHA 1 had asked.", and the request's own line adds "CP sent Track 1." The track's card says "Recon: Track 1 since 22:39:42"; the drone's card says "Looking at Track 2 since 22:39:42" and has **Recon done**. Every track card that is not a drone also has **Send drone…**, so the operator can send one with no request.
+
+![The command post after the send. A solid blue line runs from Track 1, the friendly drone team at the school in the north-west, to Track 2, the unknown vehicle at the town hall. ALPHA 1's dotted line of sight also reaches Track 2 from Bérault. The feed: CP sent Track 1 to look at Track 2, ALPHA 1 had asked; ALPHA 1's report, read as Track 2, an unknown vehicle.](images/tracks/cp-recon-sent.png)
+
+Note the track: ALPHA 1 said "unknown vehicle at Mairie de Vincennes, send the drone", and Track 2 is a vehicle, not a drone.
+
+**Ending.** Only a person ends a task: **Recon done** on the drone's card, after a confirm, or sending the drone to another track. A later report does not end it; the app concludes nothing from one. Sending a drone to a track answers every open request for that track. Ending the mission ends every task and closes open requests as not answered.
+
+**A drone team on the net.** A drone team can also be a unit: a call sign on the radio net, or a phone. Its call sign says nothing about what it is, so a person says it: under each unit in the units list is a picker, **What is it?**, with the same kinds as a track's [235]. A unit marked drone or drone team gets a button in a recon request's decision and on the track cards next to the drone tracks ("Send BRAVO 2 · drone team · free"), under the same rules: the only free one first, a confirm, and only a person ends it. While it looks, the line runs from where the unit last was, and the unit's row says "Looking at Track 2 since 22:39:42" with **Recon done**. It stays a drone or drone team until then: the coordinator refuses another kind while it looks. Its own reports still move it, and nothing places the drone it launches; what the drone sees comes back as a report about the track.
+
+<img src="images/tracks/cp-unit-kind.png" alt="The command post's side panel. Recon requests: ALPHA 1 at 23:34:06, &quot;request eyes on&quot;, Track 1, unknown vehicle, Mairie de Vincennes, with the button Send BRAVO 2, drone team, free, and Not now. Units: ALPHA 1 with the picker What is it?, and BRAVO 2 with the picker set to Drone team. The feed: CP, BRAVO 2 is a drone team." width="500">
+
+Checked on Saturday 21 November in mission `vincennes-3`, offline mode, with no model: Track 1 placed by hand, ALPHA 1's radio call "Track 1, request eyes on" typed, and BRAVO 2 joined at the château. Before BRAVO 2 was marked, sending it was refused; after, the tray offered it, the confirm read "Send BRAVO 2, drone team, to look at Track 1?", the line ran from the château to the town hall, and Recon done under BRAVO 2 ended it.
+
+Each request, send, Recon done and decline is one line in the log (`request` and `task`, [contracts.md](contracts.md#session-log)), and so is each unit's kind (`unit`), so a replay shows the request open before the send and the line after it. A drone's marker does not move when it is sent: it stays where it was last reported or placed. Limits are in [known-gaps.md](known-gaps.md).
+
+**The eval.** `npm run eval:requests`, also run by `npm test`: 84 cases in English, French, Ukrainian and Russian: requests with a report, requests on their own, with and without a track, turned down ("don't send the drone", «pas besoin de drone», «не треба дрона») and near misses ("enemy drone up north", "getting eyes on Track 2", "send BRAVO 2 to the station"). All 84 pass, and no request is read where none was said. 64 were written with the code. The other 20 were written by a separate agent from the rules alone, without the code, and scored before anyone looked at them: 20 of 20. That agent was told to keep to the words the rules list, so this checks the rules as written, not how soldiers actually ask; every case is typed, none is from speech-to-text.
+
+The pictures: mission `vincennes-2`, Saturday 21 November, 22:38 to 22:40, on a coordinator of its own in offline mode (the 3B model), with typed reports. The drone team was placed by hand at the Lycée Claude-Nicolas Ledoux; ALPHA 1 checked in at Bérault and BRAVO 2 at the château, whose question the command post answered. Every sighting is made up.
+
 ## When symbols would overlap
 
 The first run of the script, in mission `vincennes-13`, showed Track 1 drawn on top of ALPHA 1, Track 5 under BRAVO 2's dot, and the labels of Tracks 3 and 5 run together. The command post now lays the symbols out on screen [167]:
@@ -249,6 +288,27 @@ Why Track 1's place was on ALPHA 1: a track on a street is placed at the street'
 
 Limits: the size of a label is estimated from its number of letters, not measured. In a crowded spot a symbol can end up well away from its point, and its line can cross another label: Track 5 in the picture at the top.
 
+## What moves on the map
+
+Motion on the command post's map says one thing: this report is fresh, and the clock on screen is running. It never says where something is [238].
+
+| What | When it moves | What it looks like |
+|---|---|---|
+| A track's heading arrow | The track has a heading, as said, and was seen in the last 10 minutes | Light bands run along the arrow from tail to tip. The arrow itself stays as it is |
+| A unit's arrow to the place it is heading to | The unit was heard in the last 3 minutes | White dots run along the shaft to the arrowhead |
+| A unit's dot or a track's symbol | A report gave it a new place | It slides there in 0.6 s, 0.3 s in a replay, instead of jumping |
+| A track new on the map | Once, when it is first placed | One ring in its colour, twice, then nothing |
+
+What does not move:
+
+- **A track with no heading said.** Nothing was said about its movement, so nothing on it moves.
+- **An old sighting.** When a track turns old it fades, says "not seen for", and its arrow stops: the way it was moving is what was said then, not what is known now.
+- **The symbol itself, along its heading.** That would be a guessed position. A slide only runs between two places the log gave, and the new place is the truth from the first moment.
+- **Anything, when the clock on screen does not run:** an ended mission and a paused replay are one moment, held. Nothing slides after a jump either: a drag along the replay bar, another mission, live to replay.
+- **Anything, when the computer is set to reduce motion.**
+
+The flow's speed is fixed and means nothing: the app knows no speed. Nothing blinks, and no symbol changes shape or colour. The standard symbols draw movement with still marks, so the still arrow of [197] stays and reads the same in a screenshot. The rules are in `components/motion.ts`, with tests in `tests/motion.test.ts`.
+
 ## Taking the pictures again
 
 Retake them when the command post or the phone screens change.
@@ -259,3 +319,4 @@ Retake them when the command post or the phone screens change.
 4. Command post: headless Chrome at 1440 × 900 and 2× pixel density, after about 8 s for the map. The full pictures are reduced to 1600 px wide; the close-ups are cut from the full size. All are reduced to at most 256 colours, without dithering, so each stays under 600 KB: the two full pictures needed 240. The close-ups: the list scrolled to its end; the estimate after clicking Track 2 in the list and zooming out once; the two halves of the overlap picture from the question picture and after clicking BRAVO 2.
 5. Placed by hand, after the script: press P, pick Hostile, People, 2 and ±50 m, click the map and type a source, for the palette picture. Then Place, Esc, and click the new track for its card.
 6. The symbol table: one SVG made with milsymbol from `trackSymbolCode`, every affiliation against every kind, size 26.
+7. Recon: a new mission with ALPHA 1 and BRAVO 2 on the roster. Place a friendly drone team, check both units in, then send "ALPHA 1, unknown vehicle at Mairie de Vincennes, send the drone" as a typed report. The tray picture is two close-ups, 800 × 470 from the 2× picture, set side by side: before and after clicking the drone's button. Send from the confirm, wait two minutes for the note about other missions to go, and take the full picture.

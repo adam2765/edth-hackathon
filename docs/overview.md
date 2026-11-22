@@ -40,6 +40,6 @@ Times are Paris.
 | Sat evening, Sun morning | Pre-selection: the organisers pick the teams that pitch on Demo Day (their email of 20 Nov; exact times to come) |
 | Sat 22:00 | Feature freeze |
 | Sun 10:00 | Demo video done |
-| Sun 11:00 | Deck done, as a PDF or PPTX with clickable links |
+| Sun 11:00 | Deck done, as a PDF or PPTX with clickable links ([pitch.md](pitch.md)) |
 | Sun 11:30 | Submit (deadline 12:00), file named with the team number |
 | Sun 13:00 | Demo Day, until 16:00 |

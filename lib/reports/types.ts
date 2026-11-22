@@ -1,6 +1,6 @@
 /**
  * The shared record: a mission's opening, every unit that joins, every report and every answer to
- * a question, what the command post did to a track by hand, radio reports held for the operator
+ * a question, what the command post did to a track by hand, a unit it placed by hand, radio reports held for the operator
  * and what the operator did with them, and the mission's end, as one append-only log per session. The coordinator writes it; the command post reads it and rebuilds
  * the map from it, live or up to any moment for a replay.
  * A mission is what the code calls a session: one code, one log. Safe to import on the client.
@@ -142,6 +142,41 @@ export interface RosterEntry {
   held?: string;
 }
 
+/**
+ * A person at the command post says what a unit is [235]: a foot patrol, a vehicle crew, a drone
+ * team. The same kinds as a track's; null when not said. Never read from the call sign or from the
+ * words: "DRONE 1" proves nothing. A unit whose kind is drone or drone team can be sent to look at a
+ * track [234].
+ */
+export interface UnitEntry {
+  kind: "unit";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who said it: "CP". */
+  by: string;
+  callsign: string;
+  unit_kind: TrackKind | null;
+}
+
+/**
+ * A person at the command post puts a unit at a place by hand [243]: the unit said where it is and
+ * the app did not place it, or placed it wrongly. A point clicked on the map or a gazetteer place
+ * picked by name, never a model's output. The unit itself was not heard.
+ */
+export interface FixEntry {
+  kind: "fix";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who did it: "CP". */
+  by: string;
+  callsign: string;
+  position: UnitPosition;
+  /** Where the information came from, as typed ("heard on the net", "by phone"). */
+  note?: string | null;
+}
+
 /** The operator dismisses a held report: noise, or not for this net [203]. It stays in the log. */
 export interface DismissEntry {
   kind: "dismiss";
@@ -206,6 +241,55 @@ export interface PlotEntry {
   note?: string | null;
 }
 
+/**
+ * A unit asks for a drone to look at a track [234]: "send the drone", "request eyes on", read from
+ * its words in code, in the same call as a report or on its own. It only asks: a person at the
+ * command post decides whether anything is sent, with a `task` entry. It stays open until then.
+ */
+export interface RequestEntry {
+  kind: "request";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who asked. */
+  callsign: string;
+  /** The track it is about: named in the words, or the one the report opened or saw; null when none. */
+  n: number | null;
+  /** The request as it was said ("send the drone"). */
+  words: string;
+  /** The report it came with; null when the call was only the request. */
+  report_id: string | null;
+  /** Set for a radio request: how its sender was found [202]. */
+  sender?: Sender;
+}
+
+/** What the command post can do about recon [234]: send a drone to look, end it, or turn a request down. */
+export type TaskAction = "send" | "done" | "decline";
+
+/**
+ * A person at the command post sends a friendly drone or drone team to look at a track, ends that,
+ * or turns a request down [234]. The drone is a friendly track, or a unit on the net whose kind is
+ * drone or drone team [235]. Never written by a model or worked out by the app: no range, no
+ * nearest, no ranking. A drone looks at one track at a time; sending it again moves it.
+ */
+export interface TaskEntry {
+  kind: "task";
+  id: string;
+  session: string;
+  ts: number;
+  /** Who did it: "CP". */
+  by: string;
+  action: TaskAction;
+  /** For `send` and `done`: the friendly drone or drone team, by its track number. */
+  asset?: number;
+  /** For `send` and `done`, instead of `asset`: a unit on the net whose kind is drone or drone team [235]. */
+  unit?: string;
+  /** For `send`: the track it is to look at. */
+  n?: number;
+  /** For `send` and `decline`: the request it answers, if any. */
+  request?: string;
+}
+
 /** A place from the gazetteer where units are assumed to be when they join. Picked at the base, never by the model. */
 export interface StartPoint {
   /** The gazetteer feature's id. */
@@ -255,7 +339,7 @@ export interface EndEntry {
   ts: number;
 }
 
-export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry;
+export type LogEntry = MissionEntry | JoinEntry | EndEntry | ReportEntry | AnswerEntry | PlotEntry | HeldEntry | RosterEntry | DismissEntry | RequestEntry | TaskEntry | UnitEntry | FixEntry;
 
 /** One mission as listed by `GET /api/sessions` and returned when one is opened, joined or ended. */
 export interface MissionSummary {
@@ -306,6 +390,31 @@ export interface HeldReply {
 /** `POST /api/sessions/<code>/tracks` and `PATCH /api/sessions/<code>/tracks/<n>` */
 export interface PlotReply {
   entry: PlotEntry;
+}
+
+/** `POST /api/sessions/<code>/tasks` [234] */
+export interface TaskReply {
+  /** The entry written; null when the request had been settled already. */
+  entry: TaskEntry | null;
+  /** True when someone had settled the request already: the first decision stands. */
+  already: boolean;
+}
+
+/** `POST /api/sessions/<code>/units`: what a person at the command post said a unit is [235]. */
+export interface UnitReply {
+  /** Null when the unit already had that kind: nothing was written. */
+  entry: UnitEntry | null;
+}
+
+/** `POST /api/sessions/<code>/units/position`: where a person at the command post put a unit [243]. */
+export interface FixReply {
+  entry: FixEntry;
+}
+
+/** The `request` field of the report reply: the request read from the words, as saved [234]. */
+export interface RequestReply {
+  id: string;
+  n: number | null;
 }
 
 /** `POST /api/sessions/<code>/join` */

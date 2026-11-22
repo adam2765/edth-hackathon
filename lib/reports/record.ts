@@ -1,6 +1,7 @@
 /**
  * Saving to the shared record: missions, joins, reports, answers, the command post's plots and
- * ends, radio reports held for the operator and what the operator did with them. Server only.
+ * ends, a unit it placed by hand, radio reports held for the operator and what the operator did
+ * with them. Server only.
  */
 import type { AreaId } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
@@ -8,13 +9,15 @@ import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, missionRoster, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
-import { nextTrackNumber, plotPosition, type PlotInput } from "./plot";
+import { nextTrackNumber, plotPosition, type FixInput, type PlotInput } from "./plot";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { AUDIO_FILE, getStore, newEntryId, withSessionLock } from "./store";
+import { checkTask, checkUnit, trackInLog, type TaskInput, type UnitInput } from "./tasks";
 import type {
   AnswerEntry,
   DismissEntry,
   EndEntry,
+  FixEntry,
   HeldEntry,
   HeldReason,
   JoinEntry,
@@ -25,8 +28,12 @@ import type {
   MissionSummary,
   PlotEntry,
   ReportEntry,
+  RequestEntry,
+  RequestReply,
   RosterEntry,
   Sender,
+  TaskEntry,
+  UnitEntry,
   StartPoint,
   Timings,
   TrackSighting,
@@ -204,12 +211,18 @@ export interface ReportInput {
   timings_ms: Timings;
   /** A radio report: how its sender was found [202]. Its call sign must be on the roster. */
   sender?: Sender;
+  /** A request for recon said with the report, cut out of the words the model read [234]. Saved as its own entry. */
+  request?: { words: string; n: number | null };
+  /** The words the model read, when they differ from the transcript other than by the call sign: said back from these. */
+  read?: string;
 }
 
 /** A saved report: its id, and the resolution as saved, which for a track now carries its number. */
 export interface SavedReport {
   id: string;
   resolution: Resolution;
+  /** The request for recon saved with it [234]. */
+  request?: RequestReply;
   /** A held report someone had given to a unit, or dismissed, already: nothing new was saved [203]. */
   already?: boolean;
 }
@@ -228,12 +241,13 @@ function settledHeld(entries: LogEntry[], held: string): ReportEntry | DismissEn
  * A report about a track gets the track's number here, inside the lock, so two phones reporting
  * at once cannot be given the same one: the number the speaker named, or the next free one.
  */
-export async function saveReport(input: ReportInput, now = Date.now()): Promise<SavedReport | null> {
+export async function saveReport(full: ReportInput, now = Date.now()): Promise<SavedReport | null> {
   const store = getStore();
   if (store.kind === "none") return null;
+  // The request is an entry of its own, and the words read are only for saying back.
+  const { request, read, ...input } = full;
   return withSessionLock(input.session, async () => {
     const { entries } = await store.list(input.session);
-    const mission = missionOf(entries);
     if (endOf(entries)) return null;
     if (input.seq != null && input.clientTs != null) {
       const dup = entries.find((e): e is ReportEntry => e.kind === "report" && e.callsign === input.callsign && e.seq === input.seq && e.clientTs === input.clientTs);
@@ -247,18 +261,7 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
       const earlier = held ? settledHeld(entries, held) : undefined;
       if (earlier) return { id: earlier.id, resolution: earlier.kind === "report" ? earlier.resolution : input.resolution, already: true };
     }
-    if (mission && !joinedAlready(entries, input.callsign)) {
-      const join: JoinEntry = {
-        kind: "join",
-        id: newEntryId(now),
-        session: input.session,
-        callsign: input.callsign,
-        ts: now,
-        device: null,
-        position: mission.start ? startPosition(mission.start) : null,
-      };
-      await store.append(join);
-    }
+    await joinIfNew(entries, input.session, input.callsign, now);
     let resolution = input.resolution;
     let track: TrackSighting | null = null;
     const t = resolution.track;
@@ -266,7 +269,7 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     if (t && resolution.status !== "unresolved") {
       // The same count as tracks placed at the command post.
       const n = t.n ?? nextTrackNumber(entries);
-      resolution = input.intent ? withTrackNumber(resolution, n, input.intent, input.transcript) : { ...resolution, track: { ...t, n } };
+      resolution = input.intent ? withTrackNumber(resolution, n, input.intent, read ?? input.transcript) : { ...resolution, track: { ...t, n } };
       const from = input.lastPosition;
       track = {
         n,
@@ -283,7 +286,113 @@ export async function saveReport(input: ReportInput, now = Date.now()): Promise<
     const position = t ? null : positionFromReport(resolution, input.intent);
     const entry: ReportEntry = { kind: "report", id: newEntryId(now), ts: now, ...input, resolution, position, ...(track ? { track } : {}) };
     await store.append(entry);
-    return { id: entry.id, resolution };
+    if (!request) return { id: entry.id, resolution };
+    // The request is about the track it names, else the track this report opened or saw [234].
+    const n = request.n != null && trackInLog([...entries, entry], request.n) ? request.n : (track?.n ?? null);
+    const asked = await appendRequest({ session: input.session, callsign: input.callsign, words: request.words, n, report_id: entry.id, sender: input.sender }, now);
+    return { id: entry.id, resolution, request: { id: asked.id, n: asked.n } };
+  });
+}
+
+/** A call sign that reports or asks without having joined joins with that report. Inside the lock. */
+async function joinIfNew(entries: LogEntry[], session: string, callsign: string, now: number): Promise<void> {
+  const mission = missionOf(entries);
+  if (!mission || joinedAlready(entries, callsign)) return;
+  const join: JoinEntry = {
+    kind: "join",
+    id: newEntryId(now),
+    session,
+    callsign,
+    ts: now,
+    device: null,
+    position: mission.start ? startPosition(mission.start) : null,
+  };
+  await getStore().append(join);
+}
+
+async function appendRequest(r: Omit<RequestEntry, "kind" | "id" | "ts">, now: number): Promise<RequestEntry> {
+  const { sender, ...rest } = r;
+  const entry: RequestEntry = { kind: "request", id: newEntryId(now), ts: now, ...rest, ...(sender ? { sender } : {}) };
+  await getStore().append(entry);
+  return entry;
+}
+
+// ---- requests for recon and the command post's tasks [234] ----
+
+export interface RequestInput {
+  session: string;
+  callsign: string;
+  words: string;
+  /** The track named; kept only when the mission has it. */
+  n: number | null;
+  sender?: Sender;
+}
+
+/**
+ * Saves a request for recon that came with no report ("Track 2, request eyes on"). Null when this
+ * coordinator keeps no record or the mission has ended. A radio request goes only to a call sign
+ * on the roster, as a report does [201].
+ */
+export async function saveRequest(input: RequestInput, now = Date.now()): Promise<RequestEntry | null> {
+  const store = getStore();
+  if (store.kind === "none") return null;
+  return withSessionLock(input.session, async () => {
+    const { entries } = await store.list(input.session);
+    if (!missionOf(entries) || endOf(entries)) return null;
+    if (input.sender && !missionRoster(entries).includes(input.callsign)) throw new Error(`${input.callsign} is not on the roster of ${input.session}`);
+    await joinIfNew(entries, input.session, input.callsign, now);
+    const n = input.n != null && trackInLog(entries, input.n) ? input.n : null;
+    return appendRequest({ session: input.session, callsign: input.callsign, words: input.words, n, report_id: null, sender: input.sender }, now);
+  });
+}
+
+export type TaskResult = { ok: true; entry: TaskEntry | null; already: boolean } | Refusal;
+
+/**
+ * What a person at the command post did about recon [234]: sent a friendly drone or drone team to
+ * look at a track, ended that, or turned a request down. Checked against the log inside the lock;
+ * the first decision on a request stands.
+ */
+export async function recordTask(session: string, input: TaskInput, by: string, now = Date.now()): Promise<TaskResult> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!missionOf(entries)) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    const fits = checkTask(foldLog(entries), entries, input);
+    if ("already" in fits) return { ok: true, entry: null, already: true };
+    if (!fits.ok) return { ok: false, status: fits.status, error: fits.error };
+    const base = { kind: "task" as const, id: newEntryId(now), session, ts: now, by };
+    const drone = (d: TaskInput & { action: "send" | "done" }) => (d.unit != null ? { unit: d.unit } : { asset: d.asset });
+    const entry: TaskEntry =
+      input.action === "send"
+        ? { ...base, action: "send", ...drone(input), n: input.n, ...(input.request ? { request: input.request } : {}) }
+        : input.action === "done"
+          ? { ...base, action: "done", ...drone(input) }
+          : { ...base, action: "decline", request: input.request };
+    await store.append(entry);
+    return { ok: true, entry, already: false };
+  });
+}
+
+/**
+ * A person at the command post says what a unit is [235], so a drone team on the net can be sent to
+ * look at a track. The same kind again writes nothing.
+ */
+export async function recordUnit(session: string, input: UnitInput, by: string, now = Date.now()): Promise<{ ok: true; entry: UnitEntry | null } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    if (!missionOf(entries)) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    const fits = checkUnit(foldLog(entries), missionRoster(entries), input);
+    if (!fits.ok) return { ok: false, status: fits.status, error: fits.error };
+    if (fits.same) return { ok: true, entry: null };
+    const entry: UnitEntry = { kind: "unit", id: newEntryId(now), session, ts: now, by, callsign: input.callsign, unit_kind: input.kind };
+    await store.append(entry);
+    return { ok: true, entry };
   });
 }
 
@@ -402,6 +511,13 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     const earlier = entries.find((e): e is AnswerEntry => e.kind === "answer" && e.report_id === reportId);
     if (earlier) return { ok: true, entry: earlier };
     if (endOf(entries)) return ENDED;
+    // Only a question still open can be answered [241, 242]. A question with no choices ("How far east
+    // is it?") can only be closed; one the unit has moved past, by reporting again, is closed already.
+    const asked = foldLog(entries).feed.find((f) => f.id === reportId);
+    if (!asked?.question) return { ok: false, status: 400, error: "That report asked nothing." };
+    // Closed by the unit's next report [241], or by a person placing the unit by hand [243].
+    if (asked.overtaken) return { ok: false, status: 409, error: asked.byHand ? `${report.callsign} has been placed by hand since, so that question is closed.` : `${report.callsign} has reported again since, so that question is closed.` };
+    if (report.resolution.status !== "ambiguous" && choice !== null) return { ok: false, status: 400, error: "That question had no choices: it can only be closed." };
     let position = null;
     // A question about a track: the choice places the track, and the speaker stays where they are.
     let track: AnswerEntry["track"] = report.track ? { n: report.track.n, position: null } : null;
@@ -423,6 +539,31 @@ export async function recordAnswer(session: string, reportId: string, choice: st
       ...(track ? { track } : {}),
       ...(by ? { by } : {}),
     };
+    await store.append(entry);
+    return { ok: true, entry };
+  });
+}
+
+// ---- a unit placed by hand at the command post ----
+
+/**
+ * Saves where a person at the command post put a unit [243]: a click on the map, or a place picked
+ * by name, checked against the mission's area and named from the gazetteer, as for a track. Only a
+ * unit on the roster: placing never makes a unit, as a transcript never does [200]. The unit's own
+ * question about where it is closes with it; the fold does that.
+ */
+export async function recordFix(session: string, input: FixInput, by: string, now = Date.now()): Promise<{ ok: true; entry: FixEntry } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    const mission = missionOf(entries);
+    if (!mission) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    if (!missionRoster(entries).includes(input.callsign)) return { ok: false, status: 404, error: `${input.callsign} is not on this mission's roster.` };
+    const position = plotPosition(input.where, input.radius_m, mission.area, loadGazetteer(mission.area));
+    if (typeof position === "string") return { ok: false, status: 400, error: position };
+    const entry: FixEntry = { kind: "fix", id: newEntryId(now), session, ts: now, by, callsign: input.callsign, position, note: input.note };
     await store.append(entry);
     return { ok: true, entry };
   });

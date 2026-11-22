@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
-import { readGrid, toUtm } from "../lib/geo/grid";
+import { readGrid, shortGrid, toGrid, toUtm, typedGrid } from "../lib/geo/grid";
 import { resolve } from "../lib/geo/resolver";
 import { resolveReport } from "../lib/geo/tracks";
+import { positionFromReport } from "../lib/reports/position";
 import type { Intent } from "../lib/geo/types";
 
 const VINCENNES = { lat: 48.8455, lon: 2.435 };
@@ -40,10 +41,26 @@ describe("a grid reference said out loud [223]", () => {
     expect(readGrid("Квадрат UA два чотири один дев'ять один шість", KYIV)?.text).toBe("UA 241 916");
   });
 
+  it("reads a French or Ukrainian transcript's spelling [226]", () => {
+    expect(readGrid("Grille Delta Québec cinq huit six un zéro un", VINCENNES)?.text).toBe("DQ 586 101");
+    expect(readGrid("Квадрат Юніформ Альфа два чотири один дев'ять один шість", KYIV)?.text).toBe("UA 241 916");
+    expect(readGrid("Квадрат юніформ альфа 241 916", KYIV)?.text).toBe("UA 241 916");
+    for (const said of ["Я біля готелю", "Готель Україна, 5 поверх"]) expect(readGrid(said, KYIV), said).toBeNull();
+  });
+
   it("leaves distances, counts and names alone", () => {
     for (const said of ["two vehicles at three o'clock", "I see one two three", "I'm 200 metres north of the church", "Track 2, two vehicles at 300 metres", "Maidan Palace Hotel", "I'm at the château de Vincennes", "586 101"]) {
       expect(readGrid(said, VINCENNES), said).toBeNull();
     }
+  });
+
+  it("gives the grid of a point, as the mgrs library does [231]", () => {
+    expect(toGrid(CASTLE)).toBe("31U DQ 5860 1012");
+    expect(toGrid(CASTLE, 10)).toBe("31U DQ 58603 10123");
+    expect(toGrid({ lat: 50.4501, lon: 30.5234 })).toBe("36U UA 2418 9160");
+    expect(toGrid({ lat: 49.1912, lon: 37.2786 }, 6)).toBe("37U CQ 745 501");
+    // Read back, a grid lands within its own cell.
+    expect(distanceM(readGrid(`grid ${toGrid(CASTLE)}`, VINCENNES)!.pin, CASTLE)).toBeLessThan(10);
   });
 
   it("agrees with the reference UTM for the area's centre", () => {
@@ -65,6 +82,22 @@ describe("a grid in a report [223]", () => {
     expect(distanceM(r.pin!, CASTLE)).toBeLessThan(100);
   });
 
+  it("shows the grid on the command post, not \"position\" [228]", () => {
+    const r = resolve({ intent: intent({}), transcript: "Alpha 1, grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    expect(positionFromReport(r, null)?.label).toBe("grid DQ 586 101");
+  });
+
+  it("places a thing off a grid by the distance and way said [230]", () => {
+    const self = resolve({ intent: intent({ distance_m: 200, direction: "north" }), transcript: "I'm at grid DQ 586 101, 200 metres north", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    const cell = readGrid("grid DQ 586 101", VINCENNES)!.pin;
+    expect(distanceM(cell, self.pin!)).toBeCloseTo(200, -1);
+    expect(self).toMatchObject({ evidence: { rule: "grid_reference" }, estimated: true });
+    expect(positionFromReport(self, null)?.label).toBe("200 m north of grid DQ 586 101");
+    const drone = resolveReport({ intent: intent({ subject: "track", track_kind: "drone", distance_m: 200, relation: "north_of", landmark_name: "grid DQ 586 101" }), transcript: "Enemy drone 200 metres north of grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES, observer: "ALPHA 1" });
+    expect(drone.track?.label).toBe("200 m north of grid DQ 586 101");
+    expect(distanceM(cell, drone.track!.placement!.pin!)).toBeCloseTo(200, -1);
+  });
+
   it("asks again for a grid far outside the area", () => {
     const r = resolve({ intent: intent({}), transcript: "grid 31U DQ 100 900", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
     expect(r).toMatchObject({ status: "unresolved", evidence: { rule: "grid_too_far" } });
@@ -78,5 +111,26 @@ describe("a grid in a report [223]", () => {
     expect(r.pin).toBeUndefined();
     expect(r.track?.label).toBe("grid DQ 586 101");
     expect(distanceM(r.track!.placement!.pin!, CASTLE)).toBeLessThan(100);
+  });
+});
+
+describe("a grid on the command post [245]", () => {
+  it("writes a point's grid as it is said: the square and six figures", () => {
+    expect(shortGrid(CASTLE)).toBe("DQ 586 101");
+    expect(shortGrid({ lat: 50.450099, lon: 30.523404 })).toBe("UA 241 916");
+  });
+
+  it("reads a grid typed into the place search, with or without its square and zone", () => {
+    for (const typed of ["586 101", "586101", "DQ 586 101", "dq 586 101", "31U DQ 586 101", "31UDQ586101"]) {
+      const g = typedGrid(typed, VINCENNES)!;
+      expect(g, typed).not.toBeNull();
+      expect(shortGrid(g.pin), typed).toBe("DQ 586 101");
+      expect(g.radius_m, typed).toBe(71);
+    }
+    expect(typedGrid(" DQ 5860 1012 ", VINCENNES)).toMatchObject({ text: "DQ 5860 1012", radius_m: 7 });
+  });
+
+  it("leaves a place's name alone, and a grid too wide to place anything in", () => {
+    for (const typed of ["", "12 rue de Paris", "Bérault", "château 2", "58 10", "586 10", "DQ", "586 101 north"]) expect(typedGrid(typed, VINCENNES), typed).toBeNull();
   });
 });

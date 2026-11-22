@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AREAS, SPEAKER_PHRASES, speechHints, whisperPrompt, WHISPER_PROMPT_PLACES } from "../lib/geo/areas";
 import { biasTerms, loadGazetteer } from "../lib/geo/gazetteer";
 
-describe("the prompt for offline Whisper [226]", () => {
+describe("the prompt for offline Whisper [246]", () => {
   const vincennes = biasTerms(loadGazetteer("vincennes"), WHISPER_PROMPT_PLACES);
 
   it("is the roster, then ten place names likeliest first, ending in a full stop", () => {

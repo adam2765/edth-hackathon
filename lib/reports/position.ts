@@ -25,6 +25,8 @@ export function positionFromPlacement(pl: Placement, label: string): UnitPositio
 export function labelFor(res: Resolution, intent: Intent | null): string {
   const target = res.candidates.find((c) => c.id === res.evidence.feature_id);
   if (target) return target.name;
+  // A grid reference names no place: the grid is the label, "grid DQ 586 101" [228].
+  if (res.evidence.rule === "grid_reference") return res.evidence.detail.split(":")[0];
   if (res.estimated && intent?.distance_m) {
     const dir = (intent.direction ?? intent.relation?.replace(/_of$/, "") ?? "").replace("_", "-");
     return `${intent.distance_m} m ${dir} of the last position`.replace(/\s+/g, " ");

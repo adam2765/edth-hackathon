@@ -89,7 +89,7 @@ export function speechHints(area: Area, areaHints: string[], speaker: "en" | "fr
 }
 
 /**
- * Place names in the offline Whisper prompt [226]. Ten fixed a real voice's "Château de Vonsen";
+ * Place names in the offline Whisper prompt [246]. Ten fixed a real voice's "Château de Vonsen";
  * thirty did not, nor did the 100 Voxtral gets. Whisper reads only the end of a long prompt.
  */
 export const WHISPER_PROMPT_PLACES = 10;
@@ -98,7 +98,7 @@ const WHISPER_PROMPT_CALLSIGNS = 10;
 const CYRILLIC = /[Ѐ-ӿ]/;
 
 /**
- * The prompt for offline Whisper [226]: the roster's call signs, then the area's likeliest place
+ * The prompt for offline Whisper [246]: the roster's call signs, then the area's likeliest place
  * names, most useful first as `biasTerms` gives them, ending in a full stop. Whisper copies the
  * prompt's style: without the full stop it dropped the transcript's, and the local model then read
  * "Je suis à la mairie de Vincennes" as ambiguous. No report words: a prompt word can turn up in

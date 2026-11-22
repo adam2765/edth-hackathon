@@ -7,11 +7,12 @@ import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/rep
 import { AREAS, DEFAULT_AREA, isAreaId, speechHints, whisperPrompt, WHISPER_PROMPT_PLACES, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { missionRoster } from "@/lib/reports/mission";
-import { readTranscript } from "@/lib/reports/pipeline";
+import { readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
+import { splitRequest, type Split } from "@/lib/geo/requests";
 import { positionFromReport } from "@/lib/reports/position";
 import { afterCallsign, farMove, findSender, type SenderFound } from "@/lib/reports/radio";
-import { openMissionLog, reportContext, saveHeld, saveReport, type HeldInput, type ReportInput } from "@/lib/reports/record";
-import { callsignGiven, callsignOf, sessionCode, type Sender } from "@/lib/reports/types";
+import { openMissionLog, reportContext, saveHeld, saveReport, saveRequest, type HeldInput, type ReportInput, type RequestInput } from "@/lib/reports/record";
+import { callsignGiven, callsignOf, sessionCode, type RequestReply, type Sender } from "@/lib/reports/types";
 
 export const maxDuration = 30;
 
@@ -64,16 +65,33 @@ function parseLastPosition(v: FormDataEntryValue | null): LastPosition | null {
  * A report about a track gets its number on saving, so the resolution comes back too: with the
  * number and the words to say back, or, when nothing was saved, with words that say it has none.
  */
-async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string; resolution: Resolution }> {
+async function save(session: string | null, input: Omit<ReportInput, "session">): Promise<{ report_id?: string; resolution: Resolution; request?: RequestReply }> {
   // Without words there is no track to number.
-  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent, input.transcript) : input.resolution };
+  const unsaved = { resolution: input.intent ? withTrackNumber(input.resolution, null, input.intent, input.read ?? input.transcript) : input.resolution };
   if (!session) return unsaved;
   try {
     const saved = await saveReport({ session, ...input });
-    return saved ? { report_id: saved.id, resolution: saved.resolution } : unsaved;
+    return saved ? { report_id: saved.id, resolution: saved.resolution, ...(saved.request ? { request: saved.request } : {}) } : unsaved;
   } catch (err) {
     console.error("saving the report failed", err);
     return unsaved;
+  }
+}
+
+/** A request for recon cut out of the words, for `save()`: the request, and the words read for saying back [234]. */
+function asked(heard: Split): Pick<ReportInput, "request" | "read"> {
+  return heard.request ? { request: heard.request, read: heard.text } : {};
+}
+
+/** Saves a call that was only a request for recon [234]. A failure to save is logged; the reply says nothing was asked. */
+async function saveAsked(session: string | null, input: Omit<RequestInput, "session">): Promise<{ request?: RequestReply }> {
+  if (!session) return {};
+  try {
+    const e = await saveRequest({ session, ...input });
+    return e ? { request: { id: e.id, n: e.n } } : {};
+  } catch (err) {
+    console.error("saving the request failed", err);
+    return {};
   }
 }
 
@@ -184,7 +202,7 @@ export async function POST(req: Request) {
       // A speaker whose language is not the area's gets phrases in their own language first [190].
       // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
       // On a radio net, the roster's call signs go first, so Voxtral hears them [205].
-      // Whisper here gets a short prompt instead: the roster and ten place names, none in Cyrillic [226].
+      // Whisper here gets a short prompt instead: the roster and ten place names, none in Cyrillic [246].
       const hints = [...roster, ...speechHints(area, bias, pinned)].slice(0, 100);
       const prompt = whisperPrompt(roster, AREA_DATA[area.id].places);
       const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", hints, { language: pinned, prompt });
@@ -221,8 +239,16 @@ export async function POST(req: Request) {
       lastPosition = c.lastPosition;
       tracks = c.tracks;
       Object.assign(meta, { callsign, lastPosition });
-      // The model reads the words after the call sign; the log keeps them all.
-      const r = await readTranscript(afterCallsign(transcript, sender.heard), { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
+      // The model reads the words after the call sign, with a request for recon cut out [234]; the log keeps them all.
+      const heard = splitRequest(afterCallsign(transcript, sender.heard));
+      if (heard.only && heard.request) {
+        timings.total = Math.round(performance.now() - t0);
+        const lang = pinned ?? sttLanguage;
+        const request = await saveAsked(session, { callsign, words: heard.request.words, n: heard.request.n, sender });
+        const kept = await keep({ transcript, language: lang, resolution: REQUEST_ONLY });
+        return NextResponse.json({ transcript, language: lang, intent: null, timings_ms: timings, clientTs, area: area.id, callsign, sender, resolution: REQUEST_ONLY, ...request, ...kept });
+      }
+      const r = await readTranscript(heard.text, { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
       timings.extract = r.extract_ms;
       timings.resolve = r.resolve_ms;
       timings.total = Math.round(performance.now() - t0);
@@ -240,7 +266,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ transcript, language: lang, intent: r.intent, timings_ms: timings, clientTs, area: area.id, held });
       }
       const lang = pinned ?? sttLanguage ?? r.intent.language;
-      const saved = await save(session, { ...meta, transcript, language: lang, intent: r.intent, resolution: r.resolution, timings_ms: timings, sender });
+      const saved = await save(session, { ...meta, transcript, language: lang, intent: r.intent, resolution: r.resolution, timings_ms: timings, sender, ...asked(heard) });
       const kept = await keep({ transcript, language: lang, ...saved });
       return NextResponse.json({ transcript, language: lang, intent: r.intent, timings_ms: timings, clientTs, area: area.id, callsign, sender, ...saved, ...kept });
     }
@@ -259,14 +285,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ transcript: "", language: heard, intent: null, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
     }
 
-    const read = await readTranscript(transcript, { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
+    // A request for recon is cut out before the model reads the words [234].
+    const heard = splitRequest(transcript);
+    if (heard.only && heard.request) {
+      timings.total = Math.round(performance.now() - t0);
+      const language = pinned ?? sttLanguage;
+      const request = await saveAsked(session, { callsign, words: heard.request.words, n: heard.request.n });
+      const kept = await keep({ transcript, language, resolution: REQUEST_ONLY });
+      return NextResponse.json({ transcript, language, intent: null, timings_ms: timings, clientTs, area: area.id, resolution: REQUEST_ONLY, ...request, ...kept });
+    }
+    const read = await readTranscript(heard.text, { area, sttLanguage, pinned, lastPosition, now, tracks, callsign });
     const { intent, resolution } = read;
     timings.extract = read.extract_ms;
     timings.resolve = read.resolve_ms;
     timings.total = Math.round(performance.now() - t0);
 
     const language = pinned ?? sttLanguage ?? intent.language;
-    const saved = await save(session, { ...meta, transcript, language, intent, resolution, timings_ms: timings });
+    const saved = await save(session, { ...meta, transcript, language, intent, resolution, timings_ms: timings, ...asked(heard) });
     const kept = await keep({ transcript, language, ...saved });
     return NextResponse.json({ transcript, language, intent, timings_ms: timings, clientTs, area: area.id, ...saved, ...kept });
   } catch (err) {
