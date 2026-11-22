@@ -19,7 +19,7 @@ app/api/report/route.ts     the coordinator: POST multipart (audio | text, area,
 app/api/answer, app/api/sessions   the tapped choice in (from a phone or the command post); missions: list, open, join, end, delete, each one's log, its tracks placed by hand, its held radio reports with their recordings, its recon tasks (a drone sent to look at a track), and what each unit is
 app/api/places              place search by name, for a start point or a track; with lat and lon, the name of a point
 lib/reports/                missions and their logs: entry types (a contract with the command post and the transmitter), store, record, foldLog, plot (tracks placed by hand), held radio reports, tasks (recon sent by the command post)
-components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, units, tracks, feed, replay; TrackTools.tsx places and edits tracks; ReconTools.tsx sends a drone to look and answers recon requests; MissionPanel.tsx opens and ends missions
+components/CommandPost.tsx  the command post at /cp (was /receiver): shared map, Decisions list, units, tracks, feed, replay; DecisionQueue.tsx is the list and its keys; TrackTools.tsx places and edits tracks; ReconTools.tsx sends a drone to look and answers recon requests; MissionPanel.tsx opens and ends missions
 lib/providers/              Transcriber, IntentExtractor and ReplyReader interfaces, Mistral implementations
 lib/geo/resolver.ts         pure resolver: intent + last position + gazetteer -> pin, question or prompt
 lib/geo/types.ts            shared types; the transmitter imports them, so this is a contract
@@ -28,7 +28,8 @@ lib/geo/blocks.ts           "two blocks east": the count read from the words, th
 lib/geo/trackKinds.ts       the kinds of track, their words and their standard symbol codes; safe on the client
 lib/geo/callsigns.ts        the sender's call sign, read from a radio report's words, at the start or last as a sign-off, and matched against a roster
 lib/geo/requests.ts         a request for recon ("send the drone"), read from the words and cut out before the model reads them
-lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Unassigned tray
+lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Decisions list
+lib/reports/decisions.ts    what waits on the operator, oldest first, and what each one offers; safe on the client
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
 lib/map/                    which map style the map pages start with: OpenFreeMap's, the copy saved on the coordinator, or a plain background; what to save for an area

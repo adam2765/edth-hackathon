@@ -78,7 +78,7 @@ Every line here passed typed, three times of three. Alex's voice decides the fin
 | 2 | Alex | "Bravo 2, at the château." | A question: the castle and the metro station, numbered 1 and 2 on the map | We ask instead of guessing |
 | 3 | Operator | Taps **2**, the metro station, then **Choose** | BRAVO 2's marker at the metro station | A person answers |
 | 4 | Alex | "Bravo 2, moving towards the town hall." | The marker moves half way, with an arrow on to the town hall | Natural phrasing, a path |
-| 5 | Alex | "Alpha 1, unknown vehicle, bearing 060, 300 metres, send the drone." | Track 1, an unknown vehicle, 300 m from ALPHA 1 on 060. A request in the tray, with "Send CHARLIE 3 · drone team · free" | What a unit sees, and a request in one call |
+| 5 | Alex | "Alpha 1, unknown vehicle, bearing 060, 300 metres, send the drone." | Track 1, an unknown vehicle, 300 m from ALPHA 1 on 060. A request in the Decisions list, with "Send CHARLIE 3 · drone team · free" | What a unit sees, and a request in one call |
 | 6 | Operator | **Send CHARLIE 3**, then **Send** | A blue line from CHARLIE 3 to Track 1 | A person decides |
 | 7 | Alex | "Charlie 3, Track 1 is hostile." | Track 1 turns hostile. CHARLIE 3 does not move | The drone team reports back |
 | 8 | Operator | **Replay** from the start | The same minute again, with times | History |
@@ -221,9 +221,9 @@ The runner does not look at the screen. These are checked by a person in pass 4.
 
 | ID | Step | Expected |
 |---|---|---|
-| H1 | Before CHARLIE 3 is marked, open a request in the tray | CHARLIE 3 is not offered: its call sign proves nothing |
+| H1 | Before CHARLIE 3 is marked, open a request in the Decisions list | CHARLIE 3 is not offered: its call sign proves nothing |
 | H2 | Pick Drone team under CHARLIE 3 | The feed says "CHARLIE 3 is a drone team." |
-| H3 | After line 5, the tray | "Send CHARLIE 3 · drone team · free", offered first |
+| H3 | After line 5, the request in the Decisions list | "Send CHARLIE 3 · drone team · free", offered first |
 | H4 | After line 6, CHARLIE 3's row | "Looking at Track 1 since …" and **Recon done** |
 | H5 | While CHARLIE 3 is looking, pick People under it | Refused: "CHARLIE 3 is looking at Track 1. End that first." |
 | H6 | Recon done under CHARLIE 3 | The line goes; CHARLIE 3 is free |
@@ -258,7 +258,7 @@ The rule for the script: never give one unit two far places back to back. Go rou
 
 Built on the night of 21 to 22 November, in `lib/geo/callsigns.ts`, with no model [237]. The rule and its scores are in [callsigns.md](callsigns.md#a-call-sign-at-the-end).
 
-"At Vincennes station, Alpha 1, over." does not go to ALPHA 1 by itself. It waits in the Unassigned tray with "Heard “Alpha 1” at the end. Was that ALPHA 1?" and a **Give to ALPHA 1** button. After the confirm it is read as if ALPHA 1 had said its call sign first.
+"At Vincennes station, Alpha 1, over." does not go to ALPHA 1 by itself. It waits in the Decisions list with "Heard “Alpha 1” at the end. Was that ALPHA 1?" and **Give to ALPHA 1** as option 1 [240]. After the confirm it is read as if ALPHA 1 had said its call sign first.
 
 That is less than Alex asked for, and the tests are why. A call sign at the end is also how you speak to a unit: "Push up to the station and hold the north entrance, Bravo 2." No rule we tried told the two apart, and a wrong unit moving is the worst thing the app can do. A person can tell at a glance.
 
@@ -319,7 +319,7 @@ Things that will happen on stage at least once. Each is done once in pass 4, by 
 
 | Drill | What to do |
 |---|---|
-| A report lands in the Unassigned tray | The operator gives it to the unit, from the tray |
+| A report is held in the Decisions list | The operator gives it to the unit there: its number, then Enter |
 | A report is held as moved too far | The operator gives it to the unit named, or dismisses it and the speaker repeats after a few seconds |
 | Whisper garbled the place; nothing was placed, or the wrong question came up | The operator taps **None of these** if a question is open; the speaker says the line again |
 | A question is open | The operator answers it on the command post before the next report |

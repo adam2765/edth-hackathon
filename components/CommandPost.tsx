@@ -16,12 +16,14 @@ import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
-import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
+import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
+import { COMMAND_POST, sessionCode, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
+import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
-import { SendDrone, TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
+import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -279,20 +281,14 @@ type Tool =
   | { kind: "move"; n: number; radius: number; at: Draft | null }
   | { kind: "edit"; n: number; what: TrackWhat };
 
-/** An answer the command post is about to give for a unit: asked once more before it is saved. */
-type Answering = { reportId: string; choice: string | null; name: string; callsign: string };
+/**
+ * The decision open in the Decisions list [240]: by id, and where it stood in the list, so that
+ * when it is settled (here or on another screen) the one that takes its place opens next.
+ */
+type Focus = { id: string; index: number };
 
-/** What the operator is about to do with a held radio report: asked once more first [203]. */
-type Settling = { held: string; action: "assign" | "add" | "dismiss"; callsign: string | null };
-
-/** Why a radio report waits, as one word on its pill. */
-const HELD_TAG: Record<HeldReason, string> = { which: "Which unit?", unknown: "Not on roster", none: "No call sign", far: "Too far" };
-
-function settleText(s: Settling, h: HeldEntry): string {
-  if (s.action === "dismiss") return "Dismiss this report? Nothing moves.";
-  if (s.action === "add") return `Add ${s.callsign} to the roster and give it this report?`;
-  return `Give this report to ${s.callsign}? Its words are read again from where ${s.callsign} was at ${fmtTime(h.ts)}.`;
-}
+/** An option picked in the open decision, waiting for its confirm. */
+type Selection = { id: string; option: DecisionOption };
 
 /**
  * A unit's state as one word (so it is never told by colour alone) and one line of detail.
@@ -300,6 +296,8 @@ function settleText(s: Settling, h: HeldEntry): string {
  */
 function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): { tag: string; text: string; tone: UnitTone } {
   if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
+  // A question with no choices waits for the operator too [242].
+  if (u.prompt) return { tag: "Awaiting answer", text: u.prompt.question, tone: "ask" };
   // On the roster, and no report from it yet [201].
   if (u.lastHeard === 0) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const p = u.position;
@@ -360,10 +358,10 @@ export default function CommandPost() {
   const [toolError, setToolError] = useState<string | null>(null);
   /** A short line over the map after a change was saved ("Track 7 placed"). */
   const [notice, setNotice] = useState<string | null>(null);
-  const [answering, setAnswering] = useState<Answering | null>(null);
-  const [settling, setSettling] = useState<Settling | null>(null);
-  /** A call sign the operator types for a held report, when the words gave none [203]. */
-  const [newSign, setNewSign] = useState<{ held: string; text: string }>({ held: "", text: "" });
+  const [focus, setFocus] = useState<Focus | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  /** Set when the operator moves to a decision, or settles one: the map frames the next one. */
+  const frameNext = useRef(false);
 
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -558,6 +556,23 @@ export default function CommandPost() {
   const flowTracks = useMemo(() => view.tracks.some((t) => t.heading && t.position && t.gone == null && !isOld(t)), [view, isOld]);
   const flowUnits = useMemo(() => view.units.some((u) => u.position?.heading_to && !isSilent(u)), [view, isSilent]);
 
+  /** Changes are made only to the present of an open mission that this coordinator keeps. */
+  const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true;
+
+  // ---------- the Decisions list [240] ----------
+  const decisions = useMemo(() => decisionsOf(view), [view]);
+  /** Report id (or held or request id) to its place in the list. */
+  const decisionAt = useMemo(() => new Map(decisions.map((d, i) => [d.id, i])), [decisions]);
+  /** The open decision: the one the operator moved to, or the one that took its place, or the oldest. */
+  const focusedAt = useMemo(() => {
+    if (!decisions.length) return -1;
+    const i = focus ? (decisionAt.get(focus.id) ?? -1) : -1;
+    return i >= 0 ? i : Math.min(focus?.index ?? 0, decisions.length - 1);
+  }, [decisions, decisionAt, focus]);
+  const focused: Decision | null = focusedAt >= 0 ? decisions[focusedAt] : null;
+  /** The option picked in the open decision, waiting for its confirm. */
+  const picking = selection && focused && selection.id === focused.id ? selection.option : null;
+
   // ---------- the replay bar ----------
   // The missions opened in this area on the shown one's day, each a stretch from its start to its
   // end, gray between. Until the log of a mission moved to is read, its line in the list stands in.
@@ -607,10 +622,11 @@ export default function CommandPost() {
     replayRef.current.session = code;
     setPicked(null);
     setTool(null);
-    setAnswering(null);
+    setSelection(null);
+    setFocus(null);
     setConfirmEnd(false);
     showSession(code, true);
-  }, [setPicked, setAnswering]);
+  }, [setPicked, setSelection, setFocus]);
 
   const scrub = useCallback(
     (t: number) => {
@@ -1167,9 +1183,75 @@ export default function CommandPost() {
     (map.getSource("start") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
   }, [start, mapReady]);
 
+  /**
+   * Moves the map to a decision: the unit and its choices, the unit alone, where a held report
+   * would put a unit and the units it may be from, or the unit asking for recon and the track.
+   * Only the camera: it sets no state, so it can run when the next decision opens by itself.
+   */
+  const moveMapTo = useCallback(
+    (d: Decision) => {
+      const map = mapRef.current;
+      const ml = mlRef.current;
+      if (!map || !ml) return;
+      const unitAt = (c: string) => view.units.find((u) => u.callsign === c)?.position ?? null;
+      const pts: LatLon[] = [];
+      const add = (p: LatLon | null | undefined) => {
+        if (p) pts.push(p);
+      };
+      if (d.kind === "question") {
+        add(unitAt(d.callsign));
+        d.item.candidates.forEach(add);
+      } else if (d.kind === "prompt") {
+        add(unitAt(d.callsign));
+      } else if (d.kind === "held") {
+        add(d.held.position);
+        d.held.candidates.forEach((c) => add(unitAt(c)));
+      } else {
+        add(unitAt(d.callsign));
+        add(d.request.n != null ? view.tracks.find((t) => t.n === d.request.n)?.position : null);
+      }
+      if (pts.length === 1) map.flyTo({ center: [pts[0].lon, pts[0].lat], zoom: Math.max(map.getZoom(), 16), duration: 600 });
+      else if (pts.length > 1) {
+        const b = new ml.LngLatBounds();
+        pts.forEach((p) => b.extend([p.lon, p.lat]));
+        map.fitBounds(b, { padding: MAP_PADDING, maxZoom: 16.5, duration: 600 });
+      }
+    },
+    [view],
+  );
+
+  /** The operator opens a decision: by a click, the arrow keys, or its line in the feed or the units. */
+  const focusOn = useCallback(
+    (d: Decision, index: number) => {
+      setFocus({ id: d.id, index });
+      setSelection(null);
+      setFollow(false);
+      const a = d.kind === "held" ? d.held.area : d.kind === "request" ? null : d.item.area;
+      if (a && a !== area) setManualArea(a);
+      moveMapTo(d);
+    },
+    [area, moveMapTo, setFocus, setSelection],
+  );
+
+  /** The operator picks an option in the open decision, by a click, a key or a choice on the map. */
+  const pick = useCallback(
+    (o: DecisionOption) => {
+      if (!focused) return;
+      // Pinned, so that settling it opens the one after it, not the first in the list.
+      setFocus({ id: focused.id, index: focusedAt });
+      setSelection({ id: focused.id, option: o });
+      setFollow(false);
+      moveMapTo(focused);
+    },
+    [focused, focusedAt, moveMapTo, setFocus, setSelection],
+  );
+
   // Open questions: each choice numbered on the map, ringed in its unit's colour and named with
-  // its call sign, so two units' choices are not told apart by colour alone.
+  // its call sign, so two units' choices are not told apart by colour alone. The open decision's
+  // choices stand out and can be clicked; the others fade [240].
   const pendings = useMemo(() => view.units.filter((u) => u.pending), [view]);
+  const focusedQuestion = focused?.kind === "question" ? focused : null;
+  const pickedChoice = picking?.kind === "choice" ? picking.choice : null;
   /** Questions that are about a track, not about where the speaker is: report id to track number. */
   const trackQuestions = useMemo(() => new Map(view.tracks.filter((t) => t.pendingReport).map((t) => [t.pendingReport!, t.n])), [view]);
   useEffect(() => {
@@ -1180,14 +1262,16 @@ export default function CommandPost() {
     if (!map || !ml || !mapReady) return;
     // Two units asked about the same place share one marker with both names; drawn apart, the
     // second would hide the first.
-    const spots = new Map<string, { n: number; name: string; lat: number; lon: number; units: UnitState[]; who: string[] }>();
+    const spots = new Map<string, { n: number; name: string; lat: number; lon: number; units: UnitState[]; who: string[]; reports: string[]; ids: string[] }>();
     for (const u of pendings) {
       // "ALPHA 1?" asks where the unit is; "ALPHA 1: T3?" asks where the track it reported is.
       const about = trackQuestions.get(u.pending!.reportId);
       u.pending!.candidates.forEach((c, i) => {
         const k = `${i}|${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
-        const spot = spots.get(k) ?? { n: i + 1, name: c.name, lat: c.lat, lon: c.lon, units: [], who: [] };
+        const spot = spots.get(k) ?? { n: i + 1, name: c.name, lat: c.lat, lon: c.lon, units: [], who: [], reports: [], ids: [] };
         spot.units.push(u);
+        spot.reports.push(u.pending!.reportId);
+        spot.ids.push(c.id);
         spot.who.push(about != null ? `${u.callsign}: T${about}?` : `${u.callsign}?`);
         spots.set(k, spot);
       });
@@ -1202,9 +1286,27 @@ export default function CommandPost() {
       who.className = styles.candWho;
       who.textContent = s.who.join(" · ");
       el.appendChild(who);
-      candMarkers.current.push(new ml.Marker({ element: el }).setLngLat([s.lon, s.lat]).addTo(map));
+      const mine = focusedQuestion ? s.reports.indexOf(focusedQuestion.id) : -1;
+      if (focusedQuestion && mine < 0) el.dataset.dim = "";
+      if (mine >= 0) {
+        el.dataset.focus = "";
+        if (pickedChoice && s.ids[mine] === pickedChoice) el.dataset.picked = "";
+        // A click on the open question's choice picks it, as its key would.
+        const option = optionsOf(focusedQuestion!, []).numbered[s.n - 1];
+        if (canEdit && option) {
+          el.title = `${focusedQuestion!.callsign}, choice ${s.n}: ${s.name}. Click to choose it.`;
+          el.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            pick(option);
+          });
+        }
+      }
+      const marker = new ml.Marker({ element: el }).setLngLat([s.lon, s.lat]).addTo(map);
+      // The open question's choices on top of the others.
+      if (mine >= 0) marker.getElement().style.zIndex = "2";
+      candMarkers.current.push(marker);
     }
-  }, [pendings, trackQuestions, mapReady]);
+  }, [pendings, trackQuestions, mapReady, focusedQuestion, pickedChoice, canEdit, pick]);
 
   // Follow: keep every unit and track in this area (and any open choices) in view as reports come in.
   const followPoints = useMemo(() => {
@@ -1286,12 +1388,8 @@ export default function CommandPost() {
   );
 
   // ---------- the command post's own changes ----------
-  /** Changes are made only to the present of an open mission that this coordinator keeps. */
-  const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true;
   /** In a replay or an ended mission the tools close by themselves. */
   const activeTool = canEdit ? tool : null;
-  const activeAnswer = canEdit ? answering : null;
-  const activeSettle = canEdit ? settling : null;
   const pickedTrack = picked != null ? (view.tracks.find((t) => t.n === picked) ?? null) : null;
   /** The number a new track will most likely get; the coordinator gives the real one. */
   const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
@@ -1488,23 +1586,29 @@ export default function CommandPost() {
     [sendPlot, tracksUrl],
   );
 
-  /** The command post answers a unit's question, as when the unit has only a radio. */
+  /**
+   * The command post answers a unit's question, as when the unit has only a radio [178], or closes
+   * one with no choices (`choice` null) [242]. True once it is saved.
+   */
   const sendAnswer = useCallback(
-    async (a: Answering) => {
-      if (!session) return;
+    async (reportId: string, choice: string | null, callsign: string, done: string): Promise<boolean> => {
+      if (!session) return false;
       setBusy(true);
       setActionError(null);
       try {
-        const res = await fetch("/api/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, report: a.reportId, choice: a.choice, by: COMMAND_POST }) });
+        const res = await fetch("/api/answer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, report: reportId, choice, by: COMMAND_POST }) });
         const data = (await res.json().catch(() => ({}))) as { error?: string; by?: string | null };
         if (!res.ok) throw new Error(data.error ?? `The coordinator answered ${res.status}.`);
-        setNotice(data.by !== COMMAND_POST ? `${a.callsign} had answered already` : a.choice ? `Chose ${a.name} for ${a.callsign}` : `None of the choices, for ${a.callsign}`);
+        setNotice(data.by !== COMMAND_POST ? `${callsign} had answered already` : done);
         pollNow.current();
+        return true;
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "Saving the answer failed.");
+        pollNow.current();
+        return false;
       } finally {
         setBusy(false);
-        setAnswering(null);
+        setSelection(null);
       }
     },
     [session],
@@ -1552,10 +1656,10 @@ export default function CommandPost() {
     [session],
   );
 
-  /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. */
+  /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. True once it is saved. */
   const sendHeld = useCallback(
-    async (st: Settling) => {
-      if (!session) return;
+    async (st: { held: string; action: "assign" | "add" | "dismiss"; callsign: string | null }): Promise<boolean> => {
+      if (!session) return false;
       setBusy(true);
       setActionError(null);
       try {
@@ -1575,32 +1679,75 @@ export default function CommandPost() {
                 ? `Added ${st.callsign} and gave it the report`
                 : `Gave the report to ${st.callsign}`,
         );
-        setNewSign({ held: "", text: "" });
         pollNow.current();
+        return true;
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "Settling the report failed.");
+        pollNow.current();
+        return false;
       } finally {
         setBusy(false);
-        setSettling(null);
+        setSelection(null);
       }
     },
-    [session, setNewSign],
+    [session],
   );
 
+  /** The operator confirms the option picked in the open decision; the next one opens by itself [240]. */
+  const confirmPick = useCallback(async () => {
+    if (!focused || !picking || busy || !canEdit) return;
+    const d = focused;
+    const o = picking;
+    setFocus({ id: d.id, index: focusedAt });
+    setFollow(false);
+    let ok = false;
+    if (o.kind === "choice" && d.kind === "question") ok = await sendAnswer(d.id, o.choice, d.callsign, o.choice ? `Chose ${o.name} for ${d.callsign}` : `None of the choices, for ${d.callsign}`);
+    else if (o.kind === "close" && d.kind === "prompt") ok = await sendAnswer(d.id, null, d.callsign, `Closed ${d.callsign}’s question`);
+    else if (o.kind === "held" && d.kind === "held") ok = await sendHeld({ held: d.id, action: o.action, callsign: o.callsign });
+    if (ok) frameNext.current = true;
+  }, [focused, picking, busy, canEdit, focusedAt, sendAnswer, sendHeld]);
+
+  // Once a decision is settled the one that takes its place opens, and the map moves to it.
+  useEffect(() => {
+    if (!focused) {
+      frameNext.current = false;
+      return;
+    }
+    if (!frameNext.current || focused.id === focus?.id) return;
+    frameNext.current = false;
+    moveMapTo(focused);
+  }, [focused, focus, moveMapTo]);
+
+  // How many decisions wait, in the tab's title, so it shows from another window [240].
+  const waitingCount = mode === "live" && ended == null ? decisions.length : 0;
+  useEffect(() => {
+    document.title = waitingCount ? `(${waitingCount}) Command post · Voice-to-Map` : "Command post · Voice-to-Map";
+  }, [waitingCount]);
+
   // Keys, while no field has the cursor: P to place, H S U C F and 1 to 9 in the palette, Esc to step back.
+  // With no tool open: ↑ ↓ (or J K) move through the Decisions list, 1 to 9 pick, N none, Enter confirms [240].
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
+      const el = e.target instanceof HTMLElement ? e.target : null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) {
         if (e.key === "Escape") el.blur();
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
-        if (activeAnswer) setAnswering(null);
+        if (picking) setSelection(null);
         else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
         else if (activeTool) setTool(null);
         else setPicked(null);
+        return;
+      }
+      // Moving through the Decisions list works in a replay too; not while the map has the keys.
+      const onMap = !!el && !!mapEl.current?.contains(el);
+      const step = e.key === "ArrowDown" || e.key === "j" ? 1 : e.key === "ArrowUp" || e.key === "k" ? -1 : 0;
+      if (step && !activeTool && !onMap && decisions.length) {
+        e.preventDefault();
+        const i = Math.max(0, Math.min(decisions.length - 1, focusedAt + step));
+        focusOn(decisions[i], i);
         return;
       }
       if (!canEdit) return;
@@ -1608,6 +1755,21 @@ export default function CommandPost() {
         e.preventDefault();
         startPlace();
         return;
+      }
+      if (!activeTool && focused) {
+        const { numbered, drop } = optionsOf(focused, view.roster);
+        const o = /^[1-9]$/.test(e.key) ? numbered[Number(e.key) - 1] : e.key === "n" || e.key === "N" ? drop : undefined;
+        if (o) {
+          e.preventDefault();
+          pick(o);
+          return;
+        }
+        // Enter on a button is that button's own click (the confirm takes the cursor when it shows).
+        if (e.key === "Enter" && picking && el?.tagName !== "BUTTON") {
+          e.preventDefault();
+          void confirmPick();
+          return;
+        }
       }
       if (!activeTool || activeTool.kind === "move") return;
       const aff = AFFILIATIONS.find((a) => AFFILIATION_KEY[a] === e.key.toUpperCase());
@@ -1619,7 +1781,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, activeAnswer, canEdit, startPlace]);
+  }, [activeTool, picking, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -1988,151 +2150,32 @@ export default function CommandPost() {
         </div>
       </main>
 
-      <aside className={styles.side} data-tracks={view.tracks.length ? "" : undefined}>
-        {/* Radio reports the coordinator was not sure of: they wait here for the operator, and
-            nothing moves until the operator gives one to a unit [203]. */}
-        {view.held.length ? (
-          <section className={styles.section} aria-labelledby="held-h">
-            <h2 id="held-h" className={styles.h2}>
-              Unassigned <span className={styles.count}>{view.held.length}</span>
-            </h2>
-            <ol className={styles.held}>
-              {view.held.map((h) => {
-                const st = activeSettle?.held === h.id ? activeSettle : null;
-                const onRoster = (c: string) => view.roster.includes(c);
-                const give = [...new Set([...h.candidates, ...(h.read ? [h.read] : [])])].filter(onRoster);
-                const addable = h.read && !onRoster(h.read) ? h.read : null;
-                const others = view.roster.filter((c) => !give.includes(c));
-                const typed = newSign.held === h.id ? newSign.text : "";
-                const typedSign = callsignGiven(typed) ? callsignOf(typed) : null;
-                return (
-                  <li key={h.id} className={styles.heldItem}>
-                    <span className={styles.itemHead}>
-                      <span className={styles.itemTime}>{fmtTime(h.ts)}</span>
-                      <span className={styles.itemCall}>{h.heard ? `“${h.heard}”` : "Radio"}</span>
-                      <span className={styles.pill} data-status="ask">
-                        {HELD_TAG[h.reason]}
-                      </span>
-                    </span>
-                    <span className={styles.said}>{h.transcript ? `“${h.transcript}”` : "(no words heard)"}</span>
-                    <span className={styles.heldQuestion}>{h.question}</span>
-                    {h.audio && session ? (
-                      <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(session)}/audio/${encodeURIComponent(h.audio)}`}>
-                        The recording.
-                      </audio>
-                    ) : null}
-                    {!canEdit ? null : st ? (
-                      <div className={styles.confirm} role="group" aria-label="Confirm">
-                        <span className={styles.confirmText}>{settleText(st, h)}</span>
-                        <button type="button" className={st.action === "dismiss" ? styles.dangerBtn : styles.primaryBtn} onClick={() => sendHeld(st)} disabled={busy}>
-                          {st.action === "dismiss" ? "Dismiss" : st.action === "add" ? "Add and give" : "Give"}
-                        </button>
-                        <button type="button" className={styles.linkBtn} onClick={() => setSettling(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className={styles.heldActions}>
-                        {give.map((c) => (
-                          <button key={c} type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "assign", callsign: c })}>
-                            Give to {c}
-                          </button>
-                        ))}
-                        {addable ? (
-                          <button type="button" className={styles.giveBtn} onClick={() => setSettling({ held: h.id, action: "add", callsign: addable })}>
-                            Add {addable}
-                          </button>
-                        ) : null}
-                        {others.length ? (
-                          <select
-                            className={styles.giveSelect}
-                            value=""
-                            onChange={(e) => {
-                              if (e.target.value) setSettling({ held: h.id, action: "assign", callsign: e.target.value });
-                            }}
-                            aria-label="Give this report to a unit"
-                          >
-                            <option value="">{give.length ? "Another unit…" : "Give to…"}</option>
-                            {others.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
-                        <form
-                          className={styles.giveForm}
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            if (typedSign) setSettling({ held: h.id, action: onRoster(typedSign) ? "assign" : "add", callsign: typedSign });
-                          }}
-                        >
-                          <input
-                            className={styles.giveInput}
-                            value={typed}
-                            onChange={(e) => setNewSign({ held: h.id, text: e.target.value })}
-                            placeholder="New call sign"
-                            maxLength={24}
-                            autoCapitalize="characters"
-                            spellCheck={false}
-                            aria-label="A call sign to add to the roster"
-                          />
-                          <button type="submit" className={styles.linkBtn} disabled={!typedSign}>
-                            Add
-                          </button>
-                        </form>
-                        <button type="button" className={styles.linkBtn} onClick={() => setSettling({ held: h.id, action: "dismiss", callsign: null })}>
-                          Dismiss
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
+      <aside className={styles.side}>
+        {/* Everything that waits on the operator, oldest first, one open at a time [240]. */}
+        {session ? (
+          <DecisionQueue
+            decisions={decisions}
+            focused={focused}
+            selection={canEdit ? picking : null}
+            roster={view.roster}
+            tracks={view.tracks}
+            units={view.units}
+            session={session}
+            canEdit={canEdit}
+            busy={busy}
+            now={effNow}
+            fmtTime={fmtTime}
+            onFocus={(d) => focusOn(d, decisions.indexOf(d))}
+            onSelect={(o) => (o ? pick(o) : setSelection(null))}
+            onConfirm={() => void confirmPick()}
+            onTask={sendTask}
+            onTrack={(n) => {
+              const t = view.tracks.find((x) => x.n === n);
+              if (t) flyToTrack(t);
+            }}
+          />
         ) : null}
-
-        {/* Units that asked for a drone to look at a track: nothing is sent until the operator
-            picks a drone and confirms [234]. */}
-        {view.requests.length ? (
-          <section className={styles.section} aria-labelledby="requests-h">
-            <h2 id="requests-h" className={styles.h2}>
-              Recon requests <span className={styles.count}>{view.requests.length}</span>
-            </h2>
-            <ol className={styles.held}>
-              {view.requests.map((r) => {
-                const t = r.n != null ? view.tracks.find((x) => x.n === r.n) : undefined;
-                return (
-                  <li key={r.id} className={styles.heldItem}>
-                    <span className={styles.itemHead}>
-                      <span className={styles.itemTime}>{fmtTime(r.ts)}</span>
-                      <span className={styles.itemCall}>
-                        <span className={styles.itemDot} style={{ background: r.colour }} aria-hidden="true" />
-                        {r.callsign}
-                      </span>
-                      <span className={styles.pill} data-status="ask">
-                        Recon
-                      </span>
-                    </span>
-                    <span className={styles.said}>“{r.words}”</span>
-                    {t ? (
-                      <button type="button" className={styles.linkBtn} onClick={() => flyToTrack(t)}>
-                        Track {t.n} · {describeTrack(t)}
-                        {t.position ? ` · ${t.position.label}` : " · not placed yet"}
-                      </button>
-                    ) : (
-                      <span className={styles.heldQuestion}>No track named. Pick the track to look at.</span>
-                    )}
-                    {canEdit ? <SendDrone key={`${r.id}:${r.n}`} n={t ? t.n : null} tracks={view.tracks} units={view.units} request={r} busy={busy} onTask={sendTask} /> : null}
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        ) : null}
-
-        <section className={styles.section} aria-labelledby="units-h">
+        <section className={`${styles.section} ${styles.unitsSection}`} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
           </h2>
@@ -2159,9 +2202,18 @@ export default function CommandPost() {
               {view.units.map((u) => {
                 const silent = isSilent(u);
                 const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - u.lastHeard) : null);
+                // A unit whose question waits: its row opens the question [240].
+                const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 return (
                   <li key={u.callsign}>
-                    <button type="button" className={styles.unit} data-tone={st.tone} onClick={() => flyToUnit(u)} disabled={!u.position} title={u.position ? "Show on the map" : undefined}>
+                    <button
+                      type="button"
+                      className={styles.unit}
+                      data-tone={st.tone}
+                      onClick={() => (asks != null ? focusOn(decisions[asks], asks) : flyToUnit(u))}
+                      disabled={!u.position && asks == null}
+                      title={asks != null ? "Open its question in Decisions" : u.position ? "Show on the map" : undefined}
+                    >
                       <span className={styles.unitDot} style={{ background: u.colour }} aria-hidden="true" />
                       <span className={styles.unitMain}>
                         <span className={styles.unitTop}>
@@ -2192,7 +2244,7 @@ export default function CommandPost() {
         {/* Tracks: what the units have seen. Shown only once there is one, so a mission without
             them looks as it always did. */}
         {view.tracks.length ? (
-          <section className={styles.section} aria-labelledby="tracks-h">
+          <section className={`${styles.section} ${styles.tracksSection}`} aria-labelledby="tracks-h">
             <h2 id="tracks-h" className={styles.h2}>
               Tracks <span className={styles.count}>{view.tracks.length}</span>
             </h2>
@@ -2298,26 +2350,39 @@ export default function CommandPost() {
                   </li>
                 );
               }
-              const open = f.status === "ambiguous" && !f.answer && !f.expired;
+              // Waiting in the Decisions list: answered there, not here [240].
+              const waiting = decisionAt.get(f.id);
+              const open = waiting != null;
               // The same words as the units list, so a state has one name on the page.
               const estimate = f.status === "resolved" && !!f.position?.estimated;
               const pill = open
                 ? { tone: "ask", tag: "Awaiting answer" }
                 : f.expired
                   ? { tone: "none", tag: "Not answered" }
-                  : f.status === "ambiguous"
-                    ? { tone: "answered", tag: f.answer?.by ? `${f.answer.by} answered` : "Answered" }
-                    : f.track != null && f.status === "resolved"
-                      ? // A report about a track: it placed or changed the track, not the speaker.
-                        { tone: "track", tag: `Track ${f.track}` }
-                      : estimate
-                      ? { tone: "estimate", tag: "≈ Estimate" }
-                      : f.status === "resolved" && f.position
-                        ? { tone: "placed", tag: "Placed" }
-                        : { tone: "none", tag: "Not placed" };
+                  : f.overtaken
+                    ? { tone: "none", tag: "Overtaken" }
+                    : f.status === "ambiguous"
+                      ? { tone: "answered", tag: f.answer?.by ? `${f.answer.by} answered` : "Answered" }
+                      : f.status === "unresolved" && f.answer
+                        ? { tone: "answered", tag: f.answer.by ? `${f.answer.by} closed` : "Closed" }
+                        : f.track != null && f.status === "resolved"
+                          ? // A report about a track: it placed or changed the track, not the speaker.
+                            { tone: "track", tag: `Track ${f.track}` }
+                          : estimate
+                            ? { tone: "estimate", tag: "≈ Estimate" }
+                            : f.status === "resolved" && f.position
+                              ? { tone: "placed", tag: "Placed" }
+                              : { tone: "none", tag: "Not placed" };
               return (
                 <li key={f.id}>
-                  <button type="button" className={styles.item} data-selected={selected === f.id || undefined} data-open={open || undefined} onClick={() => flyToItem(f)}>
+                  <button
+                    type="button"
+                    className={styles.item}
+                    data-selected={selected === f.id || undefined}
+                    data-open={open || undefined}
+                    onClick={() => (waiting != null ? focusOn(decisions[waiting], waiting) : flyToItem(f))}
+                    title={open ? "Open it in Decisions" : undefined}
+                  >
                     <span className={styles.itemHead}>
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
                       <span className={styles.itemCall}>
@@ -2331,60 +2396,7 @@ export default function CommandPost() {
                     <span className={styles.said}>{f.transcript ? `“${f.transcript}”` : "(no words heard)"}</span>
                     <span className={styles.outcome}>{f.outcome}</span>
                     {f.sender ? <span className={styles.heardLine}>{describeSender(f.sender)}</span> : null}
-                    {open && f.candidates.length ? (
-                      <ol className={styles.choices}>
-                        {f.candidates.map((c, i) => (
-                          <li key={c.id}>
-                            <span className={styles.choiceN} style={{ borderColor: f.colour }}>
-                              {i + 1}
-                            </span>
-                            <span>
-                              {c.name}
-                              {c.town ? ` (${c.town})` : ""} <span className={styles.muted}>· {c.category.replace("_", " ")}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : null}
                   </button>
-                  {/* The command post can answer for the unit, as when it has only a radio. Asked once more first. */}
-                  {open && canEdit && f.candidates.length ? (
-                    <div className={styles.answerBar}>
-                      {activeAnswer?.reportId === f.id ? (
-                        <div className={styles.confirm} role="group" aria-label="Confirm the answer">
-                          <span className={styles.confirmText}>
-                            {activeAnswer.choice ? `Choose ${activeAnswer.name} for ${f.callsign}?` : `None of these, for ${f.callsign}? The question closes and nothing moves.`}
-                          </span>
-                          <button type="button" className={styles.primaryBtn} onClick={() => sendAnswer(activeAnswer)} disabled={busy}>
-                            {activeAnswer.choice ? "Choose" : "None of these"}
-                          </button>
-                          <button type="button" className={styles.linkBtn} onClick={() => setAnswering(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <span className={styles.answerLabel}>Answer for {f.callsign}:</span>
-                          {f.candidates.map((c, i) => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              className={styles.answerBtn}
-                              style={{ borderColor: f.colour }}
-                              onClick={() => setAnswering({ reportId: f.id, choice: c.id, name: c.name, callsign: f.callsign })}
-                              aria-label={`Choose ${i + 1}, ${c.name}, for ${f.callsign}`}
-                              title={c.name}
-                            >
-                              {i + 1}
-                            </button>
-                          ))}
-                          <button type="button" className={styles.linkBtn} onClick={() => setAnswering({ reportId: f.id, choice: null, name: "", callsign: f.callsign })}>
-                            None of these
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
                 </li>
               );
             })}

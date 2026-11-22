@@ -509,6 +509,12 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     const earlier = entries.find((e): e is AnswerEntry => e.kind === "answer" && e.report_id === reportId);
     if (earlier) return { ok: true, entry: earlier };
     if (endOf(entries)) return ENDED;
+    // Only a question still open can be answered [241, 242]. A question with no choices ("How far east
+    // is it?") can only be closed; one the unit has moved past, by reporting again, is closed already.
+    const asked = foldLog(entries).feed.find((f) => f.id === reportId);
+    if (!asked?.question) return { ok: false, status: 400, error: "That report asked nothing." };
+    if (asked.overtaken) return { ok: false, status: 409, error: `${report.callsign} has reported again since, so that question is closed.` };
+    if (report.resolution.status !== "ambiguous" && choice !== null) return { ok: false, status: 400, error: "That question had no choices: it can only be closed." };
     let position = null;
     // A question about a track: the choice places the track, and the speaker stays where they are.
     let track: AnswerEntry["track"] = report.track ? { n: report.track.n, position: null } : null;
