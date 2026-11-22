@@ -12,6 +12,7 @@ import type { Candidate, Intent, LastPosition, Resolution } from "@/lib/geo/type
 import { readVoices } from "@/lib/geo/voices";
 import { getExtractor } from "@/lib/providers/extractor";
 import { foldLog } from "./fold";
+import { withoutClosing } from "./radio";
 import type { LogEntry } from "./types";
 
 /** The resolution saved with a call that was only a request: nothing to place, and no question [234]. */
@@ -40,7 +41,8 @@ export const ANSWER_HEARD: Resolution = {
 export function answerHeard(entries: LogEntry[], callsign: string, words: string, now: number): { report_id: string; candidate: Candidate; n: number; how: PickHow } | null {
   const pending = foldLog(entries, now).units.find((u) => u.callsign === callsign)?.pending;
   if (!pending) return null;
-  const pick = readPick(words, pending.candidates);
+  // Without "over", "à vous" or «прийом», whether or not a call sign came first.
+  const pick = readPick(withoutClosing(words), pending.candidates);
   return pick ? { report_id: pending.reportId, candidate: pending.candidates[pick.choice - 1], n: pick.choice, how: pick.how } : null;
 }
 

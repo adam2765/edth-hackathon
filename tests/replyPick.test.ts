@@ -6,7 +6,7 @@ import { loadGazetteer } from "../lib/geo/gazetteer";
 import { readPick, type PickChoice } from "../lib/geo/replies";
 import type { Category } from "../lib/geo/types";
 import { expectedKinds, type ReplyCase, type ReplyCasesFile, type ReplyQuestion } from "../lib/evals/replies";
-import { afterCallsign } from "../lib/reports/radio";
+import { afterCallsign, withoutClosing } from "../lib/reports/radio";
 
 // A spoken answer read in code [243]: the closed forms only, and never a wrong choice.
 
@@ -30,7 +30,7 @@ const choicesOf = (q: ReplyQuestion): PickChoice[] => q.choices.map((c) => ({ na
 /** The words the reader gets: the reply after the sender's call sign, without "over", as in the report endpoint. */
 function heard(reply: string): string {
   const m = matchCallsign(reply, ROSTER);
-  return afterCallsign(reply, m.kind === "unit" ? m.heard : null);
+  return withoutClosing(afterCallsign(reply, m.kind === "unit" ? m.heard : null));
 }
 
 const read = (c: ReplyCase) => readPick(heard(c.reply), choicesOf(file.questions[c.question]));
@@ -68,6 +68,50 @@ describe("a spoken answer read in code, on the reply eval's cases", () => {
   });
 });
 
+describe("on replies written without seeing the reader", () => {
+  // 80 replies an agent wrote from the rule alone on 22 Nov, to make the reader pick wrongly. The
+  // first run picked wrongly three times ("Les deux.", "Лікарня.", "У парку."); those are fixed, so
+  // these cases are no longer unseen. They stay as a guard.
+  interface Held {
+    id: string;
+    question: string;
+    reply: string;
+    expect: "pick" | "none";
+    /** The choice meant; for an ambiguous case, the one a person would lean to, or null. */
+    choice: number | null;
+    /** A person could argue either way: nothing, or the choice leaned to. Never another choice. */
+    ambiguous?: boolean;
+  }
+  const held = (JSON.parse(readFileSync(join(__dirname, "../evals/replies.heldout.cases.json"), "utf8")) as { cases: Held[] }).cases;
+  const readHeld = (c: Held) => readPick(withoutClosing(c.reply), choicesOf(file.questions[c.question]));
+
+  it("uses the reply eval's questions, and none of its replies", () => {
+    expect(held.length).toBe(80);
+    const seen = new Set(file.cases.map((c) => c.reply));
+    for (const c of held) {
+      expect(file.questions[c.question], c.id).toBeDefined();
+      expect(seen.has(c.reply), c.id).toBe(false);
+    }
+  });
+
+  it("never picks a choice that was not meant", () => {
+    const wrong = held.flatMap((c) => {
+      const got = readHeld(c);
+      if (!got) return [];
+      const fine = got.choice === c.choice && (c.expect === "pick" || c.ambiguous === true);
+      return fine ? [] : [`${c.id}: “${c.reply}” read as choice ${got.choice}`];
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it("settles all but one of the clear picks", () => {
+    const picks = held.filter((c) => c.expect === "pick" && !c.ambiguous);
+    expect(picks.length).toBe(29);
+    // "узвіз" for "узвозом": the vowel changes with the case, and the reader does not follow it.
+    expect(picks.filter((c) => readHeld(c)?.choice !== c.choice).map((c) => c.reply)).toEqual(["Володимирський узвіз."]);
+  });
+});
+
 describe("the closed forms", () => {
   const castle: PickChoice[] = [
     { name: "Château de Vincennes", category: "metro_station", distance_m: 304 },
@@ -92,6 +136,27 @@ describe("the closed forms", () => {
     // A wait, not the second choice.
     expect(readPick("one second", castle)).toBeNull();
     expect(readPick("just a second", castle)).toBeNull();
+    expect(readPick("une seconde", castle)).toBeNull();
+    expect(readPick("la seconde", castle)).toEqual({ choice: 2, how: "number" });
+    // Both of them, not the second.
+    expect(readPick("les deux", castle)).toBeNull();
+    expect(readPick("both", castle)).toBeNull();
+  });
+
+  it("the kind they all are is the question's own word, unless the names set one kind against another", () => {
+    const hospitals: PickChoice[] = [
+      { name: "Міська", category: "hospital", distance_m: 36 },
+      { name: "Центральна районна лікарня", category: "hospital", distance_m: 420 },
+    ];
+    const churches: PickChoice[] = [
+      { name: "Спасо-Преображенський собор", category: "church", distance_m: 342 },
+      { name: "Хрестовоздвиженська церква", category: "church", distance_m: 624 },
+    ];
+    expect(readPick("Лікарня.", hospitals)).toBeNull();
+    expect(readPick("Міська лікарня.", hospitals)).toEqual({ choice: 1, how: "name" });
+    expect(readPick("Собор.", churches)).toEqual({ choice: 1, how: "name" });
+    // "У парку" is a park, not Парковий міст.
+    expect(readPick("У парку.", [{ name: "Парковий міст", category: "bridge" }, { name: "Київський фунікулер", category: "bridge" }])).toBeNull();
   });
 
   it("the kind, when it tells the choices apart; a name both share tells nothing", () => {

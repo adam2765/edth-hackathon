@@ -12,7 +12,8 @@
  *
  * It picks nothing by itself: the coordinator stores what it heard, and the command post shows the
  * choice already picked for the operator to confirm. No model is involved, and the place is the
- * stored choice's. Measured on evals/replies.cases.json in tests/replyPick.test.ts.
+ * stored choice's. Measured in tests/replyPick.test.ts on evals/replies.cases.json, and on the 80
+ * replies of evals/replies.heldout.cases.json, written without seeing this file (docs/ask-back.md).
  */
 import { canonTokens, isCategoryWord } from "./gazetteer";
 import { normalize } from "./normalize";
@@ -47,7 +48,8 @@ const CARDINALS: Record<string, number> = {
 const ONES = new Set(["one", "un", "une", "один", "одна", "одне", "одно"]);
 const ORDINALS: Record<string, number> = {
   first: 1, second: 2, third: 3, fourth: 4, fifth: 5, "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5,
-  premier: 1, premiere: 1, deuxieme: 2, troisieme: 3, quatrieme: 4, cinquieme: 5,
+  premier: 1, premiere: 1, deuxieme: 2, seconde: 2, troisieme: 3, quatrieme: 4, cinquieme: 5,
+  "1er": 1, "1ere": 1, "2e": 2, "2eme": 2, "3e": 3, "3eme": 3, "4e": 4, "4eme": 4, "5e": 5, "5eme": 5,
   перший: 1, перша: 1, перше: 1, першу: 1, першого: 1, другий: 2, друга: 2, друге: 2, другу: 2, другого: 2,
   третій: 3, третя: 3, третє: 3, третю: 3, третього: 3, четвертий: 4, четверта: 4, четверту: 4, пятий: 5, пята: 5,
   первый: 1, первая: 1, первое: 1, первую: 1, второй: 2, вторая: 2, второе: 2, вторую: 2, третий: 3, третья: 3, третье: 3, третью: 3, четвертый: 4, четвертая: 4,
@@ -55,8 +57,12 @@ const ORDINALS: Record<string, number> = {
 const LAST = new Set(["last", "dernier", "derniere", "останній", "остання", "останнє", "останню", "последний", "последняя", "последнюю"]);
 /** "Number two", "choice 2", "numéro deux", "номер два". */
 const NUMBER_LEAD = new Set(["number", "no", "choice", "option", "numero", "num", "choix", "номер", "варіант", "вариант"]);
-/** "A second", "one second", "just a second": a wait, not the second choice. */
-const BEFORE_SECOND = new Set(["a", "one", "just", "wait", "quick", "half"]);
+/** "A second", "one second", "just a second", "une seconde": a wait, not the second choice. */
+const SECONDS = new Set(["second", "seconds", "seconde", "secondes"]);
+const BEFORE_SECOND = new Set(["a", "one", "just", "wait", "quick", "half", "un", "une", "petite"]);
+/** "Les deux", "both", "the two": all of them, not the second choice. */
+const BEFORE_BOTH = new Set(["les", "tous", "toutes", "the", "both", "all"]);
+const BOTH = new Set(["both", "обидва", "обидві", "обоє", "оба", "обе"]);
 
 const YES = new Set([
   "yes", "yeah", "yep", "yup", "affirm", "affirmative", "correct", "right",
@@ -96,7 +102,8 @@ function sameWord(a: string, b: string): boolean {
   if (!CYRILLIC.test(a) || !CYRILLIC.test(b) || a.length < 5 || b.length < 5) return false;
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  return i >= Math.max(4, Math.min(a.length, b.length) - 2);
+  // All but an ending of the longer word: "парку" (a park) is not "парковий".
+  return i >= Math.max(4, Math.max(a.length, b.length) - 3);
 }
 
 function words(text: string): string[] {
@@ -116,7 +123,8 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
   if (!n) return null;
   const raw = normalize(reply).split(" ").filter(Boolean);
   if (!raw.length || raw.length > MAX_WORDS) return null;
-  if (raw.some((w, i) => (w === "second" || w === "seconds") && BEFORE_SECOND.has(raw[i - 1] ?? ""))) return null;
+  if (raw.some((w, i) => SECONDS.has(w) && BEFORE_SECOND.has(raw[i - 1] ?? ""))) return null;
+  if (raw.some((w, i) => BOTH.has(w) || (BEFORE_BOTH.has(raw[i - 1] ?? "") && w in CARDINALS && !/^\d/.test(w)))) return null;
   const said = words(reply);
   if (!said.length) return null;
 
@@ -166,8 +174,16 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
       readings.push({ set: null, ...none });
       continue;
     }
-    const name = new Set(shared(w) ? [] : choices.flatMap((_, i) => (inName(i, w) ? [i] : [])));
     const kind = new Set(shared(w) && sharedName ? [] : choices.flatMap((c, i) => (isCategoryWord(w, c.category) ? [i] : [])));
+    const named = shared(w) ? [] : choices.flatMap((_, i) => (inName(i, w) ? [i] : []));
+    // The kind they all are, said alone, is the question's own word: "Лікарня" to "Яка лікарня: Міська
+    // чи Центральна районна лікарня?" picks nothing, though one name has it. It names a choice only
+    // when every other name has a kind word of its own to set against it: "собор" against "церква".
+    const ownWord =
+      kind.size === n &&
+      named.length > 0 &&
+      !choices.every((c, i) => named.includes(i) || names[i].some((t) => !sameWord(t, w) && isCategoryWord(t, c.category)));
+    const name = new Set(ownWord ? [] : named);
     if (name.size || (kind.size && kind.size < n)) {
       hows.add("name");
       readings.push({ set: null, name, kind });
@@ -186,9 +202,7 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
   const telling = readings.filter((r) => r.set || r.name.size || r.kind.size);
   if (!telling.length) return null;
   // A word in one choice's name means that choice; a word in no name is read as a kind.
-  let fit = meet(telling.map((r) => r.set ?? (r.name.size ? r.name : r.kind)));
-  // That left nothing: a word that is in a name and is also a kind word ("лікарня") is read as either.
-  if (!fit.size) fit = meet(telling.map((r) => r.set ?? new Set([...r.name, ...r.kind])));
+  const fit = meet(telling.map((r) => r.set ?? (r.name.size ? r.name : r.kind)));
   if (fit.size !== 1) return null;
   const how: PickHow = hows.has("name") ? "name" : hows.has("number") ? "number" : hows.has("nearest") ? "nearest" : "yes";
   return { choice: [...fit][0] + 1, how };

@@ -76,7 +76,7 @@ Since 22 November [243]. While a unit's question with choices is open, a radio r
 | The nearer or the farther one, when one choice is nearer by 50 m and a fifth | "the closer one", "la plus proche", "та, що ближче" |
 | Yes, to a single choice | "yes", "affirm", "oui", "так точно" |
 
-Anything else is read as a report, as before: "two blocks east", "two enemy vehicles", "not the castle", "the castle, moving north". A reply that says who it is about ("I'm at the castle", "je suis…", "я біля…") stands on its own and is never read here. A word that is in every choice's name tells nothing: "Rue de Fontenay", when all three crossings are on it, and "Château de Vincennes", when both choices have that name. "One second" is a wait, not the second choice.
+Anything else is read as a report, as before: "two blocks east", "two enemy vehicles", "not the castle", "the castle, moving north". A reply that says who it is about ("I'm at the castle", "je suis…", "я біля…") stands on its own and is never read here. A word that is in every choice's name tells nothing: "Rue de Fontenay", when all three crossings are on it, and "Château de Vincennes", when both choices have that name. Nor does the kind they all are, said alone: "Лікарня", when every choice is one. "One second" is a wait, not the second choice, and "les deux" is both.
 
 An answer heard is not a report. It is a `reply` line in the log, it moves nothing, and the question stays open. The Decisions list shows the words and the choice already picked, with "BRAVO 2 said “the metro station”. Choose 1, Château de Vincennes (metro station)?". Enter confirms, as an ordinary answer by the command post; Escape steps back, and the choice is not picked again by itself. No model reads the words, so nothing is added to the wait: in one offline check the answer took 3 ms, where the report before it took 12 s.
 
@@ -90,6 +90,16 @@ Measured on the reply eval's 124 cases, in `tests/replyPick.test.ts`, so `npm te
 | Read into the 66 replies that are not picks | none |
 
 The reader was written with these cases in view, so the first two rows say what it covers, not how it does on words it has not seen.
+
+For that, an agent that had not seen the reader wrote 80 more replies from the rule alone, 50 of them to make it pick wrongly (`evals/replies.heldout.cases.json`, 22 Nov). On the first run:
+
+| What | Result |
+|---|---|
+| Clear picks | 24 of 29 right, 5 read as nothing, none wrong |
+| Replies that are not picks | 41 of 44 read as nothing, **3 picked wrongly** |
+| Ambiguous, by the writer's own mark | 7: no pick of the other choice |
+
+The three wrong picks: "Les deux." (both) read as choice 2; "Лікарня." read as the one choice with that word in its name, though it is the question's own word; "У парку." (a park) read as Парковий міст. All three are fixed, with four of the five misses ("à vous" and «приём» for over, "la seconde", "le 2ème"), and the 80 cases now run in `npm test` as a guard. So they are no longer unseen: the honest number for unseen words is the first run's, 3 wrong picks in 44 replies built to cause one. A second unseen round has not been run.
 
 Not built: choosing without the operator's confirm. A mentor called that an optional switch (22 Nov), and Alex left it out. Not read here: the radio words (say again, wait one, disregard), "none", a correction, and every reply that needs a reading ("the one by the big roundabout"). A phone that names its call sign, and a held report the operator gives to a unit, are read as reports as before.
 
