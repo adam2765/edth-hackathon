@@ -222,7 +222,7 @@ describe("Whisper on this computer in offline mode (decision 195)", () => {
   const reply = (body: object, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status }));
   const formOf = (fetchMock: ReturnType<typeof vi.fn>) => (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
 
-  it("sends the prompt it is given, and only that [246]", async () => {
+  it("sends the prompt it is given, and only that [247]", async () => {
     const fetchMock = reply({ text: " Alpha 1 at the Château de Vincennes." });
     vi.stubGlobal("fetch", fetchMock);
     const { getTranscriber } = await providers();

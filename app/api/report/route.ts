@@ -202,7 +202,7 @@ export async function POST(req: Request) {
       // A speaker whose language is not the area's gets phrases in their own language first [190].
       // Whisper on this computer listens for the device's language, as the phone does; Mistral detects it itself.
       // On a radio net, the roster's call signs go first, so Voxtral hears them [205].
-      // Whisper here gets a short prompt instead: the roster and ten place names, none in Cyrillic [246].
+      // Whisper here gets a short prompt instead: the roster and ten place names, none in Cyrillic [247].
       const hints = [...roster, ...speechHints(area, bias, pinned)].slice(0, 100);
       const prompt = whisperPrompt(roster, AREA_DATA[area.id].places);
       const r = await getTranscriber().transcribe(audio, audio.type || "audio/webm", hints, { language: pinned, prompt });

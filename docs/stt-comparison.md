@@ -135,7 +135,7 @@ Same 29 clips and the same scoring as above, three hosted scoring runs, 15:30 to
 - Every transcript of this round, with each run's result, is in the same [results file](../scenarios/results/stt-comparison-2026-11-21.jsonl), marked "round 2".
 - **Not measured:** real voices, noise, two voices in one clip (Whisper does not tell speakers apart, so the clip is read as one voice), and a report while another one is being transcribed.
 
-### A short prompt for a real voice [246]
+### A short prompt for a real voice [247]
 
 On 21 Nov, over the phone and the radio flow, Alex's "Alpha 1, at the Château de Vincennes" came back "Alpha One at the Chateau de Vonsen", not placed, and "at Vincennes RER" as "Alpha One, Advancen, RAR." One clip was kept, and turbo wrote "Vonsen" for it every time: in English, in French, and with the language detected. The same clip through whisper-server with other prompts:
 

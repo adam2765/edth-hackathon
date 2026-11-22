@@ -19,7 +19,7 @@ export interface TranscribeResult {
 export interface TranscribeOptions {
   /** The language the device is set to (en, fr, uk). Without it, the model detects the language. Mistral ignores it. */
   language?: string | null;
-  /** Text for Whisper to read as what came before the clip: call signs and place names [246]. Mistral takes the bias terms instead. */
+  /** Text for Whisper to read as what came before the clip: call signs and place names [247]. Mistral takes the bias terms instead. */
   prompt?: string | null;
 }
 
@@ -144,7 +144,7 @@ export function withoutSoundMarks(text: string): string {
  * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
  * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language and
  * prompt; the server keeps nothing between requests. The prompt is short, call signs and ten place
- * names [246]: a real English voice's "Château de Vincennes" came back "Château de Vonsen" without
+ * names [247]: a real English voice's "Château de Vincennes" came back "Château de Vonsen" without
  * one. Decision 195 had dropped it after synthetic voices gained nothing from a long list.
  * Light mode uses base with the same request format; its accuracy is not remeasured.
  */

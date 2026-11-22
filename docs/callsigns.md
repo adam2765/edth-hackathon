@@ -150,7 +150,7 @@ Built on 21 Nov (Alex: "Yes, start step 2"). The code is `lib/reports/radio.ts` 
 - **A move the unit could not have made.** A radio report that would put a unit farther than 15 m/s allows from its last fix, plus that fix's size and 100 m (the check of decision 188), is held: "ALPHA 2 moved 3.0 km in 20 s. Was that ALPHA 1?". The units named are those that could have got there. A unit still at the start point, or never placed, has no fix to measure from, so its first place is not checked. Phones are not checked: a phone names itself.
 - **A reply with no call sign.** As in the table: to a unit only when exactly one unit's question is open and was asked in the last 2 minutes. Two open questions: held, asking which.
 
-**Roster hints [205].** The roster's call signs go first in the hints sent to Voxtral with a radio report, so it writes them as the roster does. Offline, Whisper gets them too, at the front of its short prompt [246]. The eval still reads only what speech-to-text wrote.
+**Roster hints [205].** The roster's call signs go first in the hints sent to Voxtral with a radio report, so it writes them as the roster does. Offline, Whisper gets them too, at the front of its short prompt [247]. The eval still reads only what speech-to-text wrote.
 
 ### Not done
 
