@@ -9,7 +9,7 @@ import { createMission, recordAnswer, saveReport } from "../lib/reports/record";
 import { getStore } from "../lib/reports/store";
 import type { AnswerEntry, HeldEntry, LogEntry, ReportEntry, RequestEntry, TrackSighting, UnitPosition } from "../lib/reports/types";
 
-// The command post's Decisions list [239]: what waits on the operator, and when it stops waiting.
+// The command post's Decisions list [240]: what waits on the operator, and when it stops waiting.
 
 const T0 = Date.UTC(2026, 10, 22, 9, 0, 0);
 const at = (s: number) => T0 + s * 1000;

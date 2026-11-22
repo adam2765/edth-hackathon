@@ -258,7 +258,7 @@ The rule for the script: never give one unit two far places back to back. Go rou
 
 Built on the night of 21 to 22 November, in `lib/geo/callsigns.ts`, with no model [237]. The rule and its scores are in [callsigns.md](callsigns.md#a-call-sign-at-the-end).
 
-"At Vincennes station, Alpha 1, over." does not go to ALPHA 1 by itself. It waits in the Decisions list with "Heard “Alpha 1” at the end. Was that ALPHA 1?" and **Give to ALPHA 1** as option 1 [239]. After the confirm it is read as if ALPHA 1 had said its call sign first.
+"At Vincennes station, Alpha 1, over." does not go to ALPHA 1 by itself. It waits in the Decisions list with "Heard “Alpha 1” at the end. Was that ALPHA 1?" and **Give to ALPHA 1** as option 1 [240]. After the confirm it is read as if ALPHA 1 had said its call sign first.
 
 That is less than Alex asked for, and the tests are why. A call sign at the end is also how you speak to a unit: "Push up to the station and hold the north entrance, Bravo 2." No rule we tried told the two apart, and a wrong unit moving is the worst thing the app can do. A person can tell at a glance.
 

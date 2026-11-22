@@ -253,7 +253,7 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
-/* While a question is open in Decisions, the other questions' choices fade, and its own stand out [239]. */
+/* While a question is open in Decisions, the other questions' choices fade, and its own stand out [240]. */
 .candMarker[data-dim] {
   opacity: 0.35;
 }
@@ -530,7 +530,7 @@
 }
 
 /* Every section shrinks to fit and scrolls its own list, so none is pushed off the bottom of the
-   screen however many units are on the net [239]. Decisions first, at most 60% of the height; units
+   screen however many units are on the net [240]. Decisions first, at most 60% of the height; units
    and reports share what is left; tracks take at most a fifth. */
 .section {
   flex: 0 1 auto;
@@ -1587,7 +1587,7 @@
   border-color: #3a4d61;
 }
 
-/* ---------- the Decisions list: everything that waits on the operator [239] ---------- */
+/* ---------- the Decisions list: everything that waits on the operator [240] ---------- */
 /* The operator's main job: it gets the most room, and the units and the reports keep at least 110px each. */
 .decisionSection {
   max-height: 60%;

@@ -509,7 +509,7 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     const earlier = entries.find((e): e is AnswerEntry => e.kind === "answer" && e.report_id === reportId);
     if (earlier) return { ok: true, entry: earlier };
     if (endOf(entries)) return ENDED;
-    // Only a question still open can be answered [240, 241]. A question with no choices ("How far east
+    // Only a question still open can be answered [241, 242]. A question with no choices ("How far east
     // is it?") can only be closed; one the unit has moved past, by reporting again, is closed already.
     const asked = foldLog(entries).feed.find((f) => f.id === reportId);
     if (!asked?.question) return { ok: false, status: 400, error: "That report asked nothing." };

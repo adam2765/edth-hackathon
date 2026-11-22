@@ -1,5 +1,5 @@
 /**
- * What waits on the operator, oldest first, as one list [239]: questions with choices, questions
+ * What waits on the operator, oldest first, as one list [240]: questions with choices, questions
  * with none ("How far east is it?"), radio reports held until the operator says whose they are, and
  * requests for recon. On a radio net the command post is the only place a question is answered
  * [208], so nothing that needs a person is left in the history feed. Pure; safe on the client.

@@ -60,7 +60,7 @@ export interface UnitState {
   task: { n: number; ts: number; by: string } | null;
   /**
    * Its latest report asked something with no choices ("How far east is it?") and nothing has
-   * closed it yet: the operator asks it by radio, or closes it [241].
+   * closed it yet: the operator asks it by radio, or closes it [242].
    */
   prompt: { reportId: string; ts: number; question: string } | null;
 }
@@ -154,7 +154,7 @@ export interface FeedItem {
   expired: boolean;
   /** What the report asked, with choices or without; absent when it asked nothing. */
   question?: string | null;
-  /** The same unit reported again while the question was open, so it is closed and cannot be answered [240]. */
+  /** The same unit reported again while the question was open, so it is closed and cannot be answered [241]. */
   overtaken?: boolean;
   /** For a radio report: how its sender was found [202]. */
   sender?: Sender;
@@ -353,7 +353,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
 
   /**
    * A question the unit has moved past: its own later report closes it, and an answer that comes
-   * after would place it from where it was before [240].
+   * after would place it from where it was before [241].
    */
   const overtake = (reportId: string) => {
     const item = feed.get(reportId);
@@ -721,7 +721,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       const seen = e.track ? seeTrack(e, e.track) : null;
       // A held radio report the operator gave to this unit leaves the tray [203].
       if (e.sender?.held) held.delete(e.sender.held);
-      // Whatever the unit says next overtakes a question with no choices it was asked [240, 241].
+      // Whatever the unit says next overtakes a question with no choices it was asked [241, 242].
       if (u.prompt) {
         overtake(u.prompt.reportId);
         u.prompt = null;
@@ -736,7 +736,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       } else if (r.status === "resolved" && !seen) {
         u.pending = null;
       }
-      // A question with choices the unit has moved past, by a new place or a new question, is closed [240].
+      // A question with choices the unit has moved past, by a new place or a new question, is closed [241].
       if (asked && u.pending?.reportId !== asked) overtake(asked);
       if (r.status === "unresolved" && r.question) u.prompt = { reportId: e.id, ts: e.ts, question: r.question };
       feed.set(e.id, {
@@ -771,14 +771,14 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     const chosen = e.choice ? (item?.candidates.find((c) => c.id === e.choice) ?? null) : null;
     // A newer fix since the question beats a late answer to it.
     const reportTs = item?.ts ?? e.ts;
-    // A question with no choices, closed by the command post: nothing moves [241].
+    // A question with no choices, closed by the command post: nothing moves [242].
     if (item?.status === "unresolved") {
       if (u.prompt?.reportId === e.report_id) u.prompt = null;
       item.answer = { ts: e.ts, choice: null, name: null, by: e.by ?? null };
       item.outcome = `Closed by ${e.by ?? e.callsign}: ${item.question ?? item.outcome}`;
       continue;
     }
-    // An answer to a question the unit had moved past moves nothing; the coordinator now refuses one [240].
+    // An answer to a question the unit had moved past moves nothing; the coordinator now refuses one [241].
     if (item?.overtaken) {
       item.answer = { ts: e.ts, choice: e.choice, name: chosen?.name ?? null, by: e.by ?? null };
       item.outcome = `${e.choice ? `${chose} ${chosen?.name ?? e.choice}.` : none} The unit had reported again, so nothing moved.`;

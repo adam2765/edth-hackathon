@@ -35,7 +35,7 @@ Radio procedure puts the sender first, or right after the station being called.
 
 ## A call sign at the end
 
-Pilots give their call sign last: "Climbing to five thousand, Speedbird 123." Some radio users do too. The reader takes a call sign at the end of a transmission as a **question for the operator** [237]: the report waits in the Decisions list [239] with "Heard “Alpha 1” at the end. Was that ALPHA 1?", and **Give to ALPHA 1** (key 1), then the confirm, gives it to ALPHA 1. The picture below is from before the Decisions list, when held reports had a tray of their own. It never gives the report to the unit by itself.
+Pilots give their call sign last: "Climbing to five thousand, Speedbird 123." Some radio users do too. The reader takes a call sign at the end of a transmission as a **question for the operator** [237]: the report waits in the Decisions list [240] with "Heard “Alpha 1” at the end. Was that ALPHA 1?", and **Give to ALPHA 1** (key 1), then the confirm, gives it to ALPHA 1. The picture below is from before the Decisions list, when held reports had a tray of their own. It never gives the report to the unit by itself.
 
 <img src="images/callsigns/cp-signoff-tray.png" alt="The Unassigned tray on the command post. One report: &quot;Alpha 1&quot;, &quot;At Vincennes station, Alpha 1, over.&quot;, the question Heard &quot;Alpha 1&quot; at the end. Was that ALPHA 1?, a button Give to ALPHA 1, a list Another unit, and Dismiss." width="400">
 
@@ -133,7 +133,7 @@ What this does not show: every transcript is written by hand, in the way speech-
 
 Built on 21 Nov (Alex: "Yes, start step 2"). The code is `lib/reports/radio.ts` (who sent it, the guards), `lib/reports/record.ts` (saving), `app/api/report/route.ts` and `app/api/sessions/[code]/held/[id]/route.ts`. The fields are in [contracts.md](contracts.md).
 
-**The roster [201].** The operator types the call signs on the radio net when opening a mission, split by commas. The operator can add one later from a held report in the Decisions list [239]. A phone that joins puts its call sign on the roster too; the transmitter no longer joins, so this is only for older phones [208]. The units list shows each roster unit from the start, "On roster, not heard yet". Only the operator adds a call sign: **a transcript never creates a unit.**
+**The roster [201].** The operator types the call signs on the radio net when opening a mission, split by commas. The operator can add one later from a held report in the Decisions list [240]. A phone that joins puts its call sign on the roster too; the transmitter no longer joins, so this is only for older phones [208]. The units list shows each roster unit from the start, "On roster, not heard yet". Only the operator adds a call sign: **a transcript never creates a unit.**
 
 **A radio report [202]** is a report to a mission with no `callsign` field. Every report from the transmitter's microphone is one: like a radio, the phone does not join or name itself [208]. The coordinator reads the sender from the words:
 
@@ -143,7 +143,7 @@ Built on 21 Nov (Alex: "Yes, start step 2"). The code is `lib/reports/radio.ts` 
 | No call sign, one unit's question open in the last 2 minutes | It is that unit's reply, and goes to it [204]. It is then read as a new report, as a phone's would be: spoken answers are not built yet [199]. |
 | Ask which, a call sign not on the roster, no call sign, the command post speaking, no words | Held for the operator. |
 
-**Held reports [203, 239].** A held report waits in the command post's Decisions list, tagged "Unit?", with its words, its recording and the question for the operator ("Heard “Alpha”. Which unit sent this: ALPHA 1 or ALPHA 2?", "CHARLIE 3 is not on the roster. Add it, or give the report to a unit."). The operator can give it to a unit it may be from, to any unit on the roster, add the call sign it read ("Add CHARLIE 3") or one typed in, or dismiss it: 1 to 9 give it to the units offered, N dismisses it, and "Another unit…" and "New call sign" are under the options. Each is asked once more first, and Enter confirms. A report given to a unit is read again from where that unit was when the report came in, since "200 metres north of me" depends on who said it. The first decision stands. The recording is kept on the coordinator under `.data/sessions/audio/`, and moves to `deleted/` with the mission.
+**Held reports [203, 240].** A held report waits in the command post's Decisions list, tagged "Unit?", with its words, its recording and the question for the operator ("Heard “Alpha”. Which unit sent this: ALPHA 1 or ALPHA 2?", "CHARLIE 3 is not on the roster. Add it, or give the report to a unit."). The operator can give it to a unit it may be from, to any unit on the roster, add the call sign it read ("Add CHARLIE 3") or one typed in, or dismiss it: 1 to 9 give it to the units offered, N dismisses it, and "Another unit…" and "New call sign" are under the options. Each is asked once more first, and Enter confirms. A report given to a unit is read again from where that unit was when the report came in, since "200 metres north of me" depends on who said it. The first decision stands. The recording is kept on the coordinator under `.data/sessions/audio/`, and moves to `deleted/` with the mission.
 
 **Two guards [204]** ask the operator instead of acting:
 
