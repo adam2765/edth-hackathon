@@ -9,7 +9,7 @@ Agents never read `.env` files or print keys. Setup does not push or deploy the 
 | Needed for | Tools |
 |---|---|
 | Everyone | Git, Node.js 24.3+ and npm; a current browser |
-| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB; about 4 GB free RAM); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
+| Local inference | Current Ollama and `ministral-3:3b` (about 3 GB on disk; about 4 GB of RAM once running, with the 8,192-token context and the areas' prompts kept [254]); whisper.cpp’s `whisper-server` and ffmpeg on PATH; Whisper turbo by default, base with `npm start light` and Silero VAD (about 635 MB for both speech models and VAD, checksum-verified by Build) |
 | Android builds | Android SDK Platform 37, Build-Tools 37.0.0, Platform-Tools, Command-line Tools, NDK 27.1.12297006, CMake 3.22.1; a JDK, such as Android Studio’s bundled JDK |
 | iPhone builds | macOS, Xcode, Command Line Tools, CocoaPods, Apple ID |
 
@@ -125,8 +125,13 @@ or Git. Direct coordinator commands can use `.env.local` if needed.
 For local-only Ollama in a macOS console:
 
 ```bash
-OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 ollama serve
+OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
 ```
+
+The coordinator asks Ollama for a context of 8,192 tokens on every call, so the extraction
+prompt (about 4,560 tokens) is never cut, however Ollama was started. Starting Ollama at the same
+size saves one reload of the model at the first report. At 4,096, Ollama cut the prompt to
+2,051 tokens without an error, and `.run/launcher.log` said `truncating input prompt` (decision 254).
 
 On PowerShell set the corresponding `$env:` variables first. Native builds remain available
 in transmitter with `npm run android` or `npm run ios` (Mac only). For iOS set
@@ -149,6 +154,7 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 - **Map is coarse or empty away from the area:** only the tiles around the area are saved.
 - **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
 - **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
+- **Phone build fails with `Undefined symbols` for `RCTReconnectingWebSocket` or `Sealable`:** the Debug app linked React Native's Release copy, left in `transmitter/ios/Pods` by a Release build before a `pod install` (decision 255). Run `LANG=en_US.UTF-8 npx expo prebuild --platform ios` in `transmitter/` once, then build the app again with `LANG=en_US.UTF-8 npx expo run:ios`. Prebuild makes `ios/` again from the config, so it takes a few minutes and downloads React Native's copies again.
 
 Each command retires old project controllers before using the current code. Shutdown
 scans processes by checkout path, working directory and parent/child ownership across all
