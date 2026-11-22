@@ -1,6 +1,7 @@
 // Turns scenarios/*.json into audio clips and the bundle the transmitter app loads.
 //   transmitter/scenarios/audio/<scenario>/<step>.m4a   one clip per step, synthetic voice
-//   transmitter/scenarios/audio/<scenario>/<step>.wav   the same clip uncompressed, for speech-to-text on the phone
+//   transmitter/scenarios/audio/<scenario>/<step>-pcm.wav   the same clip uncompressed, for speech-to-text on the phone.
+//   Its own name, not <step>.wav: a release build keeps clips as Android resources by name without the extension.
 //   transmitter/scenarios/index.ts                      generated; do not edit by hand
 // Run: npm run scenarios   (macOS only: uses `say` and `afconvert`)
 import { execFileSync } from "node:child_process";
@@ -37,7 +38,7 @@ for (const sc of scenarios) {
     if (!voice) throw new Error(`${sc.id}/${step.id}: no voice for lang "${step.lang}"`);
     const rel = `audio/${sc.id}/${step.id}.m4a`;
     const file = join(OUT, rel);
-    const wav = file.replace(/\.m4a$/, ".wav");
+    const wav = file.replace(/\.m4a$/, "-pcm.wav");
     const key = createHash("sha256").update(`${voice}\n${step.text}`).digest("hex").slice(0, 16);
     next[rel] = key;
     if (manifest[rel] === key && existsSync(file) && existsSync(wav)) continue;
@@ -80,7 +81,7 @@ for (const sc of scenarios) {
       `expect: ${JSON.stringify(expect)}`,
       ...(choose ? [`choose: ${JSON.stringify(choose)}`] : []),
       `audio: require("./audio/${sc.id}/${id}.m4a")`,
-      `wav: require("./audio/${sc.id}/${id}.wav")`,
+      `wav: require("./audio/${sc.id}/${id}-pcm.wav")`,
     ];
     lines.push(`      { ${fields.join(", ")} },`);
   }

@@ -107,7 +107,7 @@ function extOf(audio: Blob): string {
 /**
  * Holds a radio report for the operator [203]. The phone or radio that sent it gets `held` back, not
  * a resolution. The model starts reading its words while it waits, so giving it to a unit later is
- * quick [256]; `readings` are what the model read already, for a report held after it was read.
+ * quick [257]; `readings` are what the model read already, for a report held after it was read.
  */
 async function hold(session: string, input: Omit<HeldInput, "session" | "audio">, sound: Blob | null, readings?: Readings) {
   try {
@@ -288,7 +288,7 @@ export async function POST(req: Request) {
           session,
           { clientTs, area: area.id, transcript, language: lang, reason: "far", heard: sender.heard, read: null, candidates: [...far.others, callsign], question: far.question, position: to },
           sound,
-          // Read already: giving it to a unit places it again without the model [256].
+          // Read already: giving it to a unit places it again without the model [257].
           r.readings,
         );
         console.log(`[radio] held (far): ${far.question}`);

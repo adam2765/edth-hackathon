@@ -14,7 +14,7 @@ type Action = (typeof ACTIONS)[number];
  * `POST /api/sessions/<code>/held/<id>` with JSON `{ action, callsign? }`.
  *   - `assign`: gives it to `callsign`, a unit on the roster. The words are placed again from where
  *     that unit was when the report came in, since "200 metres north of me" depends on who said it.
- *     The model read them while the report waited [256]; it reads them now only if that failed.
+ *     The model read them while the report waited [257]; it reads them now only if that failed.
  *   - `add`: puts `callsign` on the roster first, then gives it the report. Only this adds a unit.
  *   - `dismiss`: drops it. Nothing moves.
  * The first decision stands: a report settled already returns `already: true` and changes nothing.
@@ -71,7 +71,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
     // A request for recon is cut out before the model reads the words, as for any report [234].
     const { split: heard, text } = heldWords(held);
     if (text) {
-      // The model's reading from while the report waited, or still being read [256]; only the place is worked out here.
+      // The model's reading from while the report waited, or still being read [257]; only the place is worked out here.
       read = await readTranscript(text, { area, ...heldHints(held), lastPosition: c.lastPosition, now: held.ts, tracks: c.tracks, callsign }, heldReadings(session, id));
     }
     // A call that was only a request is kept as a report with nothing to place, so the held one is settled.

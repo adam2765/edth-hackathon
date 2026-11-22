@@ -1,7 +1,7 @@
 /**
  * Reading a transcript for one unit: the model extracts the intent, the resolver places it against
  * the gazetteer from the unit's last position. The report endpoint runs it on every report. A held
- * radio report is read by the model while it waits [256], and the resolver places it again when
+ * radio report is read by the model while it waits [257], and the resolver places it again when
  * the operator gives it to a unit [203], since where "200 metres north of me" is depends on who
  * said it. Server only.
  */
@@ -66,14 +66,14 @@ export interface ReadResult {
   resolution: Resolution;
   extract_ms: number;
   resolve_ms: number;
-  /** What the model read, by the words it read: kept with a report that is then held [256]. */
+  /** What the model read, by the words it read: kept with a report that is then held [257]. */
   readings: Readings;
 }
 
 /**
  * Intents the model read, by the words it read. The model's reading depends only on the words
  * (and the language and area hints), not on who said them, so a held report's reading is kept for
- * when the operator gives it to a unit [256].
+ * when the operator gives it to a unit [257].
  */
 export type Readings = Map<string, Promise<Intent>>;
 
@@ -117,7 +117,7 @@ export async function readTranscript(transcript: string, x: ReadInput, readings:
   return { ...read, readings };
 }
 
-// ---- a held radio report, read while it waits [256] ----
+// ---- a held radio report, read while it waits [257] ----
 
 /**
  * What the model reads of a held report: the words after the call sign heard, with a request for
@@ -151,7 +151,7 @@ export function forgetHeldReadings(session: string, held: string): void {
 }
 
 /**
- * Starts the model reading a held report's words while it waits for the operator [256], so giving
+ * Starts the model reading a held report's words while it waits for the operator [257], so giving
  * it to a unit later only places it. `readings` are what the model read already, for a report held
  * after it was read (`far`). Never throws: a reading that fails is read again when the report is given.
  */

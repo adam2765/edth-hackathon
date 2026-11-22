@@ -8,7 +8,7 @@ import { createMission, saveHeld, type HeldInput } from "../lib/reports/record";
 import { getStore } from "../lib/reports/store";
 import type { HeldEntry, ReportEntry, StartPoint } from "../lib/reports/types";
 
-// A held radio report is read by the model while it waits, and only placed when given [256].
+// A held radio report is read by the model while it waits, and only placed when given [257].
 
 /** "Moved 200 metres north": where it puts a unit depends on where that unit was. */
 const NORTH: Intent = { kind: "movement", landmark_text: null, landmark_name: null, landmark_category: null, relation: null, distance_m: 200, direction: "north", language: "en", confidence: 0.9 };
