@@ -109,10 +109,10 @@ Do not decode the AAC file into PCM on the phone. That needs a decoder module, w
 - **Ollama with the small model and a short context:**
 
   ```bash
-  OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 ollama serve
+  OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
   ```
 
-  The prompt is about 2,200 tokens and each answer under 100, so 4,096 is enough. That should keep `ministral-3:3b` to about 3.3 GB (estimated, not measured). Do not use the 8B model.
+  The prompt was about 2,200 tokens when this was written; on 22 Nov it is about 4,560, and at 4,096 Ollama cut it in the middle (decision 253). The coordinator now asks for 8,192 on every call; starting Ollama at the same size saves a reload. Do not use the 8B model.
 - **Connect the phone to the Mac over the cable:**
 
   ```bash
@@ -178,11 +178,11 @@ too old to load the model. If the Ollama desktop app is running, quit it before 
 This command can run from any folder. Leave it running.
 
 ```bash
-OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=4096 ollama serve
+OLLAMA_NO_CLOUD=1 OLLAMA_KEEP_ALIVE=-1 OLLAMA_CONTEXT_LENGTH=8192 ollama serve
 ```
 
-These settings disable cloud features, keep the model loaded between reports, and limit
-the context to 4,096 tokens for this 8 GB Mac. Use the 3B model, not the 8B model.
+These settings disable cloud features, keep the model loaded between reports, and set
+the context to 8,192 tokens, the size the coordinator asks for (decision 253). Use the 3B model, not the 8B model.
 
 ### Terminal 2: download and check the model
 

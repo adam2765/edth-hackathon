@@ -8,6 +8,7 @@ import type { Category, Direction, Intent, Relation } from "../geo/types";
 import { clockChecked } from "../geo/clock";
 import { TRACK_KINDS } from "../geo/trackKinds";
 import { ollamaUrl, providerMode } from "./mode";
+import { ollamaChatBody, ollamaChatContent, type ChatMessage } from "./ollama";
 import { fetchRetrying } from "./retry";
 
 export interface ExtractOptions {
@@ -234,24 +235,25 @@ class ChatJsonExtractor implements IntentExtractor {
     const response_format = this.useJsonSchema
       ? { type: "json_schema", json_schema: { name: "position_report_intent", schema: INTENT_SCHEMA, strict: true } }
       : { type: "json_object" };
-    const res = await fetchRetrying(`${this.baseUrl}/chat/completions`, () => ({
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt(opts.place) },
+      { role: "user", content: text },
+    ];
+    // Ollama through its own endpoint, which takes the context size [253].
+    const native = this.provider === "ollama";
+    const res = await fetchRetrying(native ? `${this.baseUrl}/api/chat` : `${this.baseUrl}/chat/completions`, () => ({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0,
-        max_tokens: 400,
-        messages: [
-          { role: "system", content: systemPrompt(opts.place) },
-          { role: "user", content: text },
-        ],
-        response_format,
-      }),
+      body: JSON.stringify(
+        native
+          ? ollamaChatBody(this.model, messages, INTENT_SCHEMA, 400)
+          : { model: this.model, temperature: 0, max_tokens: 400, messages, response_format },
+      ),
       signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
     }));
     if (!res.ok) throw new Error(`${this.provider} extract ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = j.choices?.[0]?.message?.content ?? "{}";
+    const content = (native ? ollamaChatContent(j) : j.choices?.[0]?.message?.content) ?? "{}";
     let parsed: unknown = {};
     try {
       parsed = JSON.parse(content);
@@ -271,7 +273,7 @@ export function getExtractor(): IntentExtractor {
   if (providerMode() === "local") {
     // Ollama ignores the key. 25 s instead of 10: the first report after a start or an area change
     // is slower, and the route allows 30 s.
-    cached = new ChatJsonExtractor(`${ollamaUrl()}/v1`, "ollama", process.env.LOCAL_EXTRACT_MODEL || LOCAL_EXTRACT_MODEL, "ollama", true, 25_000);
+    cached = new ChatJsonExtractor(ollamaUrl(), "ollama", process.env.LOCAL_EXTRACT_MODEL || LOCAL_EXTRACT_MODEL, "ollama", true, 25_000);
   } else if (process.env.MISTRAL_API_KEY) {
     cached = new ChatJsonExtractor("https://api.mistral.ai/v1", process.env.MISTRAL_API_KEY, process.env.MISTRAL_EXTRACT_MODEL || "mistral-small-latest", "mistral", true);
   } else if (process.env.FEATHERLESS_API_KEY) {
@@ -288,7 +290,9 @@ export function getExtractor(): IntentExtractor {
 
 /**
  * Loads the local model and each place's prompt before the first report, so no speaker waits for that.
- * Measured on the MacBook: 9 s to load the 3B model, 6 s for the first report in a new area.
+ * Measured on the M1 Pro at 8,192 tokens [253]: 15 s for the first report after a load, 11 s for
+ * an area's whole prompt, then 2 to 3 s a report while the area's prompt is still cached. Ollama
+ * keeps the last prompt and one more, so with three areas the first one warmed is evicted.
  */
 export async function warmUpExtractor(places: string[]): Promise<boolean> {
   const extractor = getExtractor();

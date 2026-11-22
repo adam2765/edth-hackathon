@@ -53,27 +53,55 @@ describe("provider mode", () => {
     expect(url).toBe("http://127.0.0.1:3118/inference");
   });
 
-  it("sends the same schema request to Ollama on this computer", async () => {
+  it("sends the same schema request to Ollama on this computer, with a context the whole prompt fits in [253]", async () => {
     vi.stubEnv("PROVIDER_MODE", "local");
     const reply = { kind: "position", landmark_text: "the town hall", landmark_name: null, landmark_name_lemma: null, landmark_category: "town_hall", relation: "at", distance_m: null, direction: null, language: "en", confidence: 0.9 };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] })));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: { role: "assistant", content: JSON.stringify(reply) } })));
     vi.stubGlobal("fetch", fetchMock);
-    const { getExtractor } = await providers();
+    const { getExtractor, INTENT_SCHEMA, systemPrompt } = await providers();
+    const { LOCAL_NUM_CTX } = await import("../lib/providers/ollama");
     const intent = await getExtractor().extract("I'm at the town hall.", { place: "Vincennes, France" });
 
     expect(intent.landmark_category).toBe("town_hall");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("http://127.0.0.1:11434/v1/chat/completions");
+    expect(url).toBe("http://127.0.0.1:11434/api/chat");
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe("ministral-3:3b");
-    expect(body.response_format.type).toBe("json_schema");
+    expect(body.stream).toBe(false);
+    expect(body.format).toEqual(INTENT_SCHEMA);
+    expect(body.options).toEqual({ temperature: 0, num_predict: 400, num_ctx: LOCAL_NUM_CTX });
+    // Measured 4,556 tokens for 15,721 characters: about 3.5 a token. Fewer than 3 would be a very different text.
+    const { AREAS } = await import("../lib/geo/areas");
+    const longest = Math.max(...Object.values(AREAS).map((a) => systemPrompt(a.place).length));
+    expect(longest / 3 + 100 + 400).toBeLessThan(LOCAL_NUM_CTX);
+  });
+
+  it("reads replies to a question with Ollama at the same context, so the model is not reloaded [253]", async () => {
+    vi.stubEnv("PROVIDER_MODE", "local");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: { content: JSON.stringify({ kind: "pick", choice: 2 }) } })));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.resetModules();
+    const { getReplyReader } = await import("../lib/providers/replies");
+    const { LOCAL_NUM_CTX } = await import("../lib/providers/ollama");
+    const question = { about: "self" as const, text: "Which one?", choices: [{ name: "Château de Vincennes", kind: "metro station" }, { name: "Château de Vincennes", kind: "castle" }] };
+    expect(await getReplyReader().read("the castle", question)).toEqual({ kind: "pick", choice: 2 });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://127.0.0.1:11434/api/chat");
+    expect(JSON.parse(init.body as string).options).toEqual({ temperature: 0, num_predict: 60, num_ctx: LOCAL_NUM_CTX });
+  });
+
+  it("starts Ollama from the launcher at the context the requests name [253]", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { LOCAL_NUM_CTX } = await import("../lib/providers/ollama");
+    expect(readFileSync("scripts/launcher/supervisor.mjs", "utf8")).toContain(`OLLAMA_CONTEXT_LENGTH: '${LOCAL_NUM_CTX}'`);
+    expect(readFileSync("docs/setup.md", "utf8")).toContain(`OLLAMA_CONTEXT_LENGTH=${LOCAL_NUM_CTX} ollama serve`);
   });
 
   it("takes the language the device pinned over the model's label (decision 106)", async () => {
     vi.stubEnv("PROVIDER_MODE", "local");
     // What the local 3B model answered for an English report in Kyiv
     const reply = { kind: "position", landmark_text: "Khreshchatyk", landmark_name: "Хрещатик", landmark_name_lemma: "Хрещатик", landmark_category: null, relation: "at", distance_m: null, direction: null, language: "uk", confidence: 0.9 };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }))));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ message: { content: JSON.stringify(reply) } }))));
     const { getExtractor, pinnedLanguage } = await providers();
     const place = "central Kyiv, Ukraine";
     expect((await getExtractor().extract("I'm at Хрещатик.", { place, language: "en" })).language).toBe("en");

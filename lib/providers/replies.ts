@@ -8,6 +8,7 @@
  */
 import { LOCAL_EXTRACT_MODEL } from "./extractor";
 import { ollamaUrl, providerMode } from "./mode";
+import { ollamaChatBody, ollamaChatContent, type ChatMessage } from "./ollama";
 
 export const REPLY_KINDS = ["pick", "none", "rephrase", "repeat", "stand_by", "dont_know", "disregard", "new_report", "unclear"] as const;
 export type ReplyKind = (typeof REPLY_KINDS)[number];
@@ -124,7 +125,7 @@ class ChatJsonReplyReader implements ReplyReader {
     private baseUrl: string,
     private apiKey: string,
     private model: string,
-    provider: string,
+    private provider: string,
     private useJsonSchema: boolean,
     private timeoutMs = 10_000,
   ) {
@@ -135,24 +136,25 @@ class ChatJsonReplyReader implements ReplyReader {
     const response_format = this.useJsonSchema
       ? { type: "json_schema", json_schema: { name: "reply_reading", schema: REPLY_SCHEMA, strict: true } }
       : { type: "json_object" };
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const messages: ChatMessage[] = [
+      { role: "system", content: replyPrompt() },
+      { role: "user", content: replyMessage(reply, question) },
+    ];
+    // Ollama through its own endpoint, at the same context as extraction, so the model is not reloaded [253].
+    const native = this.provider === "ollama";
+    const res = await fetch(native ? `${this.baseUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0,
-        max_tokens: 60,
-        messages: [
-          { role: "system", content: replyPrompt() },
-          { role: "user", content: replyMessage(reply, question) },
-        ],
-        response_format,
-      }),
+      body: JSON.stringify(
+        native
+          ? ollamaChatBody(this.model, messages, REPLY_SCHEMA, 60)
+          : { model: this.model, temperature: 0, max_tokens: 60, messages, response_format },
+      ),
       signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
     });
     if (!res.ok) throw new Error(`reply reader ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = j.choices?.[0]?.message?.content ?? "{}";
+    const content = (native ? ollamaChatContent(j) : j.choices?.[0]?.message?.content) ?? "{}";
     let parsed: unknown = {};
     try {
       parsed = JSON.parse(content);
@@ -170,7 +172,7 @@ let cached: ReplyReader | null = null;
 export function getReplyReader(): ReplyReader {
   if (cached) return cached;
   if (providerMode() === "local") {
-    cached = new ChatJsonReplyReader(`${ollamaUrl()}/v1`, "ollama", process.env.LOCAL_EXTRACT_MODEL || LOCAL_EXTRACT_MODEL, "ollama", true, 25_000);
+    cached = new ChatJsonReplyReader(ollamaUrl(), "ollama", process.env.LOCAL_EXTRACT_MODEL || LOCAL_EXTRACT_MODEL, "ollama", true, 25_000);
   } else if (process.env.MISTRAL_API_KEY) {
     cached = new ChatJsonReplyReader("https://api.mistral.ai/v1", process.env.MISTRAL_API_KEY, process.env.MISTRAL_EXTRACT_MODEL || "mistral-small-latest", "mistral", true);
   } else if (process.env.FEATHERLESS_API_KEY) {
