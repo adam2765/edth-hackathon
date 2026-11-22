@@ -322,6 +322,36 @@ Light. Not presented.
 
 Source: [known-gaps.md](known-gaps.md), [gazetteer.md](gazetteer.md).
 
+## The pictures
+
+Twelve pictures of the command post for the deck, in [images/pitch/](images/pitch/), taken on Sunday 22 November between 10:27 and 10:29 (frames 01 to 10), and at about 10:13 and 10:16 (frames 11 and 12). Each is 1920 × 1080, the size of a slide. None is in the deck yet.
+
+| File | What it shows | For |
+|---|---|---|
+| `01-alpha-placed.png` | "Alpha 1, at Vincennes station.": the marker, its time and ±30 m | Works live |
+| `02-bravo-question.png` | "Bravo 2, at the château.": the castle and the metro station numbered on the map, nothing moved, the question open in the Decisions list | Slide 7 |
+| `03-operator-picks.png` | The operator picked 2: "Choose Château de Vincennes for BRAVO 2?" | Slide 8 |
+| `04-bravo-placed.png` | BRAVO 2 at the metro station, "CP answered" in the feed | |
+| `05-track-and-request.png` | "…unknown vehicle, bearing 060, 300 metres, send the drone.": Track 1 on its bearing line, and the request with "Send CHARLIE 3 · drone team · free" | Slides 9, 10 |
+| `06-operator-sends.png` | The confirm: "Send CHARLIE 3, drone team, to look at Track 1?" | Slide 10 |
+| `07-drone-sent.png` | The blue line from CHARLIE 3 to Track 1 | Slide 10 |
+| `08-track-hostile.png` | "Charlie 3, Track 1 is hostile.": the track turns hostile | Slide 9 |
+| `09-bravo-moves.png` | "Bravo 2, moving towards the town hall.": the arrow, the path, "≈ Estimate" | Marker and path |
+| `10-replay.png` | The replay at 10:28:34, before the track turned hostile, with the replay bar | History |
+| `11-decisions-under-load.png` | 24 units, two tracks, and six decisions of four kinds waiting, the oldest one late | Slide 8 |
+| `12-kyiv-ukrainian.png` | Kyiv: «Альфа 1, я біля Золотих воріт.» asks which of three, in Ukrainian; «Браво 2, я на Майдані Незалежності.» is placed | Slide 11 |
+
+What a reader should know about them:
+
+- **Frames 01 to 10 are one run of the stage script,** typed, through the offline model, in mission `vincennes-69` on a coordinator of its own. Every position has its grid after it [245], and Track 1 has no heading [246].
+- **The run has BRAVO 2's move last,** after the three drone beats, not fourth as in [the stage script](stage-test-plan.md#the-stage-script). That order fills the wait the far guard needs after the operator's answer. It passed typed three times of three, and has not been spoken. The stage script and slide 4 still give the old order.
+- **Frame 11 is staged.** Its reports are made up and were written straight to the log with canned places, by a script that is not kept; no model read them. It is the real screen with a made-up net.
+- **Frame 12 is two typed reports** through the offline model, in mission `kyiv-1`.
+- **The operator turned Follow units back on** after picking BRAVO 2's place. A pick switches it off, and without that click the track of frame 05 appears off the screen.
+- **Frame 11 is 692 KB,** over the 600 KB the other pictures keep to: with fewer colours the units' colours ran together.
+
+To take them again: run the coordinator in offline mode on a port of its own, open a mission in Vincennes with the start point Château de Vincennes and the roster ALPHA 1, BRAVO 2, CHARLIE 3, mark CHARLIE 3 a drone team, and send the lines as typed reports to `POST /api/report` (text, session, language, no call sign). Take each frame in headless Chrome at 1600 × 900 and 2× pixel density, about 4 s after the line, then reduce it to 1920 × 1080 and 240 colours without dithering. Do the operator's steps on the page: 2 then Enter, **Follow units**, **Send CHARLIE 3** then **Send**, and **Replay** with the bar dragged back.
+
 ## To fill in
 
 | What | Slides | Where it comes from |
@@ -330,8 +360,7 @@ Source: [known-gaps.md](known-gaps.md), [gazetteer.md](gazetteer.md).
 | Pitch length | all | The organisers. 15 slides is long for 3 minutes; cut 8, 11 and 12 first. |
 | Seconds from speech to marker, timed | 3, 5 | The dress rehearsal, pass 4 of [stage-test-plan.md](stage-test-plan.md#the-passes). 3 to 5 s is a short report offline [195]. |
 | "Built" becomes "Met" for marker, path and history | 5 | The dress rehearsal: the whole script twice, with the phone and the projector |
-| A picture of the Decisions list, with a question open | 7, 8 | Nobody has taken one. Slide 7's picture is from before the list [240]. Save it under [docs/images/](images/), then put it in the deck. |
-| The tracks picture, taken again | 9 | It is from 21 November, before the Decisions list and the moving arrows [238] |
+| The new pictures, put in the deck | 7, 8, 9, 10 | Taken on 22 November, in [images/pitch/](images/pitch/) ([the pictures](#the-pictures)): `02-bravo-question.png` for slide 7, `11-decisions-under-load.png` for 8, `08-track-hostile.png` for 9, `07-drone-sent.png` for 10. The deck still has the pictures of 21 November. |
 | Alex's own voice, and the dress rehearsal | 12 | Passes 3 and 4 of [stage-test-plan.md](stage-test-plan.md#the-passes) |
 | The eval, run again | 12 | `npm run eval:extract -- --resolve --repeat 3` on both models, if the prompt changed since 21 November |
 | The map system's name | 13 | The mentors, if they name one |
@@ -347,7 +376,7 @@ Settled since the first draft: the demo is in Vincennes, in English, offline, wi
 - Headings in Oswald, text in Inter, spoken lines and call signs in JetBrains Mono. All three have Cyrillic, and all three travel in a PPTX file.
 - Type sizes on the 1920 × 1080 slide: 120 px for the cover title and big numbers, 72 px for slide titles, 44 px for card titles and statements, 32 px for text and the operator's table, 24 px for eyebrows, footers, small lines and the appendix table.
 - Colours: ink `#12181D`, panel `#1D272F`, paper `#EEEBE3`, card `#E1DCD0`, amber `#F2B33D`, dark amber for text on paper `#8A5600`, blue `#5B97F2`, dark blue for text on paper `#2557A8`.
-- Screenshots come from [docs/images/tracks/](images/tracks/). Retake them there when the screen changes, then put them in the deck again.
+- Screenshots come from [docs/images/tracks/](images/tracks/), and since 22 November from [docs/images/pitch/](images/pitch/), which are the size of a slide ([the pictures](#the-pictures)). Retake them there when the screen changes, then put them in the deck again.
 
 ## Submitting
 
