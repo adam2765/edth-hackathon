@@ -1,6 +1,6 @@
 # Pitch
 
-The Demo Day deck, in full: every slide's words in reading order, and its speaker notes. First draft on Saturday 21 November. Reshaped on Sunday 22 November to the order of a teammate's rewritten deck, then cut by Alex at about 10:30: seven slides to present, then six backup slides for questions. Square brackets mark what is not known yet.
+The Demo Day deck, in full: every slide's words in reading order, and its speaker notes. First draft on Saturday 21 November. Reshaped on Sunday 22 November to the order of a teammate's rewritten deck, then cut by Alex at about 10:30: seven slides to present, then six appendix slides for questions. Square brackets mark what is not known yet.
 
 ## Where the deck lives
 
@@ -14,7 +14,7 @@ The live demo has no slide. The sheet to run it from is [demo-script.md](demo-sc
 
 The seven slides to present follow the teammate's deck, in the customer's terms: the name and the team, the request, how a radio call becomes a marker, where a position comes from, the benefits, then the live demo, then what we tune next, and the close.
 
-The six backup slides are the detail, for questions: asking back, the operator's list, tracks, effectors on request, the field, and the evidence.
+The six appendix slides are the detail, for questions: asking back, the operator's list, tracks, effectors on request, the field, and the evidence.
 
 Five rules for the wording, each from Alex or from a Lysk mentor on 22 November:
 
@@ -26,7 +26,7 @@ Five rules for the wording, each from Alex or from a Lysk mentor on 22 November:
 
 ## Slides
 
-Each slide gives its background, then its words in reading order, then its picture and its speaker notes. The eyebrow is the small line in capitals above the title. Every slide except the cover and the close has a footer and the page number. The footer reads "Voice-to-Map · EDTH Paris 2026" unless the slide gives another; on a backup slide it starts with "Backup ·".
+Each slide gives its background, then its words in reading order, then its picture and its speaker notes. The eyebrow is the small line in capitals above the title. Every slide except the cover and the close has a footer and the page number. The footer reads "Voice-to-Map · EDTH Paris 2026" unless the slide gives another; on an appendix slide it starts with "Appendix ·".
 
 ### Part 1. Open: the name, the team, and the customer's request
 
@@ -170,9 +170,9 @@ Dark. No footer.
 
 **Notes:** Close on the one line from the cover. The organisers ask every team to say what it had before the event: the tag prior-work-fri-1800 marks it, and git log prior-work-fri-1800..main lists what was built here. The submitted PDF keeps these links clickable.
 
-### Part 4. Backup, for questions
+### Part 4. Appendix, for questions
 
-These six slides come after the close and are not presented. Each one's footer starts with "Backup ·". Their pictures are four of the twelve command post screenshots taken on 22 November at 10:15, in another session's worktree under `docs/images/pitch/`; they are not on `main` yet.
+These six slides come after the close and are not presented. Each one's footer starts with "Appendix ·". Their pictures are four of the twelve command post screenshots taken on 22 November at 10:15, in another session's worktree under `docs/images/pitch/`; they are not on `main` yet.
 
 #### 8. Asking back
 
@@ -270,11 +270,11 @@ Light. The footer is the source line below, not the usual one.
   |---|---|
   | 27/27 | stage lines placed right, spoken in three synthetic voices |
   | 0 | wrong units in 220 call-sign cases |
-  | 84/84 | requests for an effector read, 20 of them held out |
+  | 84/84 | effector requests read correctly, 20 unseen while building it |
   | 581 | automated tests, run on every change |
 
 - **Under them:** Every stage line also passed typed, three times of three, on the laptop’s own model.
-- **Footer:** Backup · Source: docs/stage-test-plan.md · 21 and 22 Nov
+- **Footer:** Appendix · Source: docs/stage-test-plan.md · 21 and 22 Nov
 
 **Notes:** All of this is the path we demo, on one laptop. 27 of 27: nine stage lines, each as a clip in three macOS voices, through Whisper large-v3-turbo and the 3B model. Clean synthetic voices in a silent room, so this is the easy case: say so if asked. Other lines scored 23 of 30; the French names Bérault and Mairie de Vincennes did not survive Whisper, so the script has neither. The call-sign reader never named a wrong unit in 220 cases. The small model is weaker on free wording, which is why the stage lines are tested one by one. [Add Alex’s own voice, 5 of 5 for each line, and the timed dress rehearsal, when done.]
 
@@ -285,7 +285,7 @@ Source: [stage-test-plan.md](stage-test-plan.md#results).
 | What | Slides | Where it comes from |
 |---|---|---|
 | Team number | 1, 7 | The organisers give the number; the submitted file is named with it. |
-| Pitch length | all | The organisers. Seven slides are presented; the backup slides are not. |
+| Pitch length | all | The organisers. Seven slides are presented; the appendix slides are not. |
 | "The gold standard" | 5 | The teammate's deck has this line on its benefits slide. Say what it stands for, or leave it out. |
 | Seconds from speech to marker, timed | 4 | The dress rehearsal, pass 4 of [stage-test-plan.md](stage-test-plan.md#the-passes). 3 to 5 s is a short report [195]. |
 | The map system's name | 6 | The mentors, if they name one |
