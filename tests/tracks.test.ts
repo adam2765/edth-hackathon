@@ -368,6 +368,26 @@ describe("the compass words: where it is, and the way it is going", () => {
     const same = track({ distance_m: 300, direction: "north" });
     expect(compassChecked(same, "I see a drone about 300 metres north of me", false)).toEqual({ intent: same, why: null });
   });
+
+  it("a bearing or a clock direction says where it is, not the way it moves [246]", () => {
+    // The stage line: the offline model read bearing 060 as "moving east" as well, every time.
+    const read = track({ distance_m: 300, direction: "north_east", track_heading: "east", track_kind: "vehicle" });
+    const line = "unknown vehicle, bearing 060, 300 metres, send the drone";
+    const checked = compassChecked(read, line, false);
+    expect(checked.intent.track_heading).toBeNull();
+    expect(checked.intent.direction).toBe("north_east");
+    expect(checked.why).toMatch(/moving not said \(read east\)/);
+    expect(compassChecked(track({ distance_m: 200, track_heading: "south" }), "contact at 3 o'clock, 200 metres", false).intent.track_heading).toBeNull();
+    // Placed 300 m on 060 from the observer, with no heading on the track.
+    const r = resolveReport({ ...base, intent: read, transcript: line, lastPosition: last });
+    expect(r).toMatchObject({ status: "resolved", evidence: { rule: "dead_reckoned" }, track: { heading: null } });
+    // A compass word after a verb of moving is still a heading, bearing or not.
+    const moving = compassChecked(track({ distance_m: 300, direction: "north_east", track_heading: "east" }), "unknown vehicle, bearing 060, 300 metres, moving east", false);
+    expect(moving.intent.track_heading).toBe("east");
+    // No angle and no compass word found: the model's reading stands, as before.
+    const kept = track({ distance_m: 1000, track_heading: "south" });
+    expect(compassChecked(kept, "Drone 1 km away, going S", false).intent.track_heading).toBe("south");
+  });
 });
 
 describe("what the app says back", () => {

@@ -19,6 +19,8 @@ export interface TranscribeResult {
 export interface TranscribeOptions {
   /** The language the device is set to (en, fr, uk). Without it, the model detects the language. Mistral ignores it. */
   language?: string | null;
+  /** Text for Whisper to read as what came before the clip: call signs and place names [247]. Mistral takes the bias terms instead. */
+  prompt?: string | null;
 }
 
 export interface Transcriber {
@@ -140,9 +142,10 @@ export function withoutSoundMarks(text: string): string {
 
 /**
  * Whisper in whisper-server (whisper.cpp) on this computer. It is started with --convert, so it takes
- * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language; the
- * server keeps nothing between requests. No prompt: with turbo, the area's names gained nothing on the
- * scenario clips and twice put a prompt word in the transcript (docs/stt-comparison.md).
+ * the browser's webm and the phone's m4a through ffmpeg. Each request carries its own language and
+ * prompt; the server keeps nothing between requests. The prompt is short, call signs and ten place
+ * names [247]: a real English voice's "Château de Vincennes" came back "Château de Vonsen" without
+ * one. Decision 195 had dropped it after synthetic voices gained nothing from a long list.
  * Light mode uses base with the same request format; its accuracy is not remeasured.
  */
 class WhisperServerTranscriber implements Transcriber {
@@ -156,6 +159,7 @@ class WhisperServerTranscriber implements Transcriber {
     // about 0.9 s on the M1 Pro. So it is asked for only when the device names no language.
     form.append("response_format", opts.language ? "json" : "verbose_json");
     form.append("language", opts.language || "auto");
+    if (opts.prompt) form.append("prompt", opts.prompt);
     let res: Response;
     try {
       res = await fetch(`${this.url}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(20_000) });
