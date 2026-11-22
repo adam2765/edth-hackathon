@@ -12,7 +12,7 @@ local process controller exits on Stop. The normal Next output is `.next`; state
 
 The phone detects the configured coordinator, offers Connect, and shows whether a mission
 is running. Start mission/Stop mission live on the receiver. Phones automatically join the newest running mission and follow newer missions between reports. Open missions survive server
-restarts. Hosts lists reachable coordinators from the USB/Metro bootstrap and Bonjour LAN discovery; developer settings and direct console commands
+restarts. Hosts lists reachable coordinators from the USB/Metro bootstrap, Bonjour LAN discovery and the iPhone's own Bonjour search; developer settings and direct console commands
 remain. Phone utterances now carry compressed audio; speech-to-text runs on the coordinator. See [setup](setup.md).
 
 `/api/health` returns Ready after local extraction warm-up and Whisper readiness, or after a hosted provider is
