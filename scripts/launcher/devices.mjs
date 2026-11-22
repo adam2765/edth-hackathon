@@ -14,17 +14,27 @@ export function toolEnvironment() {
 export function parseAndroidDevices(text) {
   return text.split(/\r?\n/).map((line) => line.trim().split(/\s+/)).filter((parts) => parts[1] === 'device').map(([id]) => ({ platform: 'android', id }));
 }
+// `xcrun xctrace list devices` prints three sections. Only "== Devices ==" lists what
+// Xcode can reach now, on a cable or over Wi-Fi. "== Devices Offline ==" lists phones
+// Xcode only remembers, so they are not connected, and "== Simulators ==" are not phones.
+export function parseAppleDevices(text) {
+  const devices = [];
+  let section = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    const header = line.match(/^== (.+) ==$/);
+    if (header) { section = header[1]; continue; }
+    if (section !== 'Devices') continue;
+    const match = line.match(/^(.+?) \([^)]*\) \(([0-9A-Fa-f-]{20,})\)$/);
+    if (match && !line.includes('Simulator') && !line.includes('Mac')) devices.push({ platform: 'ios', id: match[2], name: match[1] });
+  }
+  return devices;
+}
 export async function listDevices(env) {
   const devices = [];
   try { devices.push(...parseAndroidDevices(await output('adb', ['devices'], { env }))); } catch { /* Android SDK is optional. */ }
   if (process.platform === 'darwin') {
-    try {
-      const text = await output('xcrun', ['xctrace', 'list', 'devices'], { env });
-      for (const line of text.split('\n')) {
-        const match = line.match(/^(.+?) \([^)]*\) \(([0-9A-Fa-f-]{20,})\)$/);
-        if (match && !line.includes('Simulator') && !line.includes('Mac')) devices.push({ platform: 'ios', id: match[2], name: match[1] });
-      }
-    } catch { /* Xcode is optional. */ }
+    try { devices.push(...parseAppleDevices(await output('xcrun', ['xctrace', 'list', 'devices'], { env }))); } catch { /* Xcode is optional. */ }
   }
   return devices;
 }
