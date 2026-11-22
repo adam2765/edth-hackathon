@@ -1,6 +1,6 @@
 # Pitch
 
-The Demo Day deck, in full: every slide's words in reading order, and its speaker notes. First draft on Saturday 21 November. Updated on Sunday 22 November, at about 08:30, once the app was feature complete: 15 slides. Square brackets mark what is not known yet.
+The Demo Day deck, in full: every slide's words in reading order, and its speaker notes. First draft on Saturday 21 November. Reshaped on Sunday 22 November, at about 09:00, to the order of a teammate's rewritten deck: nine slides to present, then eight backup slides for questions. Square brackets mark what is not known yet.
 
 ## Where the deck lives
 
@@ -12,80 +12,156 @@ The dates for the finished deck and the submission are in [overview.md](overview
 
 ## The story
 
-The problem in Lysk's words, and the flood a mentor described. Then our answer in one sentence, the demo, and Lysk's three tests. Then why a marker can be trusted: plain code finds the place, and when the app is not sure, nothing moves and the operator is asked. Then what is ours on top: tracks, a drone sent to look, no GPS, no internet. Then the numbers, and what comes next.
+The nine slides to present follow the teammate's deck, in the customer's terms: the name, the team, the request, the new design, why a marker can be trusted, the benefits, the live demo, the technical follow-up, and the close. The trust slide and the close are ours; the other seven are the teammate's slides, one for one.
 
-The one sentence: speak, and a marker with your call sign moves on a shared map; when the app is not sure, nothing moves: it asks the operator.
+The eight backup slides are the detail from the earlier deck, for questions: Lysk's three tests, asking back, the operator's list, tracks, recon on request, the field, the evidence, and the questions we expect.
 
-What a Lysk mentor told us on 22 November shapes the wording. The map shows only what is certain. The operator asks back, not the app. A report the system does not understand is usually the system's fault, not the soldier's, so asking back is never pitched as fixing an unclear report.
+Three wordings differ from the teammate's deck, on purpose, because of what is built and what a Lysk mentor told us on 22 November:
+
+- **"If unclear" asks the operator, not the speaker.** The phone is a radio and shows no question [208]; the map shows only what is certain, and the operator asks back. A report the system does not understand is usually the system's fault, not the soldier's.
+- **The effector is recon on request.** A person sends a drone to look at a track, and nothing more [234]. The teammate's "Command!" box and the stretch goal are worded that way.
+- **Plain code finds the place.** The customer's workflow goes from "AI reads intent" straight to the map. We show the box in between, because the model never writes a coordinate.
+
+The title stays Voice-to-Map. GROUNDTRUTH is on the cover, the team slide and the close, as on the teammate's deck.
 
 ## Slides
 
-Each slide gives its background, then its words in reading order, then its picture and its speaker notes. The eyebrow is the small line in capitals above the title. Every slide except the cover and the close has a footer and the page number; the footer reads "Voice-to-Map · EDTH Paris 2026" unless the slide gives another.
+Each slide gives its background, then its words in reading order, then its picture and its speaker notes. The eyebrow is the small line in capitals above the title. Every slide except the cover and the close has a footer and the page number. The footer reads "Voice-to-Map · EDTH Paris 2026" unless the slide gives another; on a backup slide it starts with "Backup ·".
 
-### Part 1. Open: the problem in Lysk's words, and our answer in one sentence
+### Part 1. Open: the name, the team, and the customer's request
 
 #### 1. Cover
 
 Dark. No footer.
 
-- **Eyebrow:** EDTH Paris 2026 · Challenge 01 · Lysk
+- **Eyebrow:** GROUNDTRUTH
 - **Title:** Voice-to-Map
-- **Tagline:** Say where you are. The map moves.
+- **Tagline:** Radio position reports on a shared map.
 - **Spoken line:** “Alpha 1, at Vincennes station.”
-- **Bottom line:** Team [#__] · [Name], [Name], [Name], [Name]
+- **Bottom line:** EDTH Paris 2026 · Challenge 01 · Lysk · Team [#__]
 - **Picture:** on the right half, a stylised street map drawn in the deck: an amber unit marker with its dotted trail and dashed accuracy ring, labelled "ALPHA 1 · 14:16:45 · ±30 m", and a blue unit labelled "BRAVO 2".
 
-**Notes:** Open on the problem, not the tech. One sentence: a unit says where it is on the radio, and a marker with its call sign moves on a shared map within seconds. The line under the title is the demo’s first line. [Pitch length from the organisers: __ min.] [Team number for the file name: __.]
+**Notes:** Open on the request, not the tech. One sentence: a unit says where it is on the radio, and a marker with its call sign moves on a shared map within seconds. The line under the tagline is the demo’s first line. The slides to present follow the team’s rewritten deck: name, team, request, design, benefits, demo, follow-up. The slides after the close are backup, for questions. [Pitch length from the organisers: __ min.] [Team number for the file name: __.]
 
-#### 2. The problem
+#### 2. The team
+
+Dark.
+
+- **Eyebrow:** GROUNDTRUTH
+- **Title:** The team
+- **Four names, each over a line for a role:**
+
+  | Name | Under it |
+  |---|---|
+  | Boris | [role] |
+  | Adam | [role] |
+  | Brian | [role] |
+  | Alex | [role] |
+
+- **Bottom line:** Four of us, 48 hours, at EDTH Paris, 20 to 22 November.
+
+**Notes:** One line each, no more. [A role or one thing built under each name: the command post, the phone app, speech and grids, the pitch.] The organisers ask what we had before the event; that is on the close slide.
+
+#### 3. The request
 
 Light.
 
-- **Eyebrow:** The problem
-- **Title:** Reports come by voice. The map is moved by hand.
+- **Eyebrow:** The request
+- **Title:** Automate radio position reports, for troop commanders.
 - **Radio log** (left, dark panel):
 
   | Time | Call sign | Said |
   |---|---|---|
-  | 14:16 | ALPHA 2 | “I’m behind the church.” |
-  | 14:18 | ALPHA 2 | “South of the church.” |
-  | 14:21 | ALPHA 2 | “I moved towards 35th street.” |
+  | 14:16 | ALPHA 1 | “At the church.” |
+  | 14:18 | BRAVO 2 | “Moving west.” |
+  | 14:21 | ALPHA 1 | “Vehicle spotted.” |
 
-- **By hand:** An operator hears each report and moves the marker.
-- **Under a flood:** In combat, hundreds of reports arrive on top of each other.
+- **By hand:** Staff update the situation map by hand.
+- **A whole staff:** “Building an operational picture” keeps the whole staff busy.
 - **Bottom line:** **Lysk’s ask:** speak, and a shared map updates within seconds, with a history anyone can replay.
 
-**Notes:** The three lines are Lysk’s own example sentences from the challenge deck. The pain is theirs too: “slow and error-prone”. The flood is what a Lysk mentor told us on 22 Nov: in active combat, hundreds of messages on top of each other, probably all urgent. Nothing should stay unanswered, though it does all the time today, and operators track what is open in spreadsheets. Helping the operator through that flood is the point of the system.
+**Notes:** The request is Lysk’s: teams report their position by voice, and someone updates the map by hand, which is slow and error-prone. Their own example sentences are “I’m behind the church” and “I moved towards 35th street”. What a Lysk mentor added on 22 Nov: in active combat, hundreds of messages land on top of each other, probably all urgent. Nothing should stay unanswered, though it does all the time today, and operators track what is open in spreadsheets. Helping the operator through that flood is the point of the system.
 
 Source: [overview.md](overview.md#the-challenge).
 
-#### 3. One sentence
+### Part 2. The design: the customer's workflow, why a marker can be trusted, and the benefits
+
+#### 4. New design
 
 Dark.
 
-- **Eyebrow:** Voice-to-Map
-- **Title:** Speak, and a marker with your call sign moves on a shared map. When the app is not sure, nothing moves: it asks the operator.
+- **Eyebrow:** New design
+- **Title:** The workflow the customer specified.
+- **Five boxes, left to right, joined by arrows** (the fourth box, ours, has an amber edge):
+
+  | Tag | Box | Text |
+  |---|---|---|
+  | IN | Radio voice | Report 1, report 2, … each with its call sign |
+  | AI | AI text | Whisper on the laptop, or Mistral hosted |
+  | AI | AI reads intent | Place, relation, distance, direction. Never a coordinate. |
+  | PLAIN CODE | Finds the place | Reads call sign, grid and bearing. Finds the place, or asks. |
+  | OUT | Situation map | Place markers, move markers, show tracks, make corrections |
+
+- **Two cards under the boxes:**
+
+  | Tag | Text |
+  |---|---|
+  | If unclear | Nothing moves. The operator is asked, and confirms. |
+  | On request | A person sends a drone to look at a track. |
+
+**Notes:** The customer’s workflow, box for box: radio voice, AI text, AI reads intent, the situation map. We added one box, in amber: plain code finds the place. The language model only extracts intent: which place, which relation (at, near, south of, towards), a stated distance, a compass or clock direction. The resolver is deterministic code that places that against a local gazetteer built from OpenStreetMap. Plain code also reads what must be exact: who spoke (the call sign, against the mission’s roster), a grid reference, a bearing in degrees or mils, a clock direction, and a request for a drone. If unclear: the operator is asked, not the speaker. That is what is built, and what a Lysk mentor asked for on 22 Nov. On request: a unit asks for eyes on a track and a person sends a drone to look; that is the effector on the customer’s diagram, for reconnaissance only. Lysk's requirement slide says landmarks and streets are geocoded into real coordinates with OpenStreetMap APIs: say it in those words. We geocode each area once, through the Overpass API, when the area is built. So no report waits on a public server, it works offline, and no unit's words leave the team.
+
+Source: [architecture.md](architecture.md), [callsigns.md](callsigns.md), [gazetteer.md](gazetteer.md#how-it-is-built), decisions 208 and 234.
+
+#### 5. Why a marker can be trusted
+
+Dark.
+
+- **Eyebrow:** Why a marker can be trusted
+- **Title:** The AI reads the words. Plain code finds the place.
 - **Four numbers:**
 
   | Number | Label |
   |---|---|
-  | 3–5 s | from speech to marker, on one laptop, no internet |
   | 0 | coordinates written by the AI model |
   | 0 | reads of the phone’s GPS |
-  | 3 | languages: English, French, Ukrainian |
+  | 0 | internet needed: it all runs on one laptop |
+  | 3–5 s | from speech to marker, on that laptop |
 
-**Notes:** The one-sentence pitch. 3 to 5 s is a short report with no internet: Whisper and the 3B model on the M1 Pro. A long report took 8 to 11 s in the night’s tests, with other programs running. Hosted, it is 1 to 3 s. The two zeros are the rules we never break: the model never makes a coordinate, the app never reads GPS. [Replace 3–5 s with the figure timed at the dress rehearsal.]
+- **Under them:** Every marker is a real place, geocoded with OpenStreetMap’s Overpass API, or a stated distance and direction from the last known one.
 
-Source: [overview.md](overview.md#our-approach), [stage-test-plan.md](stage-test-plan.md#pass-2-synthetic-voices).
+**Notes:** The trust slide, and the one thing the customer’s workflow does not say. The three zeros are the rules we never break: the model never makes a coordinate, the app never reads GPS, and nothing needs the internet. Speech, intent and the map itself run on one laptop: Whisper large-v3-turbo, Ministral 3B through Ollama, and a saved base map. Mistral is a French provider; offline, nothing leaves the laptop. 3 to 5 s is a short report on the M1 Pro; a long one took 8 to 11 s in the night’s tests, with other programs running. Hosted, it is 1 to 3 s. [Replace 3–5 s with the figure timed at the dress rehearsal.]
 
-### Part 2. Show it: the live demo, then Lysk's three tests
+Source: [overview.md](overview.md#our-approach), [stage-test-plan.md](stage-test-plan.md#pass-2-synthetic-voices), decisions 236 and 239.
 
-#### 4. Live demo
+#### 6. The benefits
+
+Light.
+
+- **Eyebrow:** For the command post
+- **Title:** The benefits
+- **Three cards:**
+
+  | Card | Text |
+  |---|---|
+  | Less manpower | Clear reports place themselves. One operator decides the rest. |
+  | Saves space | A crowded command post needs less communications gear. |
+  | Better situational awareness | A more current view of positions and reports. |
+
+- **Statement:** Nothing waits unanswered: every open report is in one list.
+
+**Notes:** Three benefits, in the customer’s terms. Less manpower: the reports that are clear place themselves, and one operator works the rest from one list, oldest first. Saves space: the whole chain runs on one laptop, so a crowded command post carries less gear. Better situational awareness: the map moves seconds after the call, with who said it and when. The last line is the mentor’s point: today open reports are tracked in spreadsheets and some stay unanswered. [The team’s deck also has the line “The gold standard” here; say what it stands for, or leave it out.]
+
+Source: decision 240.
+
+### Part 3. Show it: the live demo
+
+#### 7. Live demo
 
 Amber, the one statement slide. The footer is the line below, not the usual one.
 
 - **Eyebrow:** Live demo · Vincennes · no internet
-- **Title:** Watch the command post.
+- **Title:** Let’s see it.
 - **Script:**
 
   | Said on the radio, or done by the operator | The command post shows |
@@ -99,13 +175,52 @@ Amber, the one statement slide. The footer is the line below, not the usual one.
   | “Charlie 3, Track 1 is hostile.” | → Track 1 turns hostile |
   | **Operator:** replays the mission | → The same minute again, with times |
 
-- **Footer:** One phone is every radio · one laptop runs everything
+- **Footer:** localhost:3117/cp · one phone is every radio · no internet
 
-**Notes:** Switch to the command post on the big screen. Show it before describing it. About 90 seconds. Alex speaks every unit into one phone; the call sign in the words says who. The laptop is the coordinator, offline: Whisper, the 3B model and a saved base map, no internet. Before the pitch: the mission is open in Vincennes with the roster ALPHA 1, BRAVO 2 and CHARLIE 3; CHARLIE 3 is marked as a drone team; “Charlie 3, at grid 586 101.” places it and warms the model up. Say the call sign first, and say the lines as written. Leave about 8 seconds between the operator’s pick and “moving towards the town hall”. Fallbacks: typed reports if the hall is too loud; the backup video if the phone cannot reach the laptop. The script and its tests are in docs/stage-test-plan.md.
+**Notes:** Open the web dashboard, localhost:3117/cp, on the big screen: that is the command post. Show it before describing it. About 90 seconds. Alex speaks every unit into one phone; the call sign in the words says who. The laptop is the coordinator, offline: Whisper, the 3B model and a saved base map, no internet. Before the pitch: the mission is open in Vincennes with the roster ALPHA 1, BRAVO 2 and CHARLIE 3; CHARLIE 3 is marked as a drone team; “Charlie 3, at grid 586 101.” places it and warms the model up. Say the call sign first, and say the lines as written. Leave about 8 seconds between the operator’s pick and “moving towards the town hall”. Fallbacks: typed reports if the hall is too loud; the backup video if the phone cannot reach the laptop. The script and its tests are in docs/stage-test-plan.md.
 
 Source: [stage-test-plan.md](stage-test-plan.md#the-stage-script), decision 236.
 
-#### 5. Lysk's three tests
+### Part 4. What we tune next, and the close
+
+#### 8. Technical follow-up
+
+Dark.
+
+- **Eyebrow:** Technical follow-up
+- **Title:** What we tune next.
+- **Three cards, each a short list:**
+
+  | Card | Points |
+  |---|---|
+  | Speech and intent | Tune the voice models. Smarter intent, more options: “I’m still moving north”. Smarter speech recognition. |
+  | Deployment | Memory footprint. Support more callers. Fast response (“latency”). |
+  | Stretch goal | Effectors: integrating output commands. Today, a person sends a drone to look. |
+
+**Notes:** The organisers’ stated goal is deployment, so end on the path to it. Speech and intent: the offline model is weaker on free wording, which is why the stage lines were tested one by one. Deployment: the whole chain already runs on one laptop; the next step is audio from a real radio set, with noise, overlapping voices and hundreds of calls. Stretch goal: recon on request is built, for looking at a track only; passing an order on to other systems is the stretch. Also next: answers by voice (a reader of spoken replies scored 342 of 372 hosted and 345 of 372 offline, and nothing uses it yet), a country-sized gazetteer, and sending markers and tracks to the map system a unit already uses. [Name the map system if the mentors name one.]
+
+Source: [ask-back.md](ask-back.md), [gazetteer.md](gazetteer.md#scaling-the-gazetteer), decisions 199 and 234.
+
+#### 9. Close
+
+Dark. No footer.
+
+- **Eyebrow:** GROUNDTRUTH · Voice-to-Map · Team [#__]
+- **Title:** Say where you are. The map moves.
+- **Links:**
+  - Live: [edth-hackathon.vercel.app](https://edth-hackathon.vercel.app)
+  - Code: [github.com/beverage/edth-hackathon](https://github.com/beverage/edth-hackathon)
+  - Video: [link]
+- **Team line:** Boris · Adam · Brian · Alex
+- **Small line:** Built at EDTH Paris, 20 to 22 November. Before the event: the stage-1 web app, tagged prior-work-fri-1800 in the repo.
+
+**Notes:** Close on the one line from the cover. The organisers ask every team to say what it had before the event: the tag prior-work-fri-1800 marks it, and git log prior-work-fri-1800..main lists what was built here. The submitted PDF keeps these links clickable.
+
+### Part 5. Backup, for questions
+
+These eight slides come after the close and are not presented. Each one's footer starts with "Backup ·".
+
+#### 10. Lysk's three tests
 
 Light.
 
@@ -123,32 +238,7 @@ Light.
 
 Source: [overview.md](overview.md#the-challenge).
 
-### Part 3. How it works, why a marker can be trusted, and the operator's one list of decisions
-
-#### 6. How it works
-
-Dark.
-
-- **Eyebrow:** How it works
-- **Title:** The AI reads the words. Plain code finds the place.
-- **Five boxes, left to right, joined by arrows** (the resolver's box has an amber edge):
-
-  | Tag | Box | Text |
-  |---|---|---|
-  | IN | Voice | A radio call: the call sign is in the words |
-  | AI | Speech to text | Whisper on the laptop, or Mistral hosted |
-  | AI | Intent | Place, relation, distance, direction. Never a coordinate. |
-  | PLAIN CODE | Resolver | Reads call sign, grid and bearing. Finds the place, or asks. |
-  | OUT | Command post | Shared map and replay; one list of decisions |
-
-- **Statement:** The model never writes a coordinate.
-- **Under it:** Every marker is a real place, geocoded with OpenStreetMap’s Overpass API, or a stated distance and direction from the last known one.
-
-**Notes:** This is the trust slide. The language model only extracts intent: which place, which relation (at, near, south of, towards), a stated distance, a compass or clock direction. The resolver is deterministic code that places that against a local gazetteer built from OpenStreetMap. Offline, the same chain runs on one laptop: Whisper large-v3-turbo for speech, Ministral 3B through Ollama for intent. Plain code also reads what must be exact: who spoke (the call sign, against the mission’s roster), a grid reference, a bearing in degrees or mils, a clock direction, and a request for a drone. The model never sees those as numbers to round. Lysk's requirement slide says landmarks and streets are geocoded into real coordinates with OpenStreetMap APIs: say it in those words. We geocode each area once, through the Overpass API, when the area is built. So no report waits on a public server, it works offline, and no unit's words leave the team.
-
-Source: [architecture.md](architecture.md), [callsigns.md](callsigns.md), [gazetteer.md](gazetteer.md#how-it-is-built).
-
-#### 7. Asking back
+#### 11. Asking back
 
 Light.
 
@@ -162,7 +252,7 @@ Light.
 
 Source: [ask-back.md](ask-back.md), decisions 178 and 240.
 
-#### 8. The operator's list
+#### 12. The operator's list
 
 Light.
 
@@ -183,9 +273,7 @@ Light.
 
 Source: decisions 203, 204, 237 and 240 to 242; [callsigns.md](callsigns.md).
 
-### Part 4. Beyond a position: tracks, and a drone sent to look at one
-
-#### 9. Tracks
+#### 13. Tracks
 
 Dark.
 
@@ -202,7 +290,7 @@ Dark.
 
 Source: [tracks.md](tracks.md), decisions 229 and 238.
 
-#### 10. Recon on request
+#### 14. Recon on request
 
 Dark.
 
@@ -218,9 +306,7 @@ Dark.
 
 Source: [tracks.md](tracks.md#recon-requests-and-tasking), decisions 234 and 235.
 
-### Part 5. Built for the field, and measured
-
-#### 11. Built for the field
+#### 15. Built for the field
 
 Dark.
 
@@ -241,7 +327,7 @@ Dark.
 
 Source: [overview.md](overview.md#our-approach), decisions 223, 229, 236 and 239.
 
-#### 12. Evidence
+#### 16. Evidence
 
 Light. The footer is the source line below, not the usual one.
 
@@ -257,51 +343,13 @@ Light. The footer is the source line below, not the usual one.
   | 2 | wrong markers in 357 hosted eval results |
 
 - **Under them:** Extraction eval, 119 reports, three rounds: hosted Mistral Small passes 89%; offline Ministral 3B 66%, with 9 wrong markers.
-- **Footer:** Sources: docs/stage-test-plan.md, evals/README.md · 21 and 22 Nov
+- **Footer:** Backup · Sources: docs/stage-test-plan.md, evals/README.md · 21 and 22 Nov
 
 **Notes:** The first three numbers are the offline path we demo. 27 of 27: nine stage lines, each as a clip in three macOS voices, through Whisper large-v3-turbo and the 3B model. Clean synthetic voices in a silent room, so this is the easy case: say so if asked. Other lines scored 23 of 30; the French names Bérault and Mairie de Vincennes did not survive Whisper, so the script has neither. The call-sign reader never named a wrong unit in 220 cases. A wrong marker is the worst miss: a wrong place on the map with nothing to say it is wrong. The offline model is weaker on free wording, which is why the stage lines are tested one by one. 509 unit tests pass. [Add Alex’s own voice, 5 of 5 for each line, and the timed dress rehearsal, when done.]
 
 Source: [stage-test-plan.md](stage-test-plan.md#results), [evals/README.md](../evals/README.md#scores).
 
-### Part 6. What comes next, and the close
-
-#### 13. Next
-
-Dark.
-
-- **Eyebrow:** Next
-- **Title:** From the hall to the field.
-- **Four steps, one per row:**
-
-  | Step | Text |
-  |---|---|
-  | Real radios | Audio from a handheld set: noise, overlapping voices, hundreds of calls. |
-  | Answers by voice | A spoken reply picks the choice for a one-key confirm. Measured, not built yet. |
-  | A country-sized gazetteer | One build for every town a unit may report from. |
-  | Into the unit’s own map | Send markers and tracks to the system a unit already uses. |
-
-**Notes:** The organisers’ stated goal is deployment, so end on the path to it. The phone app is a stand-in for a radio; the next step is audio from a real set. Answers by voice: a reader of spoken replies scored 342 of 372 on hosted Mistral and 345 of 372 on the offline model, and nothing uses it yet. The mentor’s line for intake: automate it, corrections included, with every entry confirmed by the operator; a switch that skips the confirm is ours to offer. [Name the map system if the mentors name one.]
-
-Source: [ask-back.md](ask-back.md), [gazetteer.md](gazetteer.md#scaling-the-gazetteer), decision 199.
-
-#### 14. Close
-
-Dark. No footer.
-
-- **Eyebrow:** Voice-to-Map · Team [#__]
-- **Title:** Say where you are. The map moves.
-- **Links:**
-  - Live: [edth-hackathon.vercel.app](https://edth-hackathon.vercel.app)
-  - Code: [github.com/beverage/edth-hackathon](https://github.com/beverage/edth-hackathon)
-  - Video: [link]
-- **Team line:** [Name, role] · [Name, role] · [Name, role] · [Name, role]
-- **Small line:** Built at EDTH Paris, 20 to 22 November. Before the event: the stage-1 web app, tagged prior-work-fri-1800 in the repo.
-
-**Notes:** Close on the one line from the cover. The organisers ask every team to say what it had before the event: the tag prior-work-fri-1800 marks it, and git log prior-work-fri-1800..main lists what was built here. The submitted PDF keeps these links clickable.
-
-### Part 7. Appendix: the questions we expect from the jury
-
-#### 15. Questions we expect
+#### 17. Questions we expect
 
 Light. Not presented.
 
@@ -326,19 +374,21 @@ Source: [known-gaps.md](known-gaps.md), [gazetteer.md](gazetteer.md).
 
 | What | Slides | Where it comes from |
 |---|---|---|
-| Team number and names | 1, 14 | The organisers give the number; the submitted file is named with it. |
-| Pitch length | all | The organisers. 15 slides is long for 3 minutes; cut 8, 11 and 12 first. |
-| Seconds from speech to marker, timed | 3, 5 | The dress rehearsal, pass 4 of [stage-test-plan.md](stage-test-plan.md#the-passes). 3 to 5 s is a short report offline [195]. |
-| "Built" becomes "Met" for marker, path and history | 5 | The dress rehearsal: the whole script twice, with the phone and the projector |
-| A picture of the Decisions list, with a question open | 7, 8 | Nobody has taken one. Slide 7's picture is from before the list [240]. Save it under [docs/images/](images/), then put it in the deck. |
-| The tracks picture, taken again | 9 | It is from 21 November, before the Decisions list and the moving arrows [238] |
-| Alex's own voice, and the dress rehearsal | 12 | Passes 3 and 4 of [stage-test-plan.md](stage-test-plan.md#the-passes) |
-| The eval, run again | 12 | `npm run eval:extract -- --resolve --repeat 3` on both models, if the prompt changed since 21 November |
-| The map system's name | 13 | The mentors, if they name one |
-| Video link | 14 | The backup video |
-| Questions the mentors and the jury asked | 15 | Whoever sits in on those talks |
+| Team number | 1, 9 | The organisers give the number; the submitted file is named with it. |
+| A role under each name | 2 | The team |
+| Pitch length | all | The organisers. Nine slides are presented; the backup slides are not. |
+| "The gold standard" | 6 | The teammate's deck has this line on its benefits slide. Say what it stands for, or leave it out. |
+| Seconds from speech to marker, timed | 5, 10 | The dress rehearsal, pass 4 of [stage-test-plan.md](stage-test-plan.md#the-passes). 3 to 5 s is a short report offline [195]. |
+| The map system's name | 8 | The mentors, if they name one |
+| Video link | 9 | The backup video |
+| "Built" becomes "Met" for marker, path and history | 10 | The dress rehearsal: the whole script twice, with the phone and the projector |
+| A picture of the Decisions list, with a question open | 11, 12 | Nobody has taken one. Slide 11's picture is from before the list [240]. Save it under [docs/images/](images/), then put it in the deck. |
+| The tracks picture, taken again | 13 | It is from 21 November, before the Decisions list and the moving arrows [238] |
+| Alex's own voice, and the dress rehearsal | 16 | Passes 3 and 4 of [stage-test-plan.md](stage-test-plan.md#the-passes) |
+| The eval, run again | 16 | `npm run eval:extract -- --resolve --repeat 3` on both models, if the prompt changed since 21 November |
+| Questions the mentors and the jury asked | 17 | Whoever sits in on those talks |
 
-Settled since the first draft: the demo is in Vincennes, in English, offline, with one phone as every radio [236]; the operator is asked back, in one Decisions list [208, 240]; and the effector line became recon on request, for looking at a track only [234].
+Settled since the first draft: the demo is in Vincennes, in English, offline, with one phone as every radio [236]; the operator is asked back, in one Decisions list [208, 240]; the effector line became recon on request, for looking at a track only [234]; and the team's names are on the deck.
 
 ## The look
 
