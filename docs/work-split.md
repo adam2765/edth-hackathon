@@ -95,4 +95,4 @@ The 02:00 version gave three ways to fit five streams to four people. This split
 - **A full-time pitch person from 08:00.** It leaves three builders while local mode is unproven, and the pitch has little to show before midday.
 - **Alex pitches.** Alex is also the mentor contact, the deploy gate and the one who knows the code best. Taking Alex off building at midday costs the most.
 
-Even with this split, Alex is on the most paths that cannot wait: the mentors, the core code, deploys. Deploys could pass to more people ([team question 4](open-questions.md#for-the-team)).
+Even with this split, Alex is on the most paths that cannot wait: the mentors, the core code, deploys. Deploys could pass to more people ([team question 3](open-questions.md#for-the-team)).

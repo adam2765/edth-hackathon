@@ -1,0 +1,308 @@
+{
+ "base": "http://localhost:3147",
+ "voices": [
+  "Daniel",
+  "Karen",
+  "Samantha"
+ ],
+ "repeat": 1,
+ "runs": [
+  {
+   "id": "A1",
+   "said": "Alpha 1, at Vincennes station.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha One, at Vincennes Station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 7293
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1, at Vincennes station.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Vincennes Station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 4657
+  },
+  {
+   "id": "A1",
+   "said": "Alpha 1, at Vincennes station.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, at Vincennes Station.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Vincennes; ±30 m",
+   "ms": 3849
+  },
+  {
+   "id": "A7",
+   "said": "Charlie 3, at grid 586 101.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, at grid 586-101.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; ±71 m",
+   "ms": 2718
+  },
+  {
+   "id": "A7",
+   "said": "Charlie 3, at grid 586 101.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, at grid 586-101.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; ±71 m",
+   "ms": 3220
+  },
+  {
+   "id": "A7",
+   "said": "Charlie 3, at grid 586 101.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, at grid 586-101.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; ±71 m",
+   "ms": 7035
+  },
+  {
+   "id": "B1",
+   "said": "Bravo 2, moving towards the town hall.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, moving towards the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; towards Mairie de Vincennes; ±174 m",
+   "ms": 3735
+  },
+  {
+   "id": "B1",
+   "said": "Bravo 2, moving towards the town hall.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, moving towards the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; towards Mairie de Vincennes; ±174 m",
+   "ms": 3111
+  },
+  {
+   "id": "B1",
+   "said": "Bravo 2, moving towards the town hall.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, moving towards the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; towards Mairie de Vincennes; ±174 m",
+   "ms": 2806
+  },
+  {
+   "id": "C1",
+   "said": "Bravo 2, at the château.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo to, at the chateau.",
+   "sender": "BRAVO 2",
+   "got": "ambiguous; asks: Which one: Château de Vincennes (castle), or Château de Vincennes (station)? [Château de Vincennes / Château de Vincennes]",
+   "ms": 3319
+  },
+  {
+   "id": "C1",
+   "said": "Bravo 2, at the château.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo to, at the chateau.",
+   "sender": "BRAVO 2",
+   "got": "ambiguous; asks: Which one: Château de Vincennes (castle), or Château de Vincennes (station)? [Château de Vincennes / Château de Vincennes]",
+   "ms": 5984
+  },
+  {
+   "id": "C1",
+   "said": "Bravo 2, at the château.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo to, at the chateau.",
+   "sender": "BRAVO 2",
+   "got": "ambiguous; asks: Which one: Château de Vincennes (castle), or Château de Vincennes (station)? [Château de Vincennes / Château de Vincennes]",
+   "ms": 4436
+  },
+  {
+   "id": "D2",
+   "said": "Alpha 1, I see a drone about 300 metres north of me.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha-1, I see a drone about 300 meters north of me.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown drone, 300 m north of ALPHA 1",
+   "ms": 7945
+  },
+  {
+   "id": "D2",
+   "said": "Alpha 1, I see a drone about 300 metres north of me.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. I see a drone about 300 meters north of me.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown drone, 300 m north of ALPHA 1",
+   "ms": 7960
+  },
+  {
+   "id": "D2",
+   "said": "Alpha 1, I see a drone about 300 metres north of me.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, I see a drone about 300 meters north of me.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown drone, 300 m north of ALPHA 1",
+   "ms": 7770
+  },
+  {
+   "id": "E1",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, a known vehicle, bearing 060, 300 meters.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1",
+   "ms": 6785
+  },
+  {
+   "id": "E1",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Unknown vehicle. Bearing 060. 300 meters.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1",
+   "ms": 9962
+  },
+  {
+   "id": "E1",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, unknown vehicle, bearing 060, 300 meters.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1",
+   "ms": 8365
+  },
+  {
+   "id": "F3",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres, send the drone.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha-1, a known vehicle, bearing 060, 300 meters, send the drone.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1; request on Track 1",
+   "ms": 11120
+  },
+  {
+   "id": "F3",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres, send the drone.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, unknown vehicle, bearing 060, 300 meters, send the drone.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1; request on Track 1",
+   "ms": 10471
+  },
+  {
+   "id": "F3",
+   "said": "Alpha 1, unknown vehicle, bearing 060, 300 metres, send the drone.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, unknown vehicle, bearing 060, 300 meters, send the drone.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: unknown vehicle, 300 m, bearing 060, from ALPHA 1; request on Track 1",
+   "ms": 15081
+  },
+  {
+   "id": "F3b",
+   "said": "Bravo 2, unknown vehicle at the town hall, send the drone.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, a known vehicle at the town hall. Send the drone.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Track 1: unknown vehicle, Mairie de Vincennes; Mairie de Vincennes; request on Track 1",
+   "ms": 15373
+  },
+  {
+   "id": "F3b",
+   "said": "Bravo 2, unknown vehicle at the town hall, send the drone.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, unknown vehicle at the town hall. Send the drone.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Track 1: unknown vehicle, Mairie de Vincennes; Mairie de Vincennes; request on Track 1",
+   "ms": 9726
+  },
+  {
+   "id": "F3b",
+   "said": "Bravo 2, unknown vehicle at the town hall, send the drone.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, unknown vehicle at the town hall, send the drone.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Track 1: unknown vehicle, Mairie de Vincennes; Mairie de Vincennes; request on Track 1",
+   "ms": 6071
+  },
+  {
+   "id": "F5",
+   "said": "Charlie 3, Track 1 is hostile.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, track 1 is hostile.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; Track 1: hostile ?",
+   "ms": 5827
+  },
+  {
+   "id": "F5",
+   "said": "Charlie 3, Track 1 is hostile.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, track 1 is hostile.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; Track 1: hostile ?",
+   "ms": 3913
+  },
+  {
+   "id": "F5",
+   "said": "Charlie 3, Track 1 is hostile.",
+   "how": "Karen",
+   "pass": true,
+   "misses": [],
+   "transcript": "Charlie 3, track 1 is hostile.",
+   "sender": "CHARLIE 3",
+   "got": "resolved; Track 1: hostile ?",
+   "ms": 4033
+  }
+ ]
+}

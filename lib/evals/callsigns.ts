@@ -10,8 +10,12 @@ export interface CallsignCase {
   id: string;
   tags?: string[];
   text: string;
-  /** Only the fields given are scored. `candidates` is compared as a set; `read: null` means no call sign read. */
-  expect: { kind: CallsignMatch["kind"]; callsign?: string; how?: "exact" | "near"; candidates?: string[]; read?: string | null };
+  /**
+   * Only the fields given are scored. `candidates` is compared as a set; `read: null` means no call
+   * sign read; `signoff` says whether the call sign was read at the end of the transmission [237],
+   * which is always a question for the operator (`ask`), with the one unit it may be.
+   */
+  expect: { kind: CallsignMatch["kind"]; callsign?: string; how?: "exact" | "near"; candidates?: string[]; read?: string | null; signoff?: boolean };
   note?: string;
 }
 
@@ -50,6 +54,10 @@ export function scoreCallsignCase(c: CallsignCase, roster: string[]): CallsignSc
   if (want.read !== undefined) {
     const read = got.kind === "unassigned" ? got.read : null;
     if (read !== want.read) misses.push(`read ${read ?? "nothing"}, wanted ${want.read ?? "nothing"}`);
+  }
+  if (want.signoff != null) {
+    const signoff = got.kind === "ask" && got.signoff === true;
+    if (signoff !== want.signoff) misses.push(`${signoff ? "read at the end" : "not read at the end"}, wanted ${want.signoff ? "a sign-off" : "the start"}`);
   }
   const wrongUnit = got.kind === "unit" && (want.kind !== "unit" || (want.callsign != null && want.callsign !== got.callsign));
   return { id: c.id, pass: misses.length === 0, wrongUnit, misses, got };

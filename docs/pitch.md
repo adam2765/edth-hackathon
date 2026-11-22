@@ -41,8 +41,7 @@ The one sentence: speak, and a marker with your call sign moves on a shared map;
 |---|---|---|
 | Team number and names | 1, 13 | The organisers give the number; the submitted file is named with it. |
 | Pitch length | all | The organisers. 14 slides is long for 3 minutes; cut 9 to 11 first. |
-| Demo area | 4 | [Team question 3](open-questions.md#for-the-team) |
-| The final demo script, and who holds which phone | 4 | Role 4, at the 18:00 run-through |
+| The final demo script | 4 | The area is settled: Vincennes, in English, offline, one phone as every radio [236]. The lines come from [stage-test-plan.md](stage-test-plan.md#the-stage-script) once they pass its tests. Slide 4 still lists the README's six lines |
 | Seconds from speech to marker on a real phone | 3, 5 | Role 4's timings. The 1 to 3 s today is hosted mode. |
 | "Built" becomes "Met" for marker, path and history | 5 | A mission with three real phones and a projector |
 | Who is asked back | 7 | Since the phone became a radio [208], a question goes to the operator, not the phone. The slide still shows the phone's question: swap in the command post's Decisions list, with a question open [239], and say the operator is asked. |

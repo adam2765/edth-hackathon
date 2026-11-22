@@ -291,6 +291,41 @@
   pointer-events: none;
 }
 
+/* A track that has just come onto the map [238]: one ring in its colour that grows and fades,
+   twice, then is gone. The ring's size and colour are set on the element. */
+.newTrack {
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.newTrack span {
+  position: absolute;
+  left: calc(var(--d) / -2);
+  top: calc(var(--d) / -2);
+  width: var(--d);
+  height: var(--d);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--ring);
+  box-shadow:
+    0 0 0 1.5px #fff,
+    inset 0 0 0 1.5px #fff;
+  opacity: 0;
+  animation: newTrack 0.9s ease-out 2;
+}
+
+@keyframes newTrack {
+  from {
+    transform: scale(0.6);
+    opacity: 0.95;
+  }
+  to {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
 /* ---------- replay bar ---------- */
 .replayBar {
   position: absolute;
