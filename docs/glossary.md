@@ -26,6 +26,7 @@
 | Request (for recon) | A unit asking by radio for a drone to look at a track: "send the drone", "request eyes on", «envoyez le drone», «потрібна пташка». Read from the words in code and cut out before the model reads the rest. It waits in the command post's Recon requests tray until a person sends a drone or declines [234] |
 | Session | The code's word for a mission: one code, one append-only log |
 | Sighting | One report about a track: what, where, by whom, from where, and when |
+| Sign-off | The sender's call sign said last, after a pause, as pilots give it: "At the town hall, Alpha 1, over." Read as the sender only when nothing at the start named one [237] |
 | Start point | A gazetteer place, picked at the base, where units are assumed to be until their first report names a place; shown with ≈ |
 | Suspect | A track thought to be hostile and still to be looked into. Drawn as a dashed hostile frame |
 | Task | A friendly drone or drone team sent by a person at the command post to look at a track: a track on the map, or a unit the command post marked as a drone team [235]. Drawn as a solid blue line from the drone to the track. It lasts until the command post says Recon done, sends the drone elsewhere, or the mission ends [234] |

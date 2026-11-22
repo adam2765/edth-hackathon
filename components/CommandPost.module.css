@@ -271,7 +271,7 @@
   pointer-events: none;
 }
 
-/* A track that has just come onto the map [236]: one ring in its colour that grows and fades,
+/* A track that has just come onto the map [238]: one ring in its colour that grows and fades,
    twice, then is gone. The ring's size and colour are set on the element. */
 .newTrack {
   width: 0;

@@ -1,4 +1,4 @@
-// Motion on the command post's map [236]. Nothing here places anything. A slide runs between two
+// Motion on the command post's map [238]. Nothing here places anything. A slide runs between two
 // places the log already gave, so a marker is never drawn somewhere no report put it for longer
 // than the slide. The flow along an arrow says one thing: its report is fresh and the clock on
 // screen is running. Its speed is fixed and means nothing; the app knows no speed.

@@ -182,7 +182,7 @@ A track on a street or along a river gets a circle of at least 150 m. "Track 1 m
 | after "coming from" | where it came from: neither | |
 | anywhere else | not clear: the model's reading stands | "Enemy vehicle to the **east**" |
 
-When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197]. While the sighting is fresh, light bands run along the arrow to its tip; on an old sighting the arrow is still ([below](#what-moves-on-the-map)) [236].
+When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197]. While the sighting is fresh, light bands run along the arrow to its tip; on an old sighting the arrow is still ([below](#what-moves-on-the-map)) [238].
 
 ## A track's life
 
@@ -290,7 +290,7 @@ Limits: the size of a label is estimated from its number of letters, not measure
 
 ## What moves on the map
 
-Motion on the command post's map says one thing: this report is fresh, and the clock on screen is running. It never says where something is [236].
+Motion on the command post's map says one thing: this report is fresh, and the clock on screen is running. It never says where something is [238].
 
 | What | When it moves | What it looks like |
 |---|---|---|

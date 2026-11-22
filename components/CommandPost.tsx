@@ -85,7 +85,7 @@ function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean, draw
   const out = new Map<string, Spot>();
   for (const [k, group] of together) {
     const p = group[0].position!;
-    // Where the dot is drawn: its place, or a point on the way there while it slides [236].
+    // Where the dot is drawn: its place, or a point on the way there while it slides [238].
     const at = drawnAt?.(group[0]) ?? p;
     const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
     const allSilent = group.every(isSilent);
@@ -165,12 +165,12 @@ type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
 /** The size of a track's symbol on the map, before the big-screen steps. The frame is about 1.5 times this. */
 const TRACK_SYMBOL_SIZE = 24;
 
-/** The dots that flow along a unit's arrow [236]: pixels from one to the next, and how far from the unit's marker the first one shows. */
+/** The dots that flow along a unit's arrow [238]: pixels from one to the next, and how far from the unit's marker the first one shows. */
 const FLOW_DOT_GAP = 14;
 const FLOW_DOT_SKIP = 12;
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-/** The computer is set to show less motion: then nothing on the map moves by itself [236]. */
+/** The computer is set to show less motion: then nothing on the map moves by itself [238]. */
 function subscribeReducedMotion(cb: () => void) {
   const q = window.matchMedia(REDUCED_MOTION);
   q.addEventListener("change", cb);
@@ -188,7 +188,7 @@ function headingArrow(s: number) {
 
 /**
  * The arrow's images: pointing up, dark with a white edge, its tail at the bottom middle. The
- * first is the still arrow. The rest are the steps of the flow [236]: the same arrow with light
+ * first is the still arrow. The rest are the steps of the flow [238]: the same arrow with light
  * bands across it, each step a little nearer the tip, so shown in turn the bands run the way the
  * track was said to be moving. The arrow itself never moves, fades or changes shape.
  */
@@ -387,7 +387,7 @@ export default function CommandPost() {
   const mapClick = useRef<(e: MapMouseEvent) => void>(() => {});
   /** The track symbol being placed or moved: a marker that can be dragged. */
   const draftMarker = useRef<Marker | null>(null);
-  // Motion on the map [236]. Where each unit and track is drawn while it slides to a new place,
+  // Motion on the map [238]. Where each unit and track is drawn while it slides to a new place,
   // the picture each was last drawn for, and the two drawings, so a slide can run them every frame.
   const unitSlides = useRef(new Slides());
   const trackSlides = useRef(new Slides());
@@ -548,7 +548,7 @@ export default function CommandPost() {
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
-  // Things on the map move only while the clock on screen runs [236]: a live mission that has not
+  // Things on the map move only while the clock on screen runs [238]: a live mission that has not
   // ended, or a replay that is playing. A paused replay and an ended mission are one moment, held.
   const motion = !reducedMotion && (mode === "live" ? ended == null : playing);
   /** The picture on screen, for telling a step of its clock from a jump, and the longest step. */
@@ -719,7 +719,7 @@ export default function CommandPost() {
         map.addLayer({ id: "arrow-shaft", type: "line", source: "arrow", filter: ["==", "part", "shaft"], layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": op } });
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
         // White dots that run along the shaft to the place a unit said it is heading to, while
-        // its report is fresh [236]. They say the report is live, not how fast the unit goes.
+        // its report is fresh [238]. They say the report is live, not how fast the unit goes.
         map.addLayer({ id: "arrow-flow", type: "circle", source: "arrow-flow", paint: { "circle-radius": 1.7, "circle-color": "#ffffff", "circle-opacity": 0.95 } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
         // A symbol drawn off its point, so it hides no unit and no other track: a thin line from the
@@ -831,7 +831,7 @@ export default function CommandPost() {
     return () => clearTimeout(t);
   }, [mapReady]);
 
-  // A marker slides to its new place [236]: both drawings run every frame until all have arrived.
+  // A marker slides to its new place [238]: both drawings run every frame until all have arrived.
   const runSlides = useCallback(() => {
     if (slideFrame.current) return;
     const step = () => {
@@ -919,7 +919,7 @@ export default function CommandPost() {
     const trackText = Math.round(14 * k);
     const size = Math.round(TRACK_SYMBOL_SIZE * k);
     const ha = headingArrow(size);
-    // The arrow for the way a track is moving: one still image, and one whose bands flow [236].
+    // The arrow for the way a track is moving: one still image, and one whose bands flow [238].
     const arrowIcon = `track-heading:${size}`;
     const flowIcon = `track-heading-flow:${size}`;
     if (symbols && !map.hasImage(arrowIcon)) {
@@ -1089,7 +1089,7 @@ export default function CommandPost() {
     map.setLayoutProperty("track-sym", "text-size", trackText);
     if (sliding) runSlides();
 
-    // A track that has just come onto the map gets one ring, so the eye finds it [236]. Not for
+    // A track that has just come onto the map gets one ring, so the eye finds it [238]. Not for
     // the tracks already there when the page opens, and not after a jump to another moment.
     const ml = mlRef.current;
     const onMap = new Set<string>();
@@ -1110,7 +1110,7 @@ export default function CommandPost() {
     onMapBefore.current = onMap;
   }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked, motion, sceneKey, maxStepMs, mode, runSlides]);
 
-  // The flow [236]: while a fresh report gave a way of moving and the clock runs, the bands on the
+  // The flow [238]: while a fresh report gave a way of moving and the clock runs, the bands on the
   // tracks' arrows and the dots on the units' arrows take one step every 50 ms. One image serves
   // every track's arrow, so they all step together. With nothing fresh, nothing ticks.
   useEffect(() => {

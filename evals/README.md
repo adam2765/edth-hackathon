@@ -2,7 +2,9 @@
 
 Checks how well the model turns a transcript into an intent and, with `--resolve`, what the resolver then answers. It does not check speech-to-text. It is layer 2 of the [evaluation plan](../docs/plan.md#evaluation-harness).
 
-The call-sign eval (`callsigns.cases.json`, `npm run eval:callsigns`) is separate and needs no model: see [docs/callsigns.md](../docs/callsigns.md#the-eval). So is the recon-request eval (`requests.cases.json`, `npm run eval:requests`): see [docs/tracks.md](../docs/tracks.md#recon-requests-and-tasking).
+The call-sign eval (`callsigns.cases.json`, `npm run eval:callsigns`) is separate and needs no model: see [docs/callsigns.md](../docs/callsigns.md#the-eval). So is the recon-request eval (`requests.cases.json`, `npm run eval:requests`): see [docs/tracks.md](../docs/tracks.md#recon-requests-and-tasking). `callsigns.signoff-limits.json` holds the held-out cases for a call sign at the end that the reader cannot tell apart; it is a record, not a gate.
+
+The stage eval (`stage.cases.json`, `npm run eval:stage`) is the other way round: it checks the whole pipeline on a few lines. It sends each line of the pitch's script to a running coordinator as a radio report, typed or as a clip in a synthetic voice, and scores the reply and the mission's log. It needs a coordinator in offline mode, so it is not in `npm test`: see [docs/stage-test-plan.md](../docs/stage-test-plan.md#the-passes).
 
 ```bash
 npm run eval:extract                              # hosted Mistral, needs MISTRAL_API_KEY in .env.local
