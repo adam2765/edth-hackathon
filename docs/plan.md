@@ -148,7 +148,7 @@ A unit with no start point can still report. The resolver already copes with no 
 | GPS on the phone | No | The app never reads GPS (a project rule): jamming must not matter. |
 | A start point the base sets | Yes, optional | Missions start somewhere known: the base, a meeting point, a vehicle drop-off. The operator picks a place from the gazetteer by name, or by clicking a place on the map, so no coordinates are typed and the model makes none. Every unit that joins starts there as an estimate: ≈, a circle of 300 m or the place's own size if larger. Because it is an estimate, it does not settle a choice between nearby places on its own [47]. |
 | A spoken check-in | Yes, always | The phone asks for one on joining. The first report that names a place replaces the start point. |
-| The operator drags a unit on the command post | Later | Useful for corrections. The command post places and moves tracks by hand [177], but a unit's position still comes only from what it says. |
+| The operator places a unit on the command post | Yes, for corrections | Built 22 Nov [243]. When the app did not place a unit, or placed it wrongly, the operator puts it right with a click, a dragged dot or a place by name, then a confirm. The units list says "placed by CP" until the unit's next report. |
 
 ### Who keeps the last position
 

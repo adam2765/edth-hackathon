@@ -210,11 +210,14 @@ function RadiusPicker({ radius, onRadius }: { radius: number; onRadius: (r: numb
 /** The card that says where a track will go, before it is saved: one more look before it is in the log. */
 export function DraftCard(props: {
   symbols: MilSymbol | null;
-  what: { affiliation: Affiliation; kind: TrackKind };
+  /** A track's symbol; or, for a unit placed by hand [243], `dot`: the unit's colour. */
+  what?: { affiliation: Affiliation; kind: TrackKind };
+  dot?: string;
   title: string;
   detail: string;
   note: string;
   onNote: (s: string) => void;
+  notePlaceholder?: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -224,7 +227,7 @@ export function DraftCard(props: {
   return (
     <div className={styles.draft} role="dialog" aria-label={props.title}>
       <div className={styles.draftHead}>
-        <Sym lib={props.symbols} what={props.what} size={22} />
+        {props.dot ? <span className={styles.unitDot} style={{ background: props.dot }} aria-hidden="true" /> : props.what ? <Sym lib={props.symbols} what={props.what} size={22} /> : null}
         <div className={styles.draftText}>
           <strong>{props.title}</strong>
           <span>{props.detail}</span>
@@ -237,7 +240,7 @@ export function DraftCard(props: {
         onKeyDown={(e) => {
           if (e.key === "Enter") props.onConfirm();
         }}
-        placeholder="Source, if any: drone feed, BRAVO 2 by phone"
+        placeholder={props.notePlaceholder ?? "Source, if any: drone feed, BRAVO 2 by phone"}
         aria-label="Where this came from"
         maxLength={120}
       />
