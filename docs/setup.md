@@ -147,6 +147,7 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 - **Map is coarse or empty away from the area:** only the tiles around the area are saved.
 - **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
 - **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
+- **Phone build fails with `Undefined symbols` for `RCTReconnectingWebSocket` or `Sealable`:** the Debug app linked React Native's Release copy, left in `transmitter/ios/Pods` by a Release build before a `pod install` (decision 253). Run `npx expo prebuild --platform ios` in `transmitter/` once, then Build again.
 
 Each command retires old project controllers before using the current code. Shutdown
 scans processes by checkout path, working directory and parent/child ownership across all
