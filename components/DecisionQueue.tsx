@@ -20,10 +20,12 @@ const HELD_TAG: Record<HeldReason, string> = { which: "Which unit?", unknown: "N
 /** A decision that has waited this long is marked late, in words and colour. */
 export const LATE_AFTER_MS = 2 * 60_000;
 
-/** "12 s" or "3:05": how long a decision has waited. */
+/** "12 s", "3:05" or "1 h 07": how long a decision has waited. */
 function fmtWait(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
-  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
 }
 
 function tagOf(d: Decision): string {
