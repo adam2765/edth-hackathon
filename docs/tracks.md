@@ -182,7 +182,7 @@ A track on a street or along a river gets a circle of at least 150 m. "Track 1 m
 | after "coming from" | where it came from: neither | |
 | anywhere else | not clear: the model's reading stands | "Enemy vehicle to the **east**" |
 
-When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197].
+When the words are clear they win over the model. One word is never both where the thing is and the way it is going. Two different words for the same role are dropped, so the app asks. When no compass word is found, the model's reading stands, since the word lists can miss one. A heading shows as "moving north, as said" in the list, and on the map as a bold dark arrow with a white edge, from the middle of the track's symbol and about one frame past its edge. The arrow turns with the map, so it points north on a turned map too. When it points up, the label moves above its tip [197]. While the sighting is fresh, light bands run along the arrow to its tip; on an old sighting the arrow is still ([below](#what-moves-on-the-map)) [238].
 
 ## A track's life
 
@@ -287,6 +287,27 @@ The first run of the script, in mission `vincennes-13`, showed Track 1 drawn on 
 Why Track 1's place was on ALPHA 1: a track on a street is placed at the street's point nearest the observer, with a circle of at least 150 m. That point stays, since the speaker did not say where along the street; only its symbol is drawn aside.
 
 Limits: the size of a label is estimated from its number of letters, not measured. In a crowded spot a symbol can end up well away from its point, and its line can cross another label: Track 5 in the picture at the top.
+
+## What moves on the map
+
+Motion on the command post's map says one thing: this report is fresh, and the clock on screen is running. It never says where something is [238].
+
+| What | When it moves | What it looks like |
+|---|---|---|
+| A track's heading arrow | The track has a heading, as said, and was seen in the last 10 minutes | Light bands run along the arrow from tail to tip. The arrow itself stays as it is |
+| A unit's arrow to the place it is heading to | The unit was heard in the last 3 minutes | White dots run along the shaft to the arrowhead |
+| A unit's dot or a track's symbol | A report gave it a new place | It slides there in 0.6 s, 0.3 s in a replay, instead of jumping |
+| A track new on the map | Once, when it is first placed | One ring in its colour, twice, then nothing |
+
+What does not move:
+
+- **A track with no heading said.** Nothing was said about its movement, so nothing on it moves.
+- **An old sighting.** When a track turns old it fades, says "not seen for", and its arrow stops: the way it was moving is what was said then, not what is known now.
+- **The symbol itself, along its heading.** That would be a guessed position. A slide only runs between two places the log gave, and the new place is the truth from the first moment.
+- **Anything, when the clock on screen does not run:** an ended mission and a paused replay are one moment, held. Nothing slides after a jump either: a drag along the replay bar, another mission, live to replay.
+- **Anything, when the computer is set to reduce motion.**
+
+The flow's speed is fixed and means nothing: the app knows no speed. Nothing blinks, and no symbol changes shape or colour. The standard symbols draw movement with still marks, so the still arrow of [197] stays and reads the same in a screenshot. The rules are in `components/motion.ts`, with tests in `tests/motion.test.ts`.
 
 ## Taking the pictures again
 
