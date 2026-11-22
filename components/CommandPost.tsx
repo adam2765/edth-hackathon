@@ -388,15 +388,15 @@ export default function CommandPost() {
   const [notice, setNotice] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
-  /** The unit whose strip is open: its whole line, what it is and "Move" [257]. */
+  /** The unit whose strip is open: its whole line, what it is and "Move" [258]. */
   const [openUnit, setOpenUnit] = useState<string | null>(null);
-  /** The reports under the tracks: folded to the newest one, or the whole history [257]. */
+  /** The reports under the tracks: folded to the newest one, or the whole history [258]. */
   const [reportsOpen, setReportsOpen] = useState(false);
-  /** On a phone the lists share one place under the map, one at a time [257]. */
+  /** On a phone the lists share one place under the map, one at a time [258]. */
   const [tab, setTab] = useState<"units" | "tracks" | "reports">("units");
   /**
    * The Decisions card's side of the map, chosen away from each decision as it opens, or the place
-   * the operator dragged it to, in pixels from the map's top left, with the map's size then [257].
+   * the operator dragged it to, in pixels from the map's top left, with the map's size then [258].
    */
   const [deckSide, setDeckSide] = useState<DeckSide>("right");
   const deckSideRef = useRef<DeckSide>("right");
@@ -1292,7 +1292,7 @@ export default function CommandPost() {
   const dockBusy = (canEdit && tool != null) || picked != null;
   /**
    * Puts the Decisions card on the side of the map that hides fewer of a decision's points, as the
-   * map shows them now, once for each decision that opens [257]. On a tie it goes away from where
+   * map shows them now, once for each decision that opens [258]. On a tie it goes away from where
    * the points lean, and near the middle it stays, so it does not hop from side to side. Not on a
    * phone, where the card lies across the bottom, nor once the operator has dragged it.
    */
@@ -1330,7 +1330,7 @@ export default function CommandPost() {
   );
 
   /**
-   * The camera's padding for a decision, clear of the Decisions card [257]: the map frames the
+   * The camera's padding for a decision, clear of the Decisions card [258]: the map frames the
    * points in the room the card leaves. On a phone the card lies across the bottom of the map, so
    * the room is above it; a card the operator dragged keeps the room on its nearer side.
    */
@@ -1364,7 +1364,7 @@ export default function CommandPost() {
     [deckPin, placeDeck],
   );
 
-  /** Moves the map to a decision's points, clear of the Decisions card [257]. */
+  /** Moves the map to a decision's points, clear of the Decisions card [258]. */
   const moveMapTo = useCallback(
     (d: Decision) => {
       const map = mapRef.current;
@@ -1382,7 +1382,7 @@ export default function CommandPost() {
   );
 
   // A decision that opens by itself (the first to arrive, or the one after a decision settled on
-  // another screen) moves the card off its points as the map shows them; the map stays put [257].
+  // another screen) moves the card off its points as the map shows them; the map stays put [258].
   useEffect(() => {
     const map = mapRef.current;
     if (focused && map && mapReady) placeDeck(map, pointsOf(focused), focused.id);
@@ -1505,7 +1505,7 @@ export default function CommandPost() {
       const a = AREAS[area];
       map.easeTo({ center: [a.centre.lon, a.centre.lat], zoom: a.zoom, duration });
     } else {
-      // While a decision is open, the units and its choices are framed beside the Decisions card [257].
+      // While a decision is open, the units and its choices are framed beside the Decisions card [258].
       const padding = focused ? clearOfDeck(map, followPoints, focused.id) : MAP_PADDING;
       const b = new ml.LngLatBounds();
       followPoints.forEach((p) => b.extend([p.lon, p.lat]));
@@ -2038,7 +2038,7 @@ export default function CommandPost() {
   const barPct = (t: number) => (barSpan > 0 ? ((t - rangeStart) / barSpan) * 100 : 0);
   const sliderMission = stretchAt(stretches, sliderValue, session);
 
-  // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [257].
+  // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [258].
   // Where it was dropped, or as far across a map that has changed size since.
   const deckAt = (() => {
     if (!deckPin) return null;
@@ -2049,7 +2049,7 @@ export default function CommandPost() {
     return { "--deck-x": `${left / z}px`, "--deck-y": `${top / z}px`, "--deck-h": `calc(100% - ${(top + 12) / z}px)` } as CSSProperties;
   })();
 
-  /** The operator drags the Decisions card by its heading; it stays where it is put until Unpin [257]. */
+  /** The operator drags the Decisions card by its heading; it stays where it is put until Unpin [258]. */
   const dragDeck = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
     if (e.button !== 0 || !target?.closest("h2") || target.closest("button, a, select, input")) return;
@@ -2472,7 +2472,7 @@ export default function CommandPost() {
         </div>
 
         {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
-            the map: on the side away from the open decision's points, or where the operator dragged it [257]. */}
+            the map: on the side away from the open decision's points, or where the operator dragged it [258]. */}
         {session ? (
           <div
             ref={deckEl}
@@ -2524,7 +2524,7 @@ export default function CommandPost() {
         ) : null}
       </main>
 
-      {/* On a phone the lists take turns under the map [257]. */}
+      {/* On a phone the lists take turns under the map [258]. */}
       <div className={styles.tabs} role="tablist" aria-label="Lists">
         {(
           [
@@ -2548,7 +2548,7 @@ export default function CommandPost() {
         ))}
       </div>
 
-      {/* Units on the left, one strip each [257]. */}
+      {/* Units on the left, one strip each [258]. */}
       <aside className={`${styles.side} ${styles.unitsCol}`} data-tab={tab === "units" || undefined} aria-label="Units">
         <section className={`${styles.section} ${styles.unitsSection}`} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
@@ -2580,7 +2580,7 @@ export default function CommandPost() {
                 // A unit whose question waits: its strip opens the question [240].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 const moving = activeTool?.kind === "unit" && activeTool.callsign === u.callsign;
-                // A strip opens to its whole line and what can be done to the unit [257].
+                // A strip opens to its whole line and what can be done to the unit [258].
                 const open = openUnit === u.callsign || moving;
                 return (
                   <li key={u.callsign}>
@@ -2644,7 +2644,7 @@ export default function CommandPost() {
         </section>
       </aside>
 
-      {/* Tracks on the right, one strip each, and the reports folded under them [257]. */}
+      {/* Tracks on the right, one strip each, and the reports folded under them [258]. */}
       <aside className={`${styles.side} ${styles.tracksCol}`} data-tab={tab === "units" ? undefined : tab} aria-label="Tracks and reports">
           <section className={`${styles.section} ${styles.tracksSection}`} aria-labelledby="tracks-h">
             <h2 id="tracks-h" className={styles.h2}>
@@ -2711,7 +2711,7 @@ export default function CommandPost() {
             </ul>
           </section>
 
-        {/* The reports, newest first: folded to the newest one, or the whole history [257]. */}
+        {/* The reports, newest first: folded to the newest one, or the whole history [258]. */}
         <section className={`${styles.section} ${styles.feedSection}`} data-open={reportsOpen || undefined} aria-labelledby="feed-h">
           <h2 id="feed-h" className={styles.h2}>
             <button type="button" className={styles.foldBtn} aria-expanded={reportsOpen} onClick={() => setReportsOpen((o) => !o)}>

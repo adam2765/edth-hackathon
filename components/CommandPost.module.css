@@ -525,7 +525,7 @@
   color: var(--muted);
 }
 
-/* ---------- the two columns: units on the left, tracks and reports on the right [257] ---------- */
+/* ---------- the two columns: units on the left, tracks and reports on the right [258] ---------- */
 /* Each is a container, so its strips say less when the column is thin (a 1024 px projector). */
 .side {
   display: flex;
@@ -652,7 +652,7 @@
   overflow-y: auto;
 }
 
-/* One unit as a strip [257]: its call sign and how long since it was heard, then one line that
+/* One unit as a strip [258]: its call sign and how long since it was heard, then one line that
    says where it is, or its state and question when that differs. A click opens the strip: the
    whole line, the time, what the unit is and "Move". */
 .unit {
@@ -995,7 +995,7 @@
   outline-offset: -2px;
 }
 
-/* It wraps in a thin column rather than push its pill out of the strip [257]. */
+/* It wraps in a thin column rather than push its pill out of the strip [258]. */
 .itemHead {
   display: flex;
   flex-wrap: wrap;
@@ -1111,7 +1111,7 @@
   outline-offset: -3px;
 }
 
-/* ---------- narrow screens: map on top, one list below it at a time [257] ---------- */
+/* ---------- narrow screens: map on top, one list below it at a time [258] ---------- */
 @media (max-width: 900px) {
   .root {
     grid-template-columns: minmax(0, 1fr);
@@ -1800,7 +1800,7 @@
 
 /* ---------- the Decisions list: everything that waits on the operator [240] ---------- */
 /* The operator's main job: it gets the most room, and the units and the reports keep at least 110px each. */
-/* ---------- the Decisions card, over the map [257] ---------- */
+/* ---------- the Decisions card, over the map [258] ---------- */
 /* On the side of the map away from the open decision's points (CommandPost.tsx frames the points
    in the room it leaves), above the replay bar, below the zoom buttons and the dock. Dragged by its
    heading, it stays where it is put. With nothing waiting it shrinks to its heading. */

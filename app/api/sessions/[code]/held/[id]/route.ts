@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { AREAS } from "@/lib/geo/areas";
 import type { Resolution } from "@/lib/geo/types";
-import { pinnedLanguage } from "@/lib/providers/extractor";
 import { missionRoster } from "@/lib/reports/mission";
-import { readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
-import { splitRequest } from "@/lib/geo/requests";
-import { afterCallsign } from "@/lib/reports/radio";
+import { forgetHeldReadings, heldHints, heldReadings, heldWords, readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
 import { addToRoster, dismissHeld, heldReport, openMissionLog, reportContext, saveReport } from "@/lib/reports/record";
 import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldReply } from "@/lib/reports/types";
 
@@ -15,8 +12,9 @@ type Action = (typeof ACTIONS)[number];
 /**
  * The operator settles a radio report held in the Unassigned tray [203]:
  * `POST /api/sessions/<code>/held/<id>` with JSON `{ action, callsign? }`.
- *   - `assign`: gives it to `callsign`, a unit on the roster. The words are read again from where
+ *   - `assign`: gives it to `callsign`, a unit on the roster. The words are placed again from where
  *     that unit was when the report came in, since "200 metres north of me" depends on who said it.
+ *     The model read them while the report waited [257]; it reads them now only if that failed.
  *   - `add`: puts `callsign` on the roster first, then gives it the report. Only this adds a unit.
  *   - `dismiss`: drops it. Nothing moves.
  * The first decision stands: a report settled already returns `already: true` and changes nothing.
@@ -41,11 +39,15 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
   try {
     const h = await heldReport(session, id);
     if (!h.ok) return NextResponse.json({ error: h.error, ended: h.ended }, { status: h.status });
-    if (h.settled) return NextResponse.json(settledReply(h.settled));
+    if (h.settled) {
+      forgetHeldReadings(session, id);
+      return NextResponse.json(settledReply(h.settled));
+    }
 
     if (action === "dismiss") {
       const r = await dismissHeld(session, id, COMMAND_POST, now);
       if (!r.ok) return NextResponse.json({ error: r.error, ended: r.ended }, { status: r.status });
+      forgetHeldReadings(session, id);
       const reply: HeldReply = { report_id: null, callsign: null, already: r.already };
       return NextResponse.json(reply);
     }
@@ -67,17 +69,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
     const area = AREAS[c.area];
     let read: Awaited<ReturnType<typeof readTranscript>> | null = null;
     // A request for recon is cut out before the model reads the words, as for any report [234].
-    const heard = splitRequest(afterCallsign(held.transcript, held.heard));
-    if (held.transcript.trim() && !heard.only) {
-      read = await readTranscript(heard.text, {
-        area,
-        sttLanguage: held.language,
-        pinned: pinnedLanguage(held.language),
-        lastPosition: c.lastPosition,
-        now: held.ts,
-        tracks: c.tracks,
-        callsign,
-      });
+    const { split: heard, text } = heldWords(held);
+    if (text) {
+      // The model's reading from while the report waited, or still being read [257]; only the place is worked out here.
+      read = await readTranscript(text, { area, ...heldHints(held), lastPosition: c.lastPosition, now: held.ts, tracks: c.tracks, callsign }, heldReadings(session, id));
     }
     // A call that was only a request is kept as a report with nothing to place, so the held one is settled.
     const resolution: Resolution =
@@ -104,6 +99,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]
       now,
     );
     if (!saved) return NextResponse.json({ error: "This mission has ended.", ended: true }, { status: 409 });
+    forgetHeldReadings(session, id);
     const reply: HeldReply = { report_id: saved.id, callsign, already: saved.already === true };
     return NextResponse.json(reply);
   } catch (err) {

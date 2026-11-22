@@ -7,7 +7,7 @@ import { clipSegments, keepClip, keepingClips, type ClipRecord } from "@/lib/rep
 import { AREAS, DEFAULT_AREA, isAreaId, speechHints, whisperPrompt, WHISPER_PROMPT_PLACES, type AreaId } from "@/lib/geo/areas";
 import type { GazetteerFeature, LastPosition, Resolution } from "@/lib/geo/types";
 import { missionRoster } from "@/lib/reports/mission";
-import { ANSWER_HEARD, answerHeard, readTranscript, REQUEST_ONLY } from "@/lib/reports/pipeline";
+import { ANSWER_HEARD, answerHeard, readHeldAhead, readTranscript, REQUEST_ONLY, type Readings } from "@/lib/reports/pipeline";
 import { splitRequest, type Split } from "@/lib/geo/requests";
 import { positionFromReport } from "@/lib/reports/position";
 import { afterCallsign, farMove, findSender, type SenderFound } from "@/lib/reports/radio";
@@ -104,11 +104,17 @@ function extOf(audio: Blob): string {
   return t.includes("wav") ? "wav" : t.includes("mp4") || t.includes("m4a") || t.includes("aac") ? "m4a" : t.includes("webm") ? "webm" : t.includes("ogg") ? "ogg" : t.includes("mpeg") ? "mp3" : "bin";
 }
 
-/** Holds a radio report for the operator [203]. The phone or radio that sent it gets `held` back, not a resolution. */
-async function hold(session: string, input: Omit<HeldInput, "session" | "audio">, sound: Blob | null) {
+/**
+ * Holds a radio report for the operator [203]. The phone or radio that sent it gets `held` back, not
+ * a resolution. The model starts reading its words while it waits, so giving it to a unit later is
+ * quick [257]; `readings` are what the model read already, for a report held after it was read.
+ */
+async function hold(session: string, input: Omit<HeldInput, "session" | "audio">, sound: Blob | null, readings?: Readings) {
   try {
     const audio = sound ? { data: Buffer.from(await sound.arrayBuffer()), ext: extOf(sound) } : null;
     const entry = await saveHeld({ session, ...input, audio });
+    // Not awaited: the reply does not wait for the model. It never throws.
+    if (entry) void readHeldAhead(entry, readings);
     return entry ? { id: entry.id, reason: entry.reason, question: entry.question, audio: entry.audio } : null;
   } catch (err) {
     console.error("holding the radio report failed", err);
@@ -282,6 +288,8 @@ export async function POST(req: Request) {
           session,
           { clientTs, area: area.id, transcript, language: lang, reason: "far", heard: sender.heard, read: null, candidates: [...far.others, callsign], question: far.question, position: to },
           sound,
+          // Read already: giving it to a unit places it again without the model [257].
+          r.readings,
         );
         console.log(`[radio] held (far): ${far.question}`);
         return NextResponse.json({ transcript, language: lang, intent: r.intent, timings_ms: timings, clientTs, area: area.id, held });

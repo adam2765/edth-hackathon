@@ -132,7 +132,7 @@ function sameOption(a: DecisionOption | null, b: DecisionOption): boolean {
 }
 
 export default function DecisionQueue(props: {
-  /** More at the end of the heading: the card's Unpin, once it was dragged [257]. */
+  /** More at the end of the heading: the card's Unpin, once it was dragged [258]. */
   head?: ReactNode;
   decisions: Decision[];
   focused: Decision | null;
@@ -181,7 +181,7 @@ export default function DecisionQueue(props: {
 
   return (
     <section className={`${styles.section} ${styles.decisionSection}`} aria-labelledby="decisions-h">
-      {/* The heading is where the card is dragged from, over the map [257]. */}
+      {/* The heading is where the card is dragged from, over the map [258]. */}
       <h2 id="decisions-h" className={styles.h2} title={decisions.length ? "Drag to move the card" : "Questions, radio reports the coordinator is not sure of and requests for recon come here, oldest first."}>
         Decisions <span className={styles.count} data-waiting={decisions.length ? "" : undefined}>{decisions.length}</span>
         {decisions.length === 0 ? <span className={styles.deckIdle}>Nothing waits</span> : null}
