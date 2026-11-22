@@ -61,6 +61,11 @@ interface Heard {
 const root = join(__dirname, "..");
 const scenariosDir = resolve(root, process.env.SCENARIOS_DIR ?? "scenarios");
 const clipsDir = resolve(root, process.env.CLIPS_DIR ?? "transmitter/scenarios/audio");
+/** A step's uncompressed clip: <step>-pcm.wav in the repo (build-scenarios.mjs), <step>.wav in a folder of real clips. */
+function wavClip(scenario: string, step: string): string {
+  const pcm = join(clipsDir, scenario, `${step}-pcm.wav`);
+  return existsSync(pcm) ? pcm : join(clipsDir, scenario, `${step}.wav`);
+}
 
 function scenarios(): Scenario[] {
   return readdirSync(scenariosDir)
@@ -98,7 +103,7 @@ function whisper(model: string, out: string, hints: boolean) {
     out,
     eachClip((sc, step) => {
       const of = join(tmp, `${sc.id}-${step.id}`);
-      const args = ["-m", model, "-f", join(clipsDir, sc.id, `${step.id}.wav`), "-l", step.lang, "-bs", "1", "-t", "4", "-oj", "-of", of];
+      const args = ["-m", model, "-f", wavClip(sc.id, step.id), "-l", step.lang, "-bs", "1", "-t", "4", "-oj", "-of", of];
       if (hints) args.push("--prompt", names[sc.area].join(", "));
       const p = spawnSync("whisper-cli", args, { encoding: "utf8" });
       const json = existsSync(`${of}.json`) ? (JSON.parse(readFileSync(`${of}.json`, "utf8")) as { transcription: { text: string }[] }) : null;
@@ -114,7 +119,7 @@ function parakeet(cli: string, model: string, out: string) {
     out,
     eachClip((sc, step) => {
       const of = join(tmp, `${sc.id}-${step.id}`);
-      const p = spawnSync(cli, ["-m", model, "-f", join(clipsDir, sc.id, `${step.id}.wav`), "-t", "4", "-otxt", "-of", of], { encoding: "utf8" });
+      const p = spawnSync(cli, ["-m", model, "-f", wavClip(sc.id, step.id), "-t", "4", "-otxt", "-of", of], { encoding: "utf8" });
       const heard = existsSync(`${of}.txt`) ? readFileSync(`${of}.txt`, "utf8").trim() : "";
       return { heard, ms_stt: cppTime(p.stderr, "parakeet") };
     }),
@@ -130,7 +135,7 @@ async function coordinator(out: string, bias: boolean) {
     const terms = bias ? biasTerms(loadGazetteer(sc.area), 100) : [];
     for (const step of sc.steps) {
       const m4a = join(clipsDir, sc.id, `${step.id}.m4a`);
-      const file = existsSync(m4a) ? m4a : join(clipsDir, sc.id, `${step.id}.wav`);
+      const file = existsSync(m4a) ? m4a : wavClip(sc.id, step.id);
       const mime = file.endsWith(".m4a") ? "audio/mp4" : "audio/wav";
       const s = performance.now();
       const r = await t.transcribe(new Blob([readFileSync(file)], { type: mime }), mime, terms, { language: step.lang });
