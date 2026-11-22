@@ -22,8 +22,10 @@ after it does.
 
 ## The screen
 
-The phone detects reachable coordinators from the USB/Metro host and its LAN Bonjour
-service directory. Tap Connect beside a server; multiple servers appear as separate rows.
+The phone detects reachable coordinators from the USB/Metro host, its LAN Bonjour
+service directory and, on an iPhone, its own search of the local network. Tap Connect beside
+a server; multiple servers appear as separate rows. After Connect it follows that server, by
+its id, to a new address between reports, so a renamed Mac or a new network does not strand it.
 The phone automatically follows the newest running mission and follows newer missions
 between reports. There is no mission picker or Join/Leave control. With no running mission,
 it shows Waiting for mission and joins when the server starts one.
@@ -114,8 +116,12 @@ computer's address. It sends reports to the coordinator on that same computer, p
 shows whether it answers (re-checked every 5 seconds). `EXPO_PUBLIC_SERVER_URL` overrides the default.
 
 Setup → Hosts lists discovered reachable coordinators. A manual override remains in
-Developer tools. No new native phone dependency is needed for discovery: the existing
-Metro/USB host browses LAN advertisements and the phone verifies each candidate.
+Developer tools. The Metro/USB host browses LAN advertisements, and an iPhone also browses
+for them itself: `modules/coordinator-search` is a small local Expo module (iOS only) that
+looks for the `_voicetomap._tcp` service each coordinator advertises, listed under
+`NSBonjourServices` in `app.json`. The phone verifies each candidate. The module is native, so
+an iPhone needs one rebuild to get it (`npm run build`); an older build, and Android, find
+coordinators through the addresses they already know [246].
 
 ## Speech-to-text on the coordinator
 

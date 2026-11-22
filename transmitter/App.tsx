@@ -12,7 +12,8 @@ import { CoordinatorError, loadSaved, writeSaved, type Saved } from "./src/missi
 import { positionAfter, sendUtterance } from "./src/transport";
 import type { AreaId, Candidate, Lang, MissionListReply, Position, ReportReply, Resolution, Scenario, ScenarioStep, Utterance } from "./src/types";
 import { Button } from "./src/ui/controls";
-import { discoverHosts, serverOrigin, type FoundHost } from "./src/hosts";
+import { discoverHosts, movedTo, serverOrigin, type FoundHost } from "./src/hosts";
+import { searchNearby } from "./src/search";
 import { fmtTime, type Reach, type StepResult } from "./src/ui/model";
 import { ScenarioCard } from "./src/ui/ScenarioCard";
 import { SetupSheet } from "./src/ui/SetupSheet";
@@ -154,14 +155,27 @@ function Transmitter() {
   const cancelScenarioRef = useRef(false);
   const recorder = useAudioRecorder(SPEECH_RECORDING);
 
+  /** The coordinator the person tapped Connect on, by its id, so the phone can follow it to a new address. */
+  const connectedIdRef = useRef<string | null>(null);
+
   useEffect(() => { writeSaved({ ...saved, server: serverUrl }); }, [saved, serverUrl]);
   useEffect(() => {
     let stopped = false;
     const scan = async () => {
-      const found = await discoverHosts([DEFAULT_SERVER, LOCAL_COORDINATOR, serverUrl, saved.server, saved.mission?.server, "http://127.0.0.1:3117"]);
+      // What the phone finds on the local network by itself (iOS), besides the addresses it knows.
+      const nearby = await searchNearby();
+      const found = await discoverHosts([DEFAULT_SERVER, LOCAL_COORDINATOR, serverUrl, saved.server, saved.mission?.server, "http://127.0.0.1:3117", ...nearby]);
       if (stopped) return;
       setHosts(found);
       const active = found.find(h => h.url === serverUrl);
+      // The same coordinator at another address: the computer moved network or was renamed. Follow it,
+      // between reports, instead of asking for Connect again.
+      const moved = movedTo(found, serverUrl, connectedIdRef.current);
+      if (moved && busyRef.current === "idle") {
+        setServerUrl(moved.url); setConnectedHost(moved.url);
+        setSaved((s) => ({ ...s, server: moved.url }));
+        return;
+      }
       setReach(active ? active.ready ? "ok" : "checking" : "unreachable");
       setListed(active ? { server: serverUrl, list: active.missions } : null);
     };
@@ -171,6 +185,7 @@ function Transmitter() {
   }, [serverUrl, saved.server, saved.mission?.server]);
   const connectTo = (host: FoundHost) => {
     if (!host.ready || busyRef.current !== "idle") return;
+    connectedIdRef.current = host.id;
     setServerUrl(host.url); setConnectedHost(host.url); setReach("ok");
     setListed({ server: host.url, list: host.missions }); setMissionNote(null);
     setSaved({ server: host.url });
@@ -453,7 +468,7 @@ function Transmitter() {
         serverUrl={serverUrl}
         hosts={hosts}
         onConnectHost={connectTo}
-        onServerUrl={(url) => { setConnectedHost(null); setListed(null); setServerUrl(url); }}
+        onServerUrl={(url) => { connectedIdRef.current = null; setConnectedHost(null); setListed(null); setServerUrl(url); }}
         reach={reach}
         developer={developer}
         onDeveloper={setDeveloper}
