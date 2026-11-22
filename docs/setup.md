@@ -141,7 +141,8 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 
 - **Missing coordinator build:** run Build, then Start.
 - **Missing Ollama model:** install `ministral-3:3b` once, then Start.
-- **Phone not detected:** unlock, reconnect and accept trust/debugging; use one connected phone.
+- **Phone not detected:** unlock, reconnect and accept trust/debugging; use one connected phone. An iPhone counts as connected when `xcrun xctrace list devices` lists it under `== Devices ==`. One under `== Devices Offline ==` is only remembered by Xcode and does not count.
+- **"More than one phone is connected":** leave only the phone you use connected. An iPhone that Xcode reaches over Wi-Fi is under `== Devices ==` too and counts with no cable, so the second phone can be one on the same network. Phones that Xcode only remembers no longer cause this.
 - **Coordinator without a mission:** use Start mission on the command post.
 - **Map is a plain background, "Base map not available":** no internet and no saved map. Run `npm run basemap -- vincennes` with internet, then Start again. Units and tracks draw meanwhile.
 - **Map is coarse or empty away from the area:** only the tiles around the area are saved.

@@ -8,7 +8,7 @@ import { createServer as createHttpServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { fingerprint } from "../scripts/launcher/files.mjs";
 import { ownsProcess, waitFor } from "../scripts/launcher/processes.mjs";
-import { parseAndroidDevices, selectDevice } from "../scripts/launcher/devices.mjs";
+import { parseAndroidDevices, parseAppleDevices, selectDevice } from "../scripts/launcher/devices.mjs";
 
 const temporary: string[] = [];
 const processes: ChildProcess[] = [];
@@ -64,6 +64,43 @@ describe("phone selection", () => {
     expect(() => selectDevice(devices, { phone: "auto" })).toThrow("More than one");
     expect(selectDevice(devices, { phone: "android", device: "three" })?.id).toBe("three");
     expect(selectDevice(devices, { phone: "none" })).toBeNull();
+  });
+
+  // What `xcrun xctrace list devices` prints, with made-up names and ids. `phones` go under
+  // "== Devices ==" (Xcode reaches them now), `remembered` under "== Devices Offline ==".
+  const xctrace = (phones: string[], remembered: string[]) => [
+    "== Devices ==",
+    "Someone’s MacBook Pro (3) (11111111-2222-3333-4444-555555555555)",
+    ...phones,
+    "",
+    "== Devices Offline ==",
+    ...remembered,
+    "",
+    "== Simulators ==",
+    "iPad (A16) Simulator (18.5) (99999999-8888-7777-6666-555555555555)",
+    "iPhone 16 Simulator (18.5) (AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE)",
+    "",
+  ].join("\n");
+  const phoneA = "Phone A (27.0.1) (00000000-000A000A000A000A)";
+  const phoneB = "Someone’s iPhone (2) (26.6.1) (00000000-000B000B000B000B)";
+
+  it("does not count an iPhone that Xcode only remembers", () => {
+    const devices = parseAppleDevices(xctrace([], [phoneA, phoneB]));
+    expect(devices).toEqual([]);
+    // Two remembered iPhones and none connected used to stop every command here.
+    expect(selectDevice(devices, { phone: "auto" })).toBeNull();
+  });
+  it("counts an iPhone listed under Devices, and never the Mac or a simulator", () => {
+    const devices = parseAppleDevices(xctrace([phoneA], [phoneB]));
+    expect(devices).toEqual([{ platform: "ios", id: "00000000-000A000A000A000A", name: "Phone A" }]);
+    expect(selectDevice(devices, { phone: "auto" })?.id).toBe("00000000-000A000A000A000A");
+    expect(parseAppleDevices(xctrace([], []))).toEqual([]);
+  });
+  it("still refuses two iPhones that are both connected", () => {
+    const devices = parseAppleDevices(xctrace([phoneA, phoneB], []));
+    expect(devices.map((d: { name: string }) => d.name)).toEqual(["Phone A", "Someone’s iPhone (2)"]);
+    expect(() => selectDevice(devices, { phone: "auto" })).toThrow("More than one");
+    expect(selectDevice(devices, { phone: "auto", device: "00000000-000B000B000B000B" })?.name).toBe("Someone’s iPhone (2)");
   });
 });
 describe("owned processes", () => {
