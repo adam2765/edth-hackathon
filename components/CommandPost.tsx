@@ -7,7 +7,7 @@
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { shortGrid, type GridRead } from "@/lib/geo/grid";
@@ -43,8 +43,32 @@ const EMPTY_LOG: LogEntry[] = [];
 // The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
 // label, which is wider than its marker.
 const MAP_PADDING = { top: 80, bottom: 130, left: 90, right: 90 };
+/** The Decisions card's width before the big-screen zoom, and its share of the map at most; the same as .deck in CommandPost.module.css. */
+const DECK_W = 360;
+const DECK_SHARE = 0.48;
+
+/** The Decisions card's width on screen, over a map this wide. */
+function deckWidth(mapWidth: number): number {
+  return Math.min(DECK_W * screenScale(), mapWidth * DECK_SHARE);
+}
+
+/** A phone or a narrow window: the map on top and the card across its bottom; the same 900 px as CommandPost.module.css. */
+function phoneLayout(): boolean {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
 
 type LatLon = { lat: number; lon: number };
+type DeckSide = "left" | "right";
+type Padding = { top: number; bottom: number; left: number; right: number };
+
+/** Shrinks two paddings that face each other so at least `room` pixels are left between them. */
+function leaveRoom(pad: Padding, a: keyof Padding, b: keyof Padding, size: number, room: number): void {
+  const over = pad[a] + pad[b] + room - size;
+  if (over <= 0) return;
+  const k = Math.max(0, (size - room) / (pad[a] + pad[b]));
+  pad[a] = Math.round(pad[a] * k);
+  pad[b] = Math.round(pad[b] * k);
+}
 
 function circleRing(c: LatLon, radiusM: number): [number, number][] {
   const ring: [number, number][] = [];
@@ -364,6 +388,22 @@ export default function CommandPost() {
   const [notice, setNotice] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  /** The unit whose strip is open: its whole line, what it is and "Move" [257]. */
+  const [openUnit, setOpenUnit] = useState<string | null>(null);
+  /** The reports under the tracks: folded to the newest one, or the whole history [257]. */
+  const [reportsOpen, setReportsOpen] = useState(false);
+  /** On a phone the lists share one place under the map, one at a time [257]. */
+  const [tab, setTab] = useState<"units" | "tracks" | "reports">("units");
+  /**
+   * The Decisions card's side of the map, chosen away from each decision as it opens, or the place
+   * the operator dragged it to, in pixels from the map's top left, with the map's size then [257].
+   */
+  const [deckSide, setDeckSide] = useState<DeckSide>("right");
+  const deckSideRef = useRef<DeckSide>("right");
+  const [deckPin, setDeckPin] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const deckEl = useRef<HTMLDivElement>(null);
+  /** The decision the card's side was chosen for: it does not move again for the same one. */
+  const deckFor = useRef<string | null>(null);
   /** Set when the operator moves to a decision, or settles one: the map frames the next one. */
   const frameNext = useRef(false);
 
@@ -1221,15 +1261,11 @@ export default function CommandPost() {
   }, [start, mapReady]);
 
   /**
-   * Moves the map to a decision: the unit and its choices, the unit alone, where a held report
+   * A decision's points on the map: the unit and its choices, the unit alone, where a held report
    * would put a unit and the units it may be from, or the unit asking for recon and the track.
-   * Only the camera: it sets no state, so it can run when the next decision opens by itself.
    */
-  const moveMapTo = useCallback(
-    (d: Decision) => {
-      const map = mapRef.current;
-      const ml = mlRef.current;
-      if (!map || !ml) return;
+  const pointsOf = useCallback(
+    (d: Decision): LatLon[] => {
       const unitAt = (c: string) => view.units.find((u) => u.callsign === c)?.position ?? null;
       const pts: LatLon[] = [];
       const add = (p: LatLon | null | undefined) => {
@@ -1247,15 +1283,110 @@ export default function CommandPost() {
         add(unitAt(d.callsign));
         add(d.request.n != null ? view.tracks.find((t) => t.n === d.request.n)?.position : null);
       }
-      if (pts.length === 1) map.flyTo({ center: [pts[0].lon, pts[0].lat], zoom: Math.max(map.getZoom(), 16), duration: 600 });
-      else if (pts.length > 1) {
-        const b = new ml.LngLatBounds();
-        pts.forEach((p) => b.extend([p.lon, p.lat]));
-        map.fitBounds(b, { padding: MAP_PADDING, maxZoom: 16.5, duration: 600 });
-      }
+      return pts;
     },
     [view],
   );
+
+  /** The top left of the map holds a palette or a track's card: the Decisions card keeps to the right. */
+  const dockBusy = (canEdit && tool != null) || picked != null;
+  /**
+   * Puts the Decisions card on the side of the map that hides fewer of a decision's points, as the
+   * map shows them now, once for each decision that opens [257]. On a tie it goes away from where
+   * the points lean, and near the middle it stays, so it does not hop from side to side. Not on a
+   * phone, where the card lies across the bottom, nor once the operator has dragged it.
+   */
+  const placeDeck = useCallback(
+    (map: MLMap, pts: LatLon[], id: string): DeckSide => {
+      const kept = deckSideRef.current;
+      if (deckPin || deckFor.current === id) return kept;
+      const box = mapEl.current?.getBoundingClientRect();
+      if (!box?.width || !box.height) return kept;
+      deckFor.current = id;
+      if (phoneLayout()) return kept;
+      const width = deckWidth(box.width);
+      let side = kept;
+      if (dockBusy) side = "right";
+      else if (pts.length) {
+        const xy = pts.map((p) => map.project([p.lon, p.lat]));
+        // The card's box on each side: above the replay bar, as tall as an open decision usually is.
+        const bottom = box.height - coveredBelow() - 12;
+        const height = Math.min(bottom - 120, 340 * screenScale());
+        const hidden = (s: DeckSide) => {
+          const x0 = s === "left" ? 12 : box.width - 12 - width;
+          return xy.filter((q) => q.x > x0 - 24 && q.x < x0 + width + 24 && q.y > bottom - height - 24 && q.y < bottom + 24).length;
+        };
+        const left = hidden("left");
+        const right = hidden("right");
+        const cx = xy.reduce((a, q) => a + q.x, 0) / xy.length;
+        if (left !== right) side = left < right ? "left" : "right";
+        else if (Math.abs(cx - box.width / 2) > box.width * 0.1) side = cx < box.width / 2 ? "right" : "left";
+      }
+      deckSideRef.current = side;
+      setDeckSide(side);
+      return side;
+    },
+    [deckPin, dockBusy, coveredBelow],
+  );
+
+  /**
+   * The camera's padding for a decision, clear of the Decisions card [257]: the map frames the
+   * points in the room the card leaves. On a phone the card lies across the bottom of the map, so
+   * the room is above it; a card the operator dragged keeps the room on its nearer side.
+   */
+  const clearOfDeck = useCallback(
+    (map: MLMap, pts: LatLon[], id: string): Padding => {
+      const pad = { ...MAP_PADDING };
+      const box = mapEl.current?.getBoundingClientRect();
+      if (!box?.width || !box.height) return pad;
+      const deck = deckEl.current?.getBoundingClientRect();
+      if (deckPin) {
+        if (deck?.width) {
+          if (deck.width > box.width / 2) {
+            if (deck.top - box.top < box.bottom - deck.bottom) pad.top = Math.max(pad.top, deck.bottom - box.top + 16);
+            else pad.bottom = Math.max(pad.bottom, box.bottom - deck.top + 16);
+          } else if (deck.left - box.left < box.right - deck.right) pad.left = Math.max(pad.left, deck.right - box.left + 16);
+          else pad.right = Math.max(pad.right, box.right - deck.left + 16);
+        }
+      } else {
+        if (phoneLayout()) {
+          pad.bottom += Math.round(Math.min(box.height * 0.45, Math.max(deck?.height ?? 0, 220)));
+        } else {
+          const side = placeDeck(map, pts, id);
+          // The card, its 12 px from the edge, and room for a label beside it: a label is wider than its marker.
+          pad[side] = Math.max(pad[side], Math.round(deckWidth(box.width)) + 12 + 60);
+        }
+      }
+      leaveRoom(pad, "left", "right", box.width, 160);
+      leaveRoom(pad, "top", "bottom", box.height, 120);
+      return pad;
+    },
+    [deckPin, placeDeck],
+  );
+
+  /** Moves the map to a decision's points, clear of the Decisions card [257]. */
+  const moveMapTo = useCallback(
+    (d: Decision) => {
+      const map = mapRef.current;
+      const ml = mlRef.current;
+      if (!map || !ml) return;
+      const pts = pointsOf(d);
+      if (!pts.length) return;
+      const padding = clearOfDeck(map, pts, d.id);
+      const b = new ml.LngLatBounds();
+      pts.forEach((p) => b.extend([p.lon, p.lat]));
+      // One point is shown at street level, or closer if the operator was closer already.
+      map.fitBounds(b, { padding, maxZoom: pts.length === 1 ? Math.max(map.getZoom(), 16) : 16.5, duration: 600 });
+    },
+    [pointsOf, clearOfDeck],
+  );
+
+  // A decision that opens by itself (the first to arrive, or the one after a decision settled on
+  // another screen) moves the card off its points as the map shows them; the map stays put [257].
+  useEffect(() => {
+    const map = mapRef.current;
+    if (focused && map && mapReady) placeDeck(map, pointsOf(focused), focused.id);
+  }, [focused, mapReady, placeDeck, pointsOf]);
 
   /** The operator opens a decision: by a click, the arrow keys, or its line in the feed or the units. */
   const focusOn = useCallback(
@@ -1360,6 +1491,8 @@ export default function CommandPost() {
     return pts;
   }, [view, area]);
   const followKey = followPoints.map((p) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`).join("|");
+  const focusedId = focused?.id ?? null;
+  const deckPinned = deckPin != null;
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1371,16 +1504,17 @@ export default function CommandPost() {
     } else if (!followPoints.length) {
       const a = AREAS[area];
       map.easeTo({ center: [a.centre.lon, a.centre.lat], zoom: a.zoom, duration });
-    } else if (followPoints.length === 1) {
-      map.easeTo({ center: [followPoints[0].lon, followPoints[0].lat], zoom: 16, duration });
     } else {
+      // While a decision is open, the units and its choices are framed beside the Decisions card [257].
+      const padding = focused ? clearOfDeck(map, followPoints, focused.id) : MAP_PADDING;
       const b = new ml.LngLatBounds();
       followPoints.forEach((p) => b.extend([p.lon, p.lat]));
-      map.fitBounds(b, { padding: MAP_PADDING, maxZoom: 16.5, duration });
+      map.fitBounds(b, { padding, maxZoom: followPoints.length === 1 ? 16 : 16.5, duration });
     }
-    // followKey stands for followPoints, so the camera moves only when a point moves.
+    // followKey stands for followPoints, so the camera moves only when a point moves; it moves
+    // too when a decision opens or the card changes sides.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followKey, area, follow, mapReady, mapSize, start]);
+  }, [followKey, area, follow, mapReady, mapSize, start, focusedId, deckSide, deckPinned]);
 
   const flyToItem = useCallback(
     (item: FeedItem) => {
@@ -1904,8 +2038,46 @@ export default function CommandPost() {
   const barPct = (t: number) => (barSpan > 0 ? ((t - rangeStart) / barSpan) * 100 : 0);
   const sliderMission = stretchAt(stretches, sliderValue, session);
 
+  // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [257].
+  // Where it was dropped, or as far across a map that has changed size since.
+  const deckAt = (() => {
+    if (!deckPin) return null;
+    const [w, h] = mapSize ? mapSize.split("x").map(Number) : [deckPin.w, deckPin.h];
+    const z = screenScale();
+    const left = (deckPin.x / deckPin.w) * w;
+    const top = (deckPin.y / deckPin.h) * h;
+    return { "--deck-x": `${left / z}px`, "--deck-y": `${top / z}px`, "--deck-h": `calc(100% - ${(top + 12) / z}px)` } as CSSProperties;
+  })();
+
+  /** The operator drags the Decisions card by its heading; it stays where it is put until Unpin [257]. */
+  const dragDeck = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (e.button !== 0 || !target?.closest("h2") || target.closest("button, a, select, input")) return;
+    const deck = deckEl.current;
+    const box = mapEl.current?.getBoundingClientRect();
+    if (!deck || !box) return;
+    const r = deck.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    e.preventDefault();
+    deck.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const x = Math.min(Math.max(ev.clientX - dx - box.left, 0), Math.max(0, box.width - r.width));
+      const y = Math.min(Math.max(ev.clientY - dy - box.top, 0), Math.max(0, box.height - 60));
+      setDeckPin({ x, y, w: box.width, h: box.height });
+    };
+    const up = () => {
+      deck.removeEventListener("pointermove", move);
+      deck.removeEventListener("pointerup", up);
+      deck.removeEventListener("pointercancel", up);
+    };
+    deck.addEventListener("pointermove", move);
+    deck.addEventListener("pointerup", up);
+    deck.addEventListener("pointercancel", up);
+  };
+
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-tab={tab}>
       <header className={styles.header}>
         <h1 className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
@@ -2298,12 +2470,35 @@ export default function CommandPost() {
           </div>
           </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
         </div>
-      </main>
 
-      <aside className={styles.side}>
-        {/* Everything that waits on the operator, oldest first, one open at a time [240]. */}
+        {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
+            the map: on the side away from the open decision's points, or where the operator dragged it [257]. */}
         {session ? (
+          <div
+            ref={deckEl}
+            className={styles.deck}
+            data-side={deckPin ? undefined : deckSide}
+            data-pinned={deckPin ? "" : undefined}
+            data-idle={decisions.length ? undefined : ""}
+            style={deckAt ?? undefined}
+            onPointerDown={dragDeck}
+          >
           <DecisionQueue
+            head={
+              deckPin ? (
+                <button
+                  type="button"
+                  className={styles.unpinBtn}
+                  onClick={() => {
+                    setDeckPin(null);
+                    deckFor.current = null;
+                  }}
+                  title="Let the card move off each decision again"
+                >
+                  Unpin
+                </button>
+              ) : null
+            }
             decisions={decisions}
             focused={focused}
             selection={canEdit ? picking : null}
@@ -2325,7 +2520,36 @@ export default function CommandPost() {
               if (t) flyToTrack(t);
             }}
           />
+          </div>
         ) : null}
+      </main>
+
+      {/* On a phone the lists take turns under the map [257]. */}
+      <div className={styles.tabs} role="tablist" aria-label="Lists">
+        {(
+          [
+            ["units", "Units", view.units.length],
+            ["tracks", "Tracks", view.tracks.length],
+            ["reports", "Reports", view.feed.filter((f) => f.kind === "report").length],
+          ] as const
+        ).map(([id, label, n]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => {
+              setTab(id);
+              if (id === "reports") setReportsOpen(true);
+            }}
+          >
+            {label} <span className={styles.count}>{n}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Units on the left, one strip each [257]. */}
+      <aside className={`${styles.side} ${styles.unitsCol}`} data-tab={tab === "units" || undefined} aria-label="Units">
         <section className={`${styles.section} ${styles.unitsSection}`} aria-labelledby="units-h">
           <h2 id="units-h" className={styles.h2}>
             Units <span className={styles.count}>{view.units.length}</span>
@@ -2353,69 +2577,80 @@ export default function CommandPost() {
               {view.units.map((u) => {
                 const silent = isSilent(u);
                 const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - knownAt(u)) : null);
-                // A unit whose question waits: its row opens the question [240].
+                // A unit whose question waits: its strip opens the question [240].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
+                const moving = activeTool?.kind === "unit" && activeTool.callsign === u.callsign;
+                // A strip opens to its whole line and what can be done to the unit [257].
+                const open = openUnit === u.callsign || moving;
                 return (
                   <li key={u.callsign}>
                     <button
                       type="button"
                       className={styles.unit}
                       data-tone={st.tone}
-                      onClick={() => (asks != null ? focusOn(decisions[asks], asks) : flyToUnit(u))}
-                      disabled={!u.position && asks == null}
-                      title={asks != null ? "Open its question in Decisions" : u.position ? "Show on the map" : undefined}
+                      data-open={open || undefined}
+                      aria-expanded={asks != null ? undefined : open}
+                      onClick={() => {
+                        if (asks != null) return focusOn(decisions[asks], asks);
+                        setOpenUnit(open ? null : u.callsign);
+                        if (!open && u.position) flyToUnit(u);
+                      }}
+                      title={asks != null ? "Open its question in Decisions" : open ? undefined : st.text}
                     >
                       <span className={styles.unitDot} style={{ background: u.colour }} aria-hidden="true" />
                       <span className={styles.unitMain}>
                         <span className={styles.unitTop}>
                           <span className={styles.unitName}>{u.callsign}</span>
-                          <span className={styles.pill} data-status={st.tone}>
-                            {st.tag}
-                          </span>
+                          {/* How long since it was last heard. An ended mission has no "ago": the
+                              picture is the one at its end. */}
+                          {u.lastHeard && effNow ? <span className={styles.unitTime}>{atEnd ? fmtTime(u.lastHeard) : fmtAgo(effNow - u.lastHeard)}</span> : null}
                         </span>
                         <span className={styles.unitStatus}>
+                          {/* "Placed" is what most units are: the strip says only what differs. */}
+                          {st.tone === "placed" ? null : (
+                            <span className={styles.pill} data-status={st.tone}>
+                              {st.tag}
+                            </span>
+                          )}
                           {st.text}
                           {/* Its grid, to say on the radio [245]; not under a question, which says no place. */}
                           {u.pending || u.prompt ? null : <GridTag at={u.position} />}
+                          {/* The time it was heard, in the open strip. */}
+                          {open && u.lastHeard && !atEnd ? <span className={styles.unitClock}> · heard {fmtTime(u.lastHeard)}</span> : null}
                         </span>
                       </span>
-                      {/* How long since it was last heard, then the time itself. An ended mission
-                          has no "ago": the picture is the one at its end. */}
-                      {u.lastHeard && effNow ? (
-                        <span className={styles.unitTime}>
-                          {atEnd ? null : <span className={styles.unitAge}>{fmtAgo(effNow - u.lastHeard)} ago</span>}
-                          <span>{fmtTime(u.lastHeard)}</span>
-                        </span>
-                      ) : null}
                     </button>
-                    <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask}>
-                      {/* For a unit the app did not place, or placed wrongly: a person puts it there [243]. */}
-                      <button
-                        type="button"
-                        className={styles.unitMove}
-                        aria-pressed={activeTool?.kind === "unit" && activeTool.callsign === u.callsign}
-                        aria-label={`${u.position && !u.atStart ? "Move" : "Place"} ${u.callsign} by hand`}
-                        title="Put this unit on the map by hand"
-                        onClick={() => startUnitMove(u)}
-                        disabled={busy}
-                      >
-                        {u.position && !u.atStart ? "Move" : "Place"}
-                      </button>
-                    </UnitRecon>
+                    {open || u.task ? (
+                      <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask}>
+                        {/* For a unit the app did not place, or placed wrongly: a person puts it there [243]. */}
+                        <button
+                          type="button"
+                          className={styles.unitMove}
+                          aria-pressed={moving}
+                          aria-label={`${u.position && !u.atStart ? "Move" : "Place"} ${u.callsign} by hand`}
+                          title="Put this unit on the map by hand"
+                          onClick={() => startUnitMove(u)}
+                          disabled={busy}
+                        >
+                          {u.position && !u.atStart ? "Move" : "Place"}
+                        </button>
+                      </UnitRecon>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
           )}
         </section>
+      </aside>
 
-        {/* Tracks: what the units have seen. Shown only once there is one, so a mission without
-            them looks as it always did. */}
-        {view.tracks.length ? (
+      {/* Tracks on the right, one strip each, and the reports folded under them [257]. */}
+      <aside className={`${styles.side} ${styles.tracksCol}`} data-tab={tab === "units" ? undefined : tab} aria-label="Tracks and reports">
           <section className={`${styles.section} ${styles.tracksSection}`} aria-labelledby="tracks-h">
             <h2 id="tracks-h" className={styles.h2}>
               Tracks <span className={styles.count}>{view.tracks.length}</span>
             </h2>
+            {view.tracks.length === 0 ? <p className={styles.empty}>What the units see shows here.</p> : null}
             <ul className={`${styles.units} ${styles.tracks}`}>
               {/* Tracks marked gone go last: they are off the map and kept for the record. */}
               {[...view.tracks].sort((a, b) => Number(a.gone != null) - Number(b.gone != null) || a.n - b.n).map((t) => {
@@ -2435,8 +2670,17 @@ export default function CommandPost() {
                       <span className={styles.trackSym} aria-hidden="true" dangerouslySetInnerHTML={symbols ? { __html: trackSvg(symbols, t, 18) } : undefined} />
                       <span className={styles.unitMain}>
                         <span className={styles.unitTop}>
-                          <span className={styles.unitName}>Track {t.n}</span>
-                          <span className={styles.pill} data-status={t.affiliation}>
+                          {/* "T1" in a thin column, as the map labels it. */}
+                          <span className={styles.unitName}>
+                            <span className={styles.longName}>Track </span>
+                            <span className={styles.shortName}>T</span>
+                            {t.n}
+                          </span>
+                          {t.seenTs && effNow ? <span className={styles.unitTime}>{atEnd ? fmtTime(t.seenTs) : fmtAgo(effNow - t.seenTs)}</span> : null}
+                        </span>
+                        <span className={styles.unitStatus}>
+                          {/* Whose it is: the symbol's frame says it too, so only the picked track's strip has the word. */}
+                          <span className={`${styles.pill} ${styles.affPill}`} data-status={t.affiliation}>
                             {AFFILIATION_LABEL[t.affiliation]}
                           </span>
                           {t.gone != null ? (
@@ -2452,34 +2696,34 @@ export default function CommandPost() {
                               Old sighting
                             </span>
                           ) : null}
-                        </span>
-                        <span className={styles.unitStatus}>
                           {st.main}
                           {t.pendingReport || t.gone != null ? null : <GridTag at={t.position} />}
                         </span>
-                        <span className={styles.trackWhere}>{st.sub}</span>
-                      </span>
-                      {t.seenTs && effNow ? (
-                        <span className={styles.unitTime}>
-                          {atEnd ? null : <span className={styles.unitAge}>{fmtAgo(effNow - t.seenTs)} ago</span>}
-                          <span>{fmtTime(t.seenTs)}</span>
+                        <span className={styles.trackWhere}>
+                          {st.sub}
+                          {t.seenTs && !atEnd ? ` · ${fmtTime(t.seenTs)}` : null}
                         </span>
-                      ) : null}
+                      </span>
                     </button>
                   </li>
                 );
               })}
             </ul>
           </section>
-        ) : null}
 
-        <section className={`${styles.section} ${styles.feedSection}`} aria-labelledby="feed-h">
+        {/* The reports, newest first: folded to the newest one, or the whole history [257]. */}
+        <section className={`${styles.section} ${styles.feedSection}`} data-open={reportsOpen || undefined} aria-labelledby="feed-h">
           <h2 id="feed-h" className={styles.h2}>
-            Reports <span className={styles.count}>{view.feed.filter((f) => f.kind === "report").length}</span>
+            <button type="button" className={styles.foldBtn} aria-expanded={reportsOpen} onClick={() => setReportsOpen((o) => !o)}>
+              Reports <span className={styles.count}>{view.feed.filter((f) => f.kind === "report").length}</span>
+              <span className={styles.foldMark} aria-hidden="true">
+                {reportsOpen ? "▾" : "▸"}
+              </span>
+            </button>
           </h2>
           {session && view.feed.length === 0 ? <p className={styles.empty}>{mode === "replay" ? "No reports at this time." : "No reports yet. Each one appears here with its time, call sign and outcome."}</p> : null}
           <ol className={styles.feed}>
-            {view.feed.map((f) => {
+            {(reportsOpen ? view.feed : view.feed.slice(0, 1)).map((f) => {
               if (f.kind === "plot" || f.kind === "note" || f.kind === "request" || f.kind === "task" || f.kind === "reply") {
                 // Something the command post did to a track or a held report, or a request for recon
                 // and what was done about it [234]: one line, like a join.

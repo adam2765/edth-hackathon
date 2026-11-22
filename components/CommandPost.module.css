@@ -1,21 +1,24 @@
-/* The command post: laid out for a laptop or projector first, map left, units and reports right. */
+/* The command post: laid out for a laptop or projector first. Units in a thin column on the left,
+   tracks and reports on the right, the map between them, and the Decisions card over the map. */
 
 .root {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  grid-template-columns: calc(var(--col) * var(--z)) minmax(0, 1fr) calc(var(--col) * var(--z));
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    "header header"
-    "map side";
+    "header header header"
+    "units map tracks";
   background: var(--bg);
   color: var(--text);
   font-size: 15px;
   /* Keeps the map attribution above the replay bar (see .maplibregl-ctrl-bottom-* in globals.css). */
   --sheet-h: 74px;
-  /* How much larger the header, the side panel and the replay bar are drawn (see "big screens" below). */
+  /* How much larger the header, the columns and the replay bar are drawn (see "big screens" below). */
   --z: 1;
+  /* Each column's width before --z: thin, so the map keeps most of a laptop's screen. */
+  --col: clamp(158px, 17vw, 236px);
 }
 
 /* ---------- header ---------- */
@@ -522,45 +525,87 @@
   color: var(--muted);
 }
 
-/* ---------- side panel ---------- */
+/* ---------- the two columns: units on the left, tracks and reports on the right [257] ---------- */
+/* Each is a container, so its strips say less when the column is thin (a 1024 px projector). */
 .side {
-  grid-area: side;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--panel);
+  container-type: inline-size;
+}
+
+.unitsCol {
+  grid-area: units;
+  border-right: 1px solid var(--line);
+}
+
+.tracksCol {
+  grid-area: tracks;
   border-left: 1px solid var(--line);
 }
 
 /* Every section shrinks to fit and scrolls its own list, so none is pushed off the bottom of the
-   screen however many units are on the net [240]. Decisions first, at most 60% of the height; units
-   and reports share what is left; tracks take at most a fifth. */
+   screen however many units are on the net [240]. The reports are folded to the newest one under
+   the tracks; opened, they take the larger share of the column. */
 .section {
   flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px 14px 10px;
+  padding: 10px 8px 8px;
   border-bottom: 1px solid var(--line);
 }
 
 .section > .h2 {
   flex: none;
+  padding: 0 2px;
 }
 
 .unitsSection {
   flex: 1 1 0;
-  min-height: 110px;
+  border-bottom: none;
 }
 
 .tracksSection {
-  max-height: 20%;
+  flex: 1 1 0;
+  min-height: 96px;
 }
 
 .feedSection {
-  flex: 1 1 0;
-  min-height: 110px;
+  flex: none;
+  max-height: 45%;
   border-bottom: none;
+}
+
+.feedSection[data-open] {
+  flex: 1.6 1 0;
+  max-height: none;
+}
+
+/* The reports' heading opens and folds them: it reads as the heading it is. */
+.foldBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.foldMark {
+  font-size: 11px;
+}
+
+/* On a phone the lists take turns under the map; these are hidden elsewhere. */
+.tabs {
+  display: none;
 }
 
 .h2 {
@@ -601,24 +646,31 @@
 .units {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 
-/* One unit: its state as a word (the pill), where it is, and how long since it was heard. */
+/* One unit as a strip [257]: its call sign and how long since it was heard, then one line that
+   says where it is, or its state and question when that differs. A click opens the strip: the
+   whole line, the time, what the unit is and "Move". */
 .unit {
   width: 100%;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--panel-2);
   text-align: left;
   cursor: pointer;
+}
+
+.unit[data-open],
+.unit[data-selected] {
+  border-color: var(--accent-2);
 }
 
 .unit:disabled {
@@ -641,11 +693,11 @@
 
 .unitDot {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   margin-top: 3px;
   border-radius: 50%;
-  border: 3px solid #fff;
+  border: 2.5px solid #fff;
 }
 
 .unitMain {
@@ -653,32 +705,51 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .unitTop {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-}
-
-.unitTop .pill {
-  margin-left: 0;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .unitName {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 750;
-  font-size: 17px;
-  line-height: 1.25;
-}
-
-/* The whole line, wrapped: the ± radius at its end must not be cut off. */
-.unitStatus {
   font-size: 15px;
   line-height: 1.3;
-  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One line, cut with "…"; the strip's tooltip has it whole, and an open strip shows it wrapped:
+   the ± radius at its end must be readable there. */
+.unitStatus {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unitStatus .pill {
+  margin: 0 6px 0 0;
+  padding: 0 6px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+
+.unit[data-open] .unitStatus,
+.unit[data-selected] .unitStatus,
+.unit[data-tone="ask"] .unitStatus {
+  white-space: normal;
   overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 /* A position's grid, after the words that say where it is [245]. It is read out figure by
@@ -699,27 +770,67 @@
   font-weight: 650;
 }
 
+/* How long since it was heard, at the end of the call sign's line. */
 .unitTime {
   flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: 14px;
-  line-height: 1.25;
-  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.unitAge {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
+.unitClock {
+  font-weight: 500;
+  color: var(--muted);
 }
 
-.unit[data-tone="silent"] .unitAge {
+.unit[data-tone="silent"] .unitTime {
   color: var(--warn);
+}
+
+.shortName {
+  display: none;
+}
+
+/* A thin column (a 1024 px projector) keeps each strip to one line, unless it asks or is open. */
+@container (max-width: 190px) {
+  .longName {
+    display: none;
+  }
+
+  .shortName {
+    display: inline;
+  }
+
+  .unit .trackSym {
+    width: 26px;
+    height: 26px;
+  }
+
+  .unit .trackSym svg {
+    max-width: 22px;
+    max-height: 22px;
+  }
+
+  .unit:not([data-open]):not([data-selected]):not([data-tone="ask"]) .unitStatus {
+    display: none;
+  }
+
+  .unit {
+    align-items: center;
+  }
+
+  .unitDot {
+    margin-top: 0;
+  }
+}
+
+/* Whose a track is, as a word: the symbol's frame and colour say it too, so only the picked
+   track's strip has room for the word. */
+.unit:not([data-selected]) .affPill {
+  display: none;
 }
 
 /* Under a unit: what it is, as the command post said, and its recon when it is a drone team [235].
@@ -730,8 +841,8 @@
   align-items: center;
   gap: 4px 8px;
   margin: 2px 0 0;
-  padding: 0 10px 0 36px;
-  font-size: 14px;
+  padding: 0 4px 0 26px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -780,9 +891,9 @@
 /* The track's standard symbol, on a light tile: its colours are drawn for a light map. */
 .trackSym {
   flex: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
   background: #e8ece6;
   display: grid;
   place-items: center;
@@ -790,8 +901,8 @@
 
 .trackSym svg {
   display: block;
-  max-width: 32px;
-  max-height: 32px;
+  max-width: 26px;
+  max-height: 26px;
 }
 
 /* A track nobody has reported for a while: the symbol fades as it does on the map, the words do not. */
@@ -799,11 +910,17 @@
   opacity: 0.5;
 }
 
+/* Who saw it and how it moves: only in the picked track's strip. */
 .trackWhere {
-  font-size: 14px;
+  display: none;
+  font-size: 13px;
   line-height: 1.3;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.unit[data-selected] .trackWhere {
+  display: block;
 }
 
 /* Whose a track is, as a word. Red is kept for hostile and suspect; a suspect is dashed, as its
@@ -878,10 +995,12 @@
   outline-offset: -2px;
 }
 
+/* It wraps in a thin column rather than push its pill out of the strip [257]. */
 .itemHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-size: 14px;
 }
 
@@ -992,15 +1111,16 @@
   outline-offset: -3px;
 }
 
-/* ---------- narrow screens: map on top, lists below ---------- */
+/* ---------- narrow screens: map on top, one list below it at a time [257] ---------- */
 @media (max-width: 900px) {
   .root {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 56vh minmax(0, 1fr);
+    grid-template-rows: auto 56vh auto minmax(0, 1fr);
     grid-template-areas:
       "header"
       "map"
-      "side";
+      "tabs"
+      "lists";
     --sheet-h: 112px;
   }
 
@@ -1009,9 +1129,52 @@
     gap: 8px 12px;
   }
 
-  .side {
-    border-left: none;
+  .tabs {
+    grid-area: tabs;
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px 0;
+    background: var(--panel);
     border-top: 1px solid var(--line);
+  }
+
+  .tabs button {
+    flex: 1;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 6px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .tabs button[aria-selected="true"] {
+    color: var(--text);
+    border-bottom-color: var(--accent-2);
+  }
+
+  .unitsCol,
+  .tracksCol {
+    grid-area: lists;
+    border: none;
+  }
+
+  .side:not([data-tab]),
+  .tracksCol[data-tab="tracks"] .feedSection,
+  .tracksCol[data-tab="reports"] .tracksSection,
+  .side > .section > .h2 {
+    display: none;
+  }
+
+  .tracksCol[data-tab="reports"] .feedSection {
+    flex: 1 1 0;
+    max-height: none;
   }
 
   .replayBar {
@@ -1637,8 +1800,103 @@
 
 /* ---------- the Decisions list: everything that waits on the operator [240] ---------- */
 /* The operator's main job: it gets the most room, and the units and the reports keep at least 110px each. */
+/* ---------- the Decisions card, over the map [257] ---------- */
+/* On the side of the map away from the open decision's points (CommandPost.tsx frames the points
+   in the room it leaves), above the replay bar, below the zoom buttons and the dock. Dragged by its
+   heading, it stays where it is put. With nothing waiting it shrinks to its heading. */
+.deck {
+  position: absolute;
+  /* Over the map's controls and credits (2), under the header's menu: .mapCol isolates them. */
+  z-index: 3;
+  bottom: calc((var(--sheet-h) + 24px) / var(--z));
+  /* The same 360 px and 48% as DECK_W and DECK_SHARE in CommandPost.tsx, which frames the map beside it. */
+  width: min(360px, 48%);
+  max-height: calc(100% - (var(--sheet-h) + 24px + 120px) / var(--z));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(22, 33, 44, 0.97);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  zoom: var(--z);
+}
+
+.deck[data-side="left"] {
+  left: calc(12px / var(--z));
+}
+
+.deck[data-side="right"] {
+  right: calc(12px / var(--z));
+}
+
+.deck[data-pinned] {
+  bottom: auto;
+  left: var(--deck-x);
+  top: var(--deck-y);
+  max-height: var(--deck-h);
+}
+
+.deck[data-idle] {
+  width: auto;
+}
+
 .decisionSection {
-  max-height: 60%;
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  border-bottom: none;
+}
+
+.decisionSection > .h2 {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.deck[data-idle] .decisionSection > .h2 {
+  margin: 0;
+}
+
+.deckIdle {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.unpinBtn {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.unpinBtn:hover {
+  color: var(--text);
+}
+
+/* On a phone the card lies across the bottom of the map, above the replay bar, wherever it was dragged. */
+@media (max-width: 900px) {
+  .deck[data-side],
+  .deck[data-pinned] {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: calc(var(--sheet-h) + 20px);
+    width: auto;
+    max-height: 45%;
+  }
+
+  .deck[data-idle] {
+    right: auto;
+  }
 }
 
 /* The count turns yellow while anything waits. */
@@ -1932,8 +2190,9 @@
 }
 
 /* ---------- big screens: a projector or a wall screen, read from across the room ---------- */
-/* The same pixels are a smaller share of a bigger picture, so the header, the side panel and the
-   replay bar are drawn larger. The map itself is not scaled; CommandPost.tsx enlarges its labels. */
+/* The same pixels are a smaller share of a bigger picture, so the header, the columns, the Decisions
+   card and the replay bar are drawn larger (the card sets its own zoom). The map itself is not scaled;
+   CommandPost.tsx enlarges its labels. */
 .header,
 .side,
 .replayBar,
@@ -1944,7 +2203,6 @@
 
 @media (min-width: 1700px) {
   .root {
-    grid-template-columns: minmax(0, 1fr) 500px;
     --z: 1.25;
     --sheet-h: 90px;
   }
@@ -1963,7 +2221,6 @@
 
 @media (min-width: 2300px) {
   .root {
-    grid-template-columns: minmax(0, 1fr) 640px;
     --z: 1.6;
     --sheet-h: 114px;
   }
