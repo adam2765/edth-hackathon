@@ -18,6 +18,7 @@ import { PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { COMMAND_POST, callsignGiven, callsignOf, sessionCode, type HeldEntry, type HeldReason, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
+import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { SendDrone, TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
@@ -74,7 +75,7 @@ type Spot = { lat: number; lon: number; name: string; when: string; allSilent: b
  * it, so call signs do not overprint. "silent" is written out, because a faded marker alone is easy
  * to miss on a projector.
  */
-function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean): Map<string, Spot> {
+function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean, drawnAt?: (u: UnitState) => LatLon | null): Map<string, Spot> {
   const together = new Map<string, UnitState[]>();
   for (const u of units) {
     if (!u.position || u.positionTs == null) continue;
@@ -84,11 +85,13 @@ function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean): Map
   const out = new Map<string, Spot>();
   for (const [k, group] of together) {
     const p = group[0].position!;
+    // Where the dot is drawn: its place, or a point on the way there while it slides [236].
+    const at = drawnAt?.(group[0]) ?? p;
     const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
     const allSilent = group.every(isSilent);
     const name = group.map((x) => (isSilent(x) && !allSilent ? `${x.callsign} (silent)` : x.callsign)).join(" · ");
     const when = `${p.estimated ? "≈ " : ""}${fmtTime(newest)}${allSilent ? " · silent" : ""}`;
-    out.set(k, { lat: p.lat, lon: p.lon, name, when, allSilent });
+    out.set(k, { lat: at.lat, lon: at.lon, name, when, allSilent });
   }
   return out;
 }
@@ -162,6 +165,18 @@ type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
 /** The size of a track's symbol on the map, before the big-screen steps. The frame is about 1.5 times this. */
 const TRACK_SYMBOL_SIZE = 24;
 
+/** The dots that flow along a unit's arrow [236]: pixels from one to the next, and how far from the unit's marker the first one shows. */
+const FLOW_DOT_GAP = 14;
+const FLOW_DOT_SKIP = 12;
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+/** The computer is set to show less motion: then nothing on the map moves by itself [236]. */
+function subscribeReducedMotion(cb: () => void) {
+  const q = window.matchMedia(REDUCED_MOTION);
+  q.addEventListener("change", cb);
+  return () => q.removeEventListener("change", cb);
+}
+
 /**
  * The way a track is moving, as a bold arrow from the middle of its symbol. milsymbol's own
  * indicator is a thin black line that hardly shows past the frame, so this one is drawn on its own,
@@ -171,8 +186,13 @@ function headingArrow(s: number) {
   return { len: Math.round(2.4 * s), shaft: Math.max(4, Math.round(0.22 * s)), headW: Math.round(0.95 * s), headL: Math.round(0.8 * s), halo: Math.max(2, Math.round(0.1 * s)) };
 }
 
-/** The arrow's image: pointing up, dark with a white edge, its tail at the bottom middle. */
-function headingArrowImage(s: number): ImageData | null {
+/**
+ * The arrow's images: pointing up, dark with a white edge, its tail at the bottom middle. The
+ * first is the still arrow. The rest are the steps of the flow [236]: the same arrow with light
+ * bands across it, each step a little nearer the tip, so shown in turn the bands run the way the
+ * track was said to be moving. The arrow itself never moves, fades or changes shape.
+ */
+function headingArrowImages(s: number): { still: ImageData; flow: ImageData[] } | null {
   const a = headingArrow(s);
   const r = 2;
   const w = a.headW + 2 * a.halo;
@@ -180,28 +200,54 @@ function headingArrowImage(s: number): ImageData | null {
   const canvas = document.createElement("canvas");
   canvas.width = w * r;
   canvas.height = h * r;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.scale(r, r);
   const x = w / 2;
   const tip = a.halo;
   const neck = tip + a.headL;
-  ctx.beginPath();
-  ctx.moveTo(x, tip);
-  ctx.lineTo(x + a.headW / 2, neck);
-  ctx.lineTo(x + a.shaft / 2, neck);
-  ctx.lineTo(x + a.shaft / 2, h);
-  ctx.lineTo(x - a.shaft / 2, h);
-  ctx.lineTo(x - a.shaft / 2, neck);
-  ctx.lineTo(x - a.headW / 2, neck);
-  ctx.closePath();
-  ctx.lineJoin = "round";
-  ctx.lineWidth = 2 * a.halo;
-  ctx.strokeStyle = "#ffffff";
-  ctx.stroke();
-  ctx.fillStyle = "#16212c";
-  ctx.fill();
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(x, tip);
+    ctx.lineTo(x + a.headW / 2, neck);
+    ctx.lineTo(x + a.shaft / 2, neck);
+    ctx.lineTo(x + a.shaft / 2, h);
+    ctx.lineTo(x - a.shaft / 2, h);
+    ctx.lineTo(x - a.shaft / 2, neck);
+    ctx.lineTo(x - a.headW / 2, neck);
+    ctx.closePath();
+  };
+  const gap = Math.round(0.58 * s);
+  const rise = 0.85 * x;
+  const draw = (phase: number | null): ImageData => {
+    ctx.clearRect(0, 0, w, h);
+    trace();
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 2 * a.halo;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.fillStyle = "#16212c";
+    ctx.fill();
+    if (phase != null) {
+      // Bands shaped like the arrow's head, cut to the dark part so the white edge stays whole.
+      ctx.save();
+      trace();
+      ctx.clip();
+      ctx.lineJoin = "miter";
+      ctx.lineWidth = Math.max(3, 0.14 * s);
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      for (let y = tip - rise - phase * gap; y < h + gap; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + rise);
+        ctx.lineTo(x, y);
+        ctx.lineTo(w, y + rise);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  };
+  return { still: draw(null), flow: Array.from({ length: FLOW_STEPS }, (_, i) => draw(i / FLOW_STEPS)) };
 }
 
 /**
@@ -341,6 +387,23 @@ export default function CommandPost() {
   const mapClick = useRef<(e: MapMouseEvent) => void>(() => {});
   /** The track symbol being placed or moved: a marker that can be dragged. */
   const draftMarker = useRef<Marker | null>(null);
+  // Motion on the map [236]. Where each unit and track is drawn while it slides to a new place,
+  // the picture each was last drawn for, and the two drawings, so a slide can run them every frame.
+  const unitSlides = useRef(new Slides());
+  const trackSlides = useRef(new Slides());
+  const unitScene = useRef<Scene | null>(null);
+  const trackScene = useRef<Scene | null>(null);
+  const drawUnits = useRef<(t: number) => void>(() => {});
+  const drawTracks = useRef<(t: number) => void>(() => {});
+  const slideFrame = useRef(0);
+  /** The arrows whose reports are fresh: each unit's shaft from its marker, and the image the tracks' arrows share. */
+  const flowShafts = useRef<{ from: LatLon; to: LatLon }[]>([]);
+  const flowArrow = useRef<{ id: string; frames: ImageData[] } | null>(null);
+  /** The steps of the flowing arrow, by image: one set for each size of symbol. */
+  const flowFrames = useRef(new Map<string, ImageData[]>());
+  /** The tracks on the map at the last drawing, by picture and number: one not among them is new. */
+  const onMapBefore = useRef(new Set<string>());
+  const reducedMotion = useSyncExternalStore(subscribeReducedMotion, () => window.matchMedia(REDUCED_MOTION).matches, () => false);
 
   // ---------- which mission ----------
   // No mission in the address: show the newest open one, or open the missions menu.
@@ -485,6 +548,15 @@ export default function CommandPost() {
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - u.lastHeard > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
   const isOld = useCallback((t: TrackState) => effNow > 0 && effNow - t.seenTs > TRACK_OLD_AFTER_MS, [effNow]);
+  // Things on the map move only while the clock on screen runs [236]: a live mission that has not
+  // ended, or a replay that is playing. A paused replay and an ended mission are one moment, held.
+  const motion = !reducedMotion && (mode === "live" ? ended == null : playing);
+  /** The picture on screen, for telling a step of its clock from a jump, and the longest step. */
+  const sceneKey = `${session ?? ""}:${mode}`;
+  const maxStepMs = Math.max(2500, 3 * STEP_MS * speed);
+  /** A fresh report gave a way of moving: a track's heading, or the place a unit is heading to. */
+  const flowTracks = useMemo(() => view.tracks.some((t) => t.heading && t.position && t.gone == null && !isOld(t)), [view, isOld]);
+  const flowUnits = useMemo(() => view.units.some((u) => u.position?.heading_to && !isSilent(u)), [view, isSilent]);
 
   // ---------- the replay bar ----------
   // The missions opened in this area on the shown one's day, each a stretch from its start to its
@@ -613,7 +685,7 @@ export default function CommandPost() {
       // One handler for the life of the map; what a click does depends on what the command post is doing.
       map.on("click", (e) => mapClick.current(e));
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-task", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "arrow", "arrow-flow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-task", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -646,6 +718,9 @@ export default function CommandPost() {
         map.addLayer({ id: "track-task-line", type: "line", source: "track-task", layout: { "line-cap": "round" }, paint: { "line-color": AFFILIATION_COLOUR.friendly, "line-width": 2, "line-opacity": 0.8 } });
         map.addLayer({ id: "arrow-shaft", type: "line", source: "arrow", filter: ["==", "part", "shaft"], layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-opacity": op } });
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": ["get", "color"], "fill-opacity": op } });
+        // White dots that run along the shaft to the place a unit said it is heading to, while
+        // its report is fresh [236]. They say the report is live, not how fast the unit goes.
+        map.addLayer({ id: "arrow-flow", type: "circle", source: "arrow-flow", paint: { "circle-radius": 1.7, "circle-color": "#ffffff", "circle-opacity": 0.95 } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(255,255,255,0.35)", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-opacity": op } });
         // A symbol drawn off its point, so it hides no unit and no other track: a thin line from the
         // symbol back to the point, and a small dot in the track's colour on the point itself.
@@ -756,47 +831,84 @@ export default function CommandPost() {
     return () => clearTimeout(t);
   }, [mapReady]);
 
+  // A marker slides to its new place [236]: both drawings run every frame until all have arrived.
+  const runSlides = useCallback(() => {
+    if (slideFrame.current) return;
+    const step = () => {
+      const t = performance.now();
+      drawUnits.current(t);
+      drawTracks.current(t);
+      slideFrame.current = unitSlides.current.active(t) || trackSlides.current.active(t) ? requestAnimationFrame(step) : 0;
+    };
+    slideFrame.current = requestAnimationFrame(step);
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(slideFrame.current), []);
+
   // Draw every unit: marker with call sign and time, circle, trail, movement arrow.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const pos: GeoJSON.Feature[] = [];
-    const acc: GeoJSON.Feature[] = [];
-    const trail: GeoJSON.Feature[] = [];
-    const arrows: GeoJSON.Feature[] = [];
-    const targets: GeoJSON.Feature[] = [];
-    // Units on the same spot share one label: the first unit of the spot carries it.
-    const spots = unitSpots(view.units, isSilent);
-    const labelled = new Set<string>();
-    for (const u of view.units) {
-      const op = isSilent(u) ? 0.35 : 1;
-      const color = u.colour;
-      const p = u.position;
-      const pts = [...u.trail, ...(p ? [p] : [])];
-      if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
-      for (const t of u.trail) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [t.lon, t.lat] } });
-      if (!p || u.positionTs == null) continue;
-      const k = spotKey(p);
-      const spot = spots.get(k);
-      const first = !labelled.has(k);
-      labelled.add(k);
-      const name = first ? (spot?.name ?? u.callsign) : "";
-      const when = first ? (spot?.when ?? "") : "";
-      pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [p.lon, p.lat] } });
-      acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
-      if (p.heading_to) {
-        // From the marker, the middle of the circle, so the trail stays visible up to it.
-        if (distanceM(p, p.heading_to) > 5) arrows.push(...arrowFeatures(p, p.heading_to, color, op));
-        targets.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [p.heading_to.lon, p.heading_to.lat] } });
+    // A unit whose place changed with a step of the clock slides there. After a jump (another
+    // mission, live to replay, a drag along the bar) it is drawn where it is.
+    const scene = { key: sceneKey, t: effNow };
+    const slideMs = motion && steppedOn(unitScene.current, scene, maxStepMs) ? (mode === "live" ? SLIDE_MS : SLIDE_MS_REPLAY) : 0;
+    unitScene.current = scene;
+    const places = new Map<string, LatLon>();
+    for (const u of view.units) if (u.position && u.positionTs != null) places.set(u.callsign, u.position);
+    const sliding = unitSlides.current.retarget(places, performance.now(), slideMs);
+    const draw = (now: number) => {
+      const pos: GeoJSON.Feature[] = [];
+      const acc: GeoJSON.Feature[] = [];
+      const trail: GeoJSON.Feature[] = [];
+      const arrows: GeoJSON.Feature[] = [];
+      const targets: GeoJSON.Feature[] = [];
+      const shafts: { from: LatLon; to: LatLon }[] = [];
+      // Units on the same spot share one label: the first unit of the spot carries it.
+      const spots = unitSpots(view.units, isSilent);
+      const labelled = new Set<string>();
+      for (const u of view.units) {
+        const silent = isSilent(u);
+        const op = silent ? 0.35 : 1;
+        const color = u.colour;
+        const p = u.position;
+        // Where the marker is drawn: its place, or a point on the way there while it slides.
+        const q = p ? (unitSlides.current.at(u.callsign, now) ?? p) : null;
+        const pts = [...u.trail, ...(q ? [q] : [])];
+        if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
+        for (const t of u.trail) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [t.lon, t.lat] } });
+        if (!p || !q || u.positionTs == null) continue;
+        const k = spotKey(p);
+        const spot = spots.get(k);
+        const first = !labelled.has(k);
+        labelled.add(k);
+        const name = first ? (spot?.name ?? u.callsign) : "";
+        const when = first ? (spot?.when ?? "") : "";
+        pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
+        acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(q, p.radius_m)] } });
+        if (p.heading_to) {
+          // From the marker, the middle of the circle, so the trail stays visible up to it.
+          if (distanceM(q, p.heading_to) > 5) {
+            const arrow = arrowFeatures(q, p.heading_to, color, op);
+            arrows.push(...arrow);
+            // The dots run along the shaft, from the marker to the arrowhead, while the unit is heard.
+            const [, end] = (arrow[0].geometry as GeoJSON.LineString).coordinates;
+            if (!silent) shafts.push({ from: q, to: { lat: end[1], lon: end[0] } });
+          }
+          targets.push({ type: "Feature", properties: { color, op }, geometry: { type: "Point", coordinates: [p.heading_to.lon, p.heading_to.lat] } });
+        }
       }
-    }
-    const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-    set("pos", pos);
-    set("accuracy", acc);
-    set("trail", trail);
-    set("arrow", arrows);
-    set("target", targets);
-  }, [view, isSilent, mapReady]);
+      flowShafts.current = shafts;
+      const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+      set("pos", pos);
+      set("accuracy", acc);
+      set("trail", trail);
+      set("arrow", arrows);
+      set("target", targets);
+    };
+    drawUnits.current = draw;
+    draw(performance.now());
+    if (sliding) runSlides();
+  }, [view, isSilent, mapReady, motion, sceneKey, effNow, maxStepMs, mode, runSlides]);
 
   // Draw every track: its symbol and label, its circle, where it was seen before, and the line of
   // sight from the unit that reported it.
@@ -804,148 +916,231 @@ export default function CommandPost() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const k = screenScale();
-    const sym: GeoJSON.Feature[] = [];
-    const acc: GeoJSON.Feature[] = [];
-    const trail: GeoJSON.Feature[] = [];
-    const sight: GeoJSON.Feature[] = [];
-    const leader: GeoJSON.Feature[] = [];
-    // Each drone sent to look at a track, from the drone to the track [234]. Not drawn when either is gone or not placed.
-    const task: GeoJSON.Feature[] = [];
-    for (const d of view.tracks) {
-      const seen = d.task ? view.tracks.find((t) => t.n === d.task!.n) : undefined;
-      const a = d.position;
-      const b = seen?.position;
-      if (!a || !b || d.gone != null || seen!.gone != null || distanceM(a, b) < 5) continue;
-      task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
-    }
-    // And from a drone unit on the net, from where it last was [235].
-    for (const u of view.units) {
-      const seen = u.task ? view.tracks.find((t) => t.n === u.task!.n) : undefined;
-      const a = u.position;
-      const b = seen?.position;
-      if (!a || !b || seen!.gone != null || distanceM(a, b) < 5) continue;
-      task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
-    }
-    // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
-    // keeps its spot and a new one moves.
-    const drawn: { id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
     const trackText = Math.round(14 * k);
     const size = Math.round(TRACK_SYMBOL_SIZE * k);
     const ha = headingArrow(size);
+    // The arrow for the way a track is moving: one still image, and one whose bands flow [236].
     const arrowIcon = `track-heading:${size}`;
+    const flowIcon = `track-heading-flow:${size}`;
     if (symbols && !map.hasImage(arrowIcon)) {
-      const img = headingArrowImage(size);
-      if (img) map.addImage(arrowIcon, img, { pixelRatio: 2 });
+      const imgs = headingArrowImages(size);
+      if (imgs) {
+        map.addImage(arrowIcon, imgs.still, { pixelRatio: 2 });
+        map.addImage(flowIcon, imgs.flow[0], { pixelRatio: 2 });
+        flowFrames.current.set(flowIcon, imgs.flow);
+      }
     }
+    const frames = flowFrames.current.get(flowIcon);
+    const canFlow = motion && frames != null && map.hasImage(flowIcon);
+    flowArrow.current = canFlow ? { id: flowIcon, frames } : null;
+    // A track whose place changed with a step of the clock slides there, as a unit does.
+    const scene = { key: sceneKey, t: effNow };
+    const stepped = steppedOn(trackScene.current, scene, maxStepMs);
+    trackScene.current = scene;
+    const places = new Map<string, LatLon>();
+    for (const t of view.tracks) if (t.position && t.positionTs != null && t.gone == null) places.set(String(t.n), t.position);
+    const sliding = trackSlides.current.retarget(places, performance.now(), motion && stepped ? (mode === "live" ? SLIDE_MS : SLIDE_MS_REPLAY) : 0);
     // The label's bottom, in pixels above the point, when no arrow is in its way.
     const liftPlain = 1.9 * trackText;
-    for (const t of [...view.tracks].sort((a, b) => a.n - b.n)) {
-      const p = t.position;
-      // A track marked gone stays in the list, not on the map.
-      if (!p || t.positionTs == null || t.gone != null) continue;
-      const old = isOld(t);
-      const op = old ? 0.45 : 1;
-      const color = AFFILIATION_COLOUR[t.affiliation];
-      const pts = [...t.trail, p];
-      if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
-      acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(p, p.radius_m)] } });
-      if (t.from && !old && distanceM(t.from, p) > 5) {
-        sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [p.lon, p.lat]] } });
+    /** Draws every track as it is at this moment of a slide. Gives where each symbol was drawn, by number. */
+    const draw = (now: number): Map<number, [number, number]> => {
+      const sym: GeoJSON.Feature[] = [];
+      const acc: GeoJSON.Feature[] = [];
+      const trail: GeoJSON.Feature[] = [];
+      const sight: GeoJSON.Feature[] = [];
+      const leader: GeoJSON.Feature[] = [];
+      // Where a unit or a track is drawn: its place, or a point on the way there while it slides.
+      const unitAt = (u: UnitState): LatLon | null => (u.position ? (unitSlides.current.at(u.callsign, now) ?? u.position) : null);
+      const trackAt = (t: TrackState | undefined): LatLon | null => (t?.position ? (trackSlides.current.at(String(t.n), now) ?? t.position) : null);
+      // Each drone sent to look at a track, from the drone to the track [234]. Not drawn when either is gone or not placed.
+      const task: GeoJSON.Feature[] = [];
+      for (const d of view.tracks) {
+        const seen = d.task ? view.tracks.find((t) => t.n === d.task!.n) : undefined;
+        const a = trackAt(d);
+        const b = trackAt(seen);
+        if (!a || !b || d.gone != null || seen!.gone != null || distanceM(a, b) < 5) continue;
+        task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
       }
-      // The symbol image: one per code and size. Some frames are not centred on their own anchor,
-      // so the image is shifted to keep the anchor on the point.
-      let icon = "";
-      let off: [number, number] = [0, 0];
-      if (symbols) {
-        icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
-        if (!map.hasImage(icon)) {
-          const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
-          const canvas = s.asCanvas(2);
-          const ctx = canvas.getContext("2d");
-          if (ctx && canvas.width && canvas.height) {
-            map.addImage(icon, ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 });
-            const { width, height } = s.getSize();
-            const a = s.getAnchor();
-            trackIcons.current.set(icon, [width / 2 - a.x, height / 2 - a.y, width, height]);
-          }
+      // And from a drone unit on the net, from where it last was [235].
+      for (const u of view.units) {
+        const seen = u.task ? view.tracks.find((t) => t.n === u.task!.n) : undefined;
+        const a = unitAt(u);
+        const b = trackAt(seen);
+        if (!a || !b || seen!.gone != null || distanceM(a, b) < 5) continue;
+        task.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] } });
+      }
+      // Each track's symbol and label, before it is laid out: lower numbers first, so an older track
+      // keeps its spot and a new one moves.
+      const drawn: { n: number; id: string; p: LatLon; color: string; op: number; props: Record<string, unknown>; label: string[]; icon: string; lift: number; arrow: Rect | null }[] = [];
+      for (const t of [...view.tracks].sort((a, b) => a.n - b.n)) {
+        const p = t.position;
+        // A track marked gone stays in the list, not on the map.
+        if (!p || t.positionTs == null || t.gone != null) continue;
+        const q = trackAt(t) ?? p;
+        const old = isOld(t);
+        const op = old ? 0.45 : 1;
+        const color = AFFILIATION_COLOUR[t.affiliation];
+        const pts = [...t.trail, q];
+        if (pts.length > 1) trail.push({ type: "Feature", properties: { color, op }, geometry: { type: "LineString", coordinates: pts.map((x) => [x.lon, x.lat]) } });
+        acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(q, p.radius_m)] } });
+        if (t.from && !old && distanceM(t.from, q) > 5) {
+          sight.push({ type: "Feature", properties: { color: colours.get(t.seenBy) ?? "#475569" }, geometry: { type: "LineString", coordinates: [[t.from.lon, t.from.lat], [q.lon, q.lat]] } });
         }
-        const i = trackIcons.current.get(icon);
-        if (i) off = [i[0], i[1]];
+        // The symbol image: one per code and size. Some frames are not centred on their own anchor,
+        // so the image is shifted to keep the anchor on the point.
+        let icon = "";
+        let off: [number, number] = [0, 0];
+        if (symbols) {
+          icon = `track:${trackSymbolCode(t.affiliation, t.kind)}:${size}`;
+          if (!map.hasImage(icon)) {
+            const s = new symbols.Symbol(trackSymbolCode(t.affiliation, t.kind), { size, civilianColor: false, outlineWidth: 3, outlineColor: "#ffffff" });
+            const canvas = s.asCanvas(2);
+            const ctx = canvas.getContext("2d");
+            if (ctx && canvas.width && canvas.height) {
+              map.addImage(icon, ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 });
+              const { width, height } = s.getSize();
+              const a = s.getAnchor();
+              trackIcons.current.set(icon, [width / 2 - a.x, height / 2 - a.y, width, height]);
+            }
+          }
+          const i = trackIcons.current.get(icon);
+          if (i) off = [i[0], i[1]];
+        }
+        // The way it is moving, as said: an arrow from the middle of the symbol. On screen it points
+        // at the heading less the map's turn. When it points up, the label goes above its tip.
+        const heading = symbols && t.heading ? HEADING_DEG[t.heading] : null;
+        let lift = liftPlain;
+        let arrow: Rect | null = null;
+        if (heading != null) {
+          const rad = ((heading - map.getBearing()) * Math.PI) / 180;
+          const [sin, cos] = [Math.sin(rad), Math.cos(rad)];
+          const [tx, ty] = [ha.len * sin, -ha.len * cos];
+          const hw = ha.headW / 2 + ha.halo;
+          arrow = { x0: Math.min(0, tx) - hw, y0: Math.min(0, ty) - hw, x1: Math.max(0, tx) + hw, y1: Math.max(0, ty) + hw };
+          if (cos > 0) lift = Math.max(liftPlain, ha.len * cos + hw * Math.abs(sin) + 0.3 * trackText);
+        }
+        const what = describeTrack(t);
+        const name = `T${t.n} · ${what}`;
+        const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
+        const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
+        // The bands flow while the sighting is fresh. On an old one the arrow is still: the way it
+        // was moving is what was said then, not what is known now.
+        if (heading != null) Object.assign(props, { heading, arrow: canFlow && !old ? flowIcon : arrowIcon });
+        drawn.push({ n: t.n, id: `T${t.n}`, p: q, color, op, icon, label: [name, when], props, lift, arrow });
       }
-      // The way it is moving, as said: an arrow from the middle of the symbol. On screen it points
-      // at the heading less the map's turn. When it points up, the label goes above its tip.
-      const heading = symbols && t.heading ? HEADING_DEG[t.heading] : null;
-      let lift = liftPlain;
-      let arrow: Rect | null = null;
-      if (heading != null) {
-        const rad = ((heading - map.getBearing()) * Math.PI) / 180;
-        const [sin, cos] = [Math.sin(rad), Math.cos(rad)];
-        const [tx, ty] = [ha.len * sin, -ha.len * cos];
-        const hw = ha.headW / 2 + ha.halo;
-        arrow = { x0: Math.min(0, tx) - hw, y0: Math.min(0, ty) - hw, x1: Math.max(0, tx) + hw, y1: Math.max(0, ty) + hw };
-        if (cos > 0) lift = Math.max(liftPlain, ha.len * cos + hw * Math.abs(sin) + 0.3 * trackText);
-      }
-      const what = describeTrack(t);
-      const name = `T${t.n} · ${what}`;
-      const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
-      const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
-      if (heading != null) Object.assign(props, { heading, arrow: arrowIcon });
-      drawn.push({ id: `T${t.n}`, p, color, op, icon, label: [name, when], props, lift, arrow });
-    }
 
-    // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
-    // track drawn before it. Then it is drawn a little way off, in screen pixels, with a line back
-    // to the point. The track's place is the same; only the drawing moves.
-    // The edges of the map count as taken, and the replay bar over its lower edge, so a symbol is
-    // not pushed out of sight. A track whose point is out of sight is not moved at all.
-    const pad = 2;
-    const grow = (r: Rect): Rect => ({ x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad });
-    const box = map.getContainer();
-    const [w, h] = [box.clientWidth, box.clientHeight];
-    const fixed: Rect[] = outside(w, h, Math.round(80 * k));
-    const dot = 2 * (Math.round(9 * k) + 3);
-    const unitText = Math.round(15 * k);
-    for (const s of unitSpots(view.units, isSilent).values()) {
-      const { x, y } = map.project([s.lon, s.lat]);
-      fixed.push(grow(centred(x, y, dot, dot)));
-      const b = textBox([s.name, s.when], unitText);
-      const top = y + 1.1 * unitText;
-      fixed.push(grow({ x0: x - b.w / 2, y0: top, x1: x + b.w / 2, y1: top + b.h }));
-    }
-    const frame = TRACK_SYMBOL_SIZE * k * 1.5;
-    const marks: Mark[] = drawn.map((d) => {
-      const { x, y } = map.project([d.p.lon, d.p.lat]);
-      const i = trackIcons.current.get(d.icon);
-      const b = textBox(d.label, trackText);
-      const bottom = -d.lift;
-      const boxes = [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })];
-      if (d.arrow) boxes.push(grow(d.arrow));
-      return { id: d.id, x, y, boxes };
-    });
-    const inSight = marks.filter((m) => m.x >= 0 && m.y >= 0 && m.x <= w && m.y <= h);
-    const shifts = declutter(inSight, fixed, Math.round(40 * k));
-    marks.forEach((m, n) => {
-      const d = drawn[n];
-      const s = shifts.get(m.id) ?? { dx: 0, dy: 0 };
-      let at: [number, number] = [d.p.lon, d.p.lat];
-      if (s.dx || s.dy) {
-        const q = map.unproject([m.x + s.dx, m.y + s.dy]);
-        at = [q.lng, q.lat];
-        leader.push({ type: "Feature", properties: { op: d.op }, geometry: { type: "LineString", coordinates: [[d.p.lon, d.p.lat], at] } });
-        leader.push({ type: "Feature", properties: { op: d.op, color: d.color }, geometry: { type: "Point", coordinates: [d.p.lon, d.p.lat] } });
+      // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
+      // track drawn before it. Then it is drawn a little way off, in screen pixels, with a line back
+      // to the point. The track's place is the same; only the drawing moves.
+      // The edges of the map count as taken, and the replay bar over its lower edge, so a symbol is
+      // not pushed out of sight. A track whose point is out of sight is not moved at all.
+      const pad = 2;
+      const grow = (r: Rect): Rect => ({ x0: r.x0 - pad, y0: r.y0 - pad, x1: r.x1 + pad, y1: r.y1 + pad });
+      const box = map.getContainer();
+      const [w, h] = [box.clientWidth, box.clientHeight];
+      const fixed: Rect[] = outside(w, h, Math.round(80 * k));
+      const dot = 2 * (Math.round(9 * k) + 3);
+      const unitText = Math.round(15 * k);
+      for (const s of unitSpots(view.units, isSilent, unitAt).values()) {
+        const { x, y } = map.project([s.lon, s.lat]);
+        fixed.push(grow(centred(x, y, dot, dot)));
+        const b = textBox([s.name, s.when], unitText);
+        const top = y + 1.1 * unitText;
+        fixed.push(grow({ x0: x - b.w / 2, y0: top, x1: x + b.w / 2, y1: top + b.h }));
       }
-      sym.push({ type: "Feature", properties: d.props, geometry: { type: "Point", coordinates: at } });
-    });
+      const frame = TRACK_SYMBOL_SIZE * k * 1.5;
+      const marks: Mark[] = drawn.map((d) => {
+        const { x, y } = map.project([d.p.lon, d.p.lat]);
+        const i = trackIcons.current.get(d.icon);
+        const b = textBox(d.label, trackText);
+        const bottom = -d.lift;
+        const boxes = [grow(i ? centred(i[0], i[1], i[2], i[3]) : centred(0, 0, frame, frame)), grow({ x0: -b.w / 2, y0: bottom - b.h, x1: b.w / 2, y1: bottom })];
+        if (d.arrow) boxes.push(grow(d.arrow));
+        return { id: d.id, x, y, boxes };
+      });
+      const inSight = marks.filter((m) => m.x >= 0 && m.y >= 0 && m.x <= w && m.y <= h);
+      const shifts = declutter(inSight, fixed, Math.round(40 * k));
+      const where = new Map<number, [number, number]>();
+      marks.forEach((m, n) => {
+        const d = drawn[n];
+        const s = shifts.get(m.id) ?? { dx: 0, dy: 0 };
+        let at: [number, number] = [d.p.lon, d.p.lat];
+        if (s.dx || s.dy) {
+          const q = map.unproject([m.x + s.dx, m.y + s.dy]);
+          at = [q.lng, q.lat];
+          leader.push({ type: "Feature", properties: { op: d.op }, geometry: { type: "LineString", coordinates: [[d.p.lon, d.p.lat], at] } });
+          leader.push({ type: "Feature", properties: { op: d.op, color: d.color }, geometry: { type: "Point", coordinates: [d.p.lon, d.p.lat] } });
+        }
+        sym.push({ type: "Feature", properties: d.props, geometry: { type: "Point", coordinates: at } });
+        where.set(d.n, at);
+      });
 
-    const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-    set("track", sym);
-    set("track-acc", acc);
-    set("track-trail", trail);
-    set("track-sight", sight);
-    set("track-task", task);
-    set("track-leader", leader);
+      const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+      set("track", sym);
+      set("track-acc", acc);
+      set("track-trail", trail);
+      set("track-sight", sight);
+      set("track-task", task);
+      set("track-leader", leader);
+      return where;
+    };
+    drawTracks.current = draw;
+    const where = draw(performance.now());
     map.setLayoutProperty("track-sym", "text-size", trackText);
-  }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked]);
+    if (sliding) runSlides();
+
+    // A track that has just come onto the map gets one ring, so the eye finds it [236]. Not for
+    // the tracks already there when the page opens, and not after a jump to another moment.
+    const ml = mlRef.current;
+    const onMap = new Set<string>();
+    for (const t of view.tracks) {
+      const at = where.get(t.n);
+      if (!at || t.positionTs == null) continue;
+      const id = `${sceneKey}:${t.n}`;
+      onMap.add(id);
+      if (!ml || !motion || !stepped || onMapBefore.current.has(id) || Math.abs(effNow - t.positionTs) > NEW_TRACK_MS) continue;
+      const el = document.createElement("div");
+      el.className = styles.newTrack;
+      el.style.setProperty("--ring", AFFILIATION_COLOUR[t.affiliation]);
+      el.style.setProperty("--d", `${Math.round(44 * k)}px`);
+      el.appendChild(document.createElement("span"));
+      const ring = new ml.Marker({ element: el }).setLngLat(at).addTo(map);
+      setTimeout(() => ring.remove(), 2200);
+    }
+    onMapBefore.current = onMap;
+  }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked, motion, sceneKey, maxStepMs, mode, runSlides]);
+
+  // The flow [236]: while a fresh report gave a way of moving and the clock runs, the bands on the
+  // tracks' arrows and the dots on the units' arrows take one step every 50 ms. One image serves
+  // every track's arrow, so they all step together. With nothing fresh, nothing ticks.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !motion || !(flowTracks || flowUnits)) return;
+    let step = 0;
+    const tick = () => {
+      step = (step + 1) % FLOW_STEPS;
+      const f = flowArrow.current;
+      if (f && map.hasImage(f.id)) map.updateImage(f.id, f.frames[step]);
+      const box = map.getContainer();
+      const dots: GeoJSON.Feature[] = [];
+      for (const s of flowShafts.current) {
+        const from = map.project([s.from.lon, s.from.lat]);
+        const to = map.project([s.to.lon, s.to.lat]);
+        for (const d of flowDots(from, to, FLOW_DOT_GAP, step / FLOW_STEPS, FLOW_DOT_SKIP)) {
+          if (d.x < 0 || d.y < 0 || d.x > box.clientWidth || d.y > box.clientHeight) continue;
+          const q = map.unproject([d.x, d.y]);
+          dots.push({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [q.lng, q.lat] } });
+        }
+      }
+      (map.getSource("arrow-flow") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: dots });
+    };
+    const id = setInterval(tick, FLOW_TICK_MS);
+    return () => {
+      clearInterval(id);
+      // Not when the page is closing: the map is gone by then.
+      if (mapRef.current === map) (map.getSource("arrow-flow") as GeoJSONSource | undefined)?.setData(EMPTY_FC);
+    };
+  }, [mapReady, motion, flowTracks, flowUnits]);
 
   // On a projector or a wall screen, the map's labels and markers grow with the panels.
   useEffect(() => {
