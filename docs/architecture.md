@@ -70,7 +70,7 @@ flowchart TB
     API <-- "plot a track, answer, name a point, task a drone" --> TOOLS
 ```
 
-The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 195]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap.
+The coordinator is one Next.js app, on Vercel in Paris or on the Mac. The dashed lines are local mode, `PROVIDER_MODE=local`: extraction through Ollama and speech-to-text through whisper-server, both on the computer [83, 195]. The web page joins no mission, so its reports are not saved. The live site keeps no mission logs at all [101]. Both maps load their tiles, fonts and icons from OpenFreeMap in hosted mode, and from the copy saved on the Mac in local mode [236]; see [the map with no internet](#the-map-with-no-internet).
 
 ### A report through the coordinator
 
@@ -135,7 +135,7 @@ no speech-to-text. Developer tools contain scenarios and connection overrides.
 | Speech-to-text | Mistral's API, called from our server in Paris; or Whisper turbo by default, base with `npm start light` on the coordinator in local mode [182] |
 | Intent extraction | Mistral's API, same route; or Ollama on the same computer in local mode [83] |
 | Resolving the place | Our server; plain code, no AI, no outside calls |
-| Map | On the phone; tiles, fonts and icons from OpenFreeMap |
+| Map | In the browser, on the phone page and the command post. Tiles, fonts and icons from OpenFreeMap; in local mode from the copy saved on the coordinator; a plain background with the units if neither loads [236] |
 | Speaking the question | On the web page, in the language the phone is set to [106]. The browser's voice for English and French; for Ukrainian, a Piper voice that runs in the browser [49]. The native transmitter does not speak: the operator asks over the radio [208] |
 | State (position history) | In a mission, in the mission's log on the coordinator, which the resolver and the command post both read [108]. With no mission, on the phone, which sends its last position with each report |
 | Shared map and replay | The command post page, rebuilt from the session log in the browser [98] |
@@ -159,8 +159,42 @@ no speech-to-text. Developer tools contain scenarios and connection overrides.
 | Missions: open, join, check in, end | `lib/reports/record.ts`, `lib/reports/mission.ts`, `app/api/sessions`, `app/api/places`, `components/MissionPanel.tsx`, `transmitter/src/mission.ts`, `transmitter/src/ui/MissionCard.tsx` | Built 20 Nov, evening [107 to 114]. Checked with curl, in a desktop browser (open a mission with a start point, joins, check-in, question, end) and in the iPhone simulator (join, check-in from a scenario step, the mission ending under the phone). Rejoining after the app restarts, and two phones at once, not tried yet. Since decision 208 the transmitter picks a mission instead of joining; joining stays on the coordinator for older phones. |
 | Tracks: what a unit sees, numbered and drawn with APP-6 symbols | `lib/geo/tracks.ts`, `lib/geo/trackKinds.ts`, `lib/reports/fold.ts`, `lib/reports/plot.ts`, `components/CommandPost.tsx`, `components/TrackTools.tsx`, `tests/tracks.test.ts`, `tests/plot.test.ts` | Built Saturday 21 November, steps 1 to 3 of five [145 to 152]: a unit reports a thing by a place or by a distance and direction from itself, the app says its number back, and "Track 3 moved to the station" or "Track 3 is hostile" updates it. Checked with typed reports through hosted Mistral and the local model, on the command post in a desktop browser, and with the 11 synthetic-voice clips of the tracks script through the coordinator (11 of 11). The phone screens were checked in the iPhone simulator, with ALPHA 1's clips sent from the transmitter; screenshots in [tracks.md](tracks.md). Not yet with a real phone or a person's voice. Edits by hand at the command post built the same day [177, 178]: place, change, move, gone and back, and answering for a unit, checked in a desktop browser and in `tests/plot.test.ts`. Not built: a question when a sighting is close to an old track, "Track 3 is gone" said by a unit, range rings. |
 | Recon requests and tasking [234, 235] | `lib/geo/requests.ts`, `lib/reports/tasks.ts`, `lib/reports/record.ts`, `app/api/sessions/[code]/tasks`, `app/api/sessions/[code]/units`, `components/ReconTools.tsx`, `evals/requests.cases.json`, `tests/requests.test.ts`, `tests/tasks.test.ts` | Built Saturday 21 November. A unit asks by radio ("send the drone", "request eyes on"); the request is cut out of the words in code before the model reads them; a person at the command post sends a friendly drone or drone team track, or a unit it marked as one, ends its recon, or declines. Checked with typed reports through the local model, on the command post in a desktop browser: a request with a report, a request on its own, one that names no track, send, recon done, decline and replay ([tracks.md](tracks.md#recon-requests-and-tasking)). The request eval: 84 of 84 cases, 20 of them held out and written without the code. Not with speech or a real phone. |
-| Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); network, HTTPS and offline map not started. See [plan.md](plan.md#local-mode). |
+| The map with no internet [236] | `lib/map/`, `app/api/basemap`, `scripts/build-basemap.ts`, `public/glyphs/`, `tests/basemap.test.ts` | Built Sunday 22 November. Checked for Vincennes in a desktop browser that refused every host but the coordinator, on the dev server: street names, a unit and a track, panned, zoomed and reloaded. Kyiv and Izium looked at once each. The production server was checked to serve the files. Not yet checked on the stage Mac with its Wi-Fi off. See [below](#the-map-with-no-internet). |
+| Local (uplink-off) mode | | Local extraction built (`PROVIDER_MODE=local`, [83, 84]); the map built [236]; network and HTTPS not started. See [plan.md](plan.md#local-mode). |
 | Evaluation harness beyond unit tests | | Planned, not started |
+
+## The map with no internet
+
+Built on Sunday 22 November [236]. MapLibre adds the units, tracks and arrows only after the map's style has loaded, so the page fetches the style first and picks one of three (`lib/map/baseMap.ts`):
+
+| Style | Where it comes from | When |
+|---|---|---|
+| Hosted | OpenFreeMap's "liberty" style, tiles, fonts and icons, over the internet | Hosted mode, or `BASEMAP=hosted` |
+| Saved | `public/basemap/` on the coordinator, written by `npm run basemap -- <area>`; not in git | Local mode (`PROVIDER_MODE=local`), or `BASEMAP=local` |
+| Plain | A grey background and the label fonts in `public/glyphs/`, which are in git | Neither of the others could be loaded |
+
+The coordinator says which of the first two it prefers (`GET /api/basemap`). The page tries that one, then the other, then the plain background. The map's corner says which is in use: "Map saved on this computer", or "Base map not available. Units and tracks still draw."
+
+```mermaid
+flowchart LR
+    PAGE["Map page<br/>loadBaseMap()"] -- "which one?" --> PREF["GET /api/basemap<br/>PROVIDER_MODE, BASEMAP"]
+    PAGE -- "saved" --> FILES[("public/basemap/<br/>style, tiles, fonts, icons")]
+    PAGE -- "hosted" --> OFM["OpenFreeMap"]
+    PAGE -- "neither" --> PLAIN["Plain background<br/>public/glyphs/"]
+    SCRIPT["npm run basemap -- vincennes<br/>once, with internet"] --> FILES
+    OFM --> SCRIPT
+```
+
+What the script saves for one area, and what it leaves out:
+
+- **Tiles from zoom 0 to 14,** the most detailed OpenFreeMap has; closer in, the map draws the zoom-14 tiles larger. The area's own tiles, two more around them from zoom 12 to 14, one more from 8 to 11, none below. For Vincennes: 154 tiles, 27.7 MB downloaded, 45 MB on disk.
+- **Outside the saved tiles** the map draws the nearest saved tile above, with less detail: 6 km east of Vincennes the small streets' names are gone, 25 km east only main roads are left. Far from every saved area it should be empty at street zooms: MapLibre looks at most ten zoom levels up (read in its code, not looked at). The saved source is marked `sparse` for this.
+- **Fonts** for the letters found in the saved tiles, in Noto Sans Regular, Bold and Italic. MapLibre draws Chinese, Japanese, Korean and joined scripts with a font of the computer, and any letter whose file is missing.
+- **Icons** at both sizes, and the shaded relief up to zoom 6.
+- **Every address in the saved style points at the coordinator,** and the tile index is written into it. `tests/basemap.test.ts` checks that no address leaves.
+- **OpenFreeMap's terms** for offline downloads (read 22 November): at most 3,000 tiles or 50 MB a download, 4 requests at a time, a User-Agent that names the app. The script keeps to them, so it takes one area a run.
+
+Each area is one run: `npm run basemap -- vincennes`, then `kyiv`, then `izium`. Kyiv is 210 tiles and 13.2 MB of download, Izium 253 tiles and 5.6 MB; the three together are 75 MB on disk. On a computer where an area was not fetched, a mission there has little or nothing under its units.
 
 **Deploys.** The live site is https://edth-hackathon.vercel.app. It is deployed with the Vercel CLI from Alex's account; the project is not connected to GitHub, so a push does not deploy. Production is at commit `e030cc3`, deployed on Saturday 21 November at 09:10 and checked with typed reports in all three areas. The live site keeps no reports, so it has no missions and its command post stays empty [101]. `.vercelignore` says what the CLI must not upload: it does not read `.gitignore` [144]. Before changing it, look at what would go up with `vercel deploy --prod --dry`.
 

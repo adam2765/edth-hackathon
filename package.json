@@ -11,6 +11,7 @@
     "test": "vitest run",
     "stt": "node scripts/stt-server.mjs",
     "gazetteer": "tsx scripts/build-gazetteer.ts",
+    "basemap": "tsx scripts/build-basemap.ts",
     "scenarios": "node scripts/build-scenarios.mjs && tsx scripts/build-transmitter-hints.ts",
     "eval:extract": "tsx scripts/eval-extraction.ts",
     "eval:format": "tsx scripts/eval-format.ts",

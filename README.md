@@ -191,6 +191,8 @@ Unrelated processes are left alone.
 
 Install the host tools and Ollama model using [setup](docs/setup.md#install-once). On macOS the tools are `brew install ollama whisper.cpp ffmpeg`. Then use Build followed by Start above; Build prepares the Whisper models once.
 
+The map works offline too. `npm run basemap -- vincennes` saves the area's tiles, fonts and icons from OpenFreeMap into `public/basemap/` once, with internet (28 MB; `kyiv` and `izium` are one run each, 13 and 6 MB). In offline mode both maps read that copy and ask no other host. With no saved copy and no internet, the units and tracks draw on a plain background and the map's corner says so. `BASEMAP=hosted` or `BASEMAP=local` picks the map whatever the mode [236].
+
 `LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server warms the model and each area's prompt. The launcher waits for this before showing Ready.
 
 Measured on 20 Nov on the MacBook (M1 Pro, 32 GB), the 9 scenario texts through extraction and the resolver:
@@ -251,4 +253,4 @@ DECISIONS.md                               every choice made, one line each
 AGENTS.md                                  instructions for coding agents (Claude Code and Codex read the same file)
 ```
 
-Map data © OpenStreetMap contributors (ODbL). Tiles by OpenFreeMap / OpenMapTiles.
+Map data © OpenStreetMap contributors (ODbL). Tiles by OpenFreeMap / OpenMapTiles. Label fonts: Noto Sans (SIL Open Font License 1.1, [public/glyphs/README.md](public/glyphs/README.md)).
