@@ -1,6 +1,7 @@
 /**
  * Saving to the shared record: missions, joins, reports, answers, the command post's plots and
- * ends, radio reports held for the operator and what the operator did with them. Server only.
+ * ends, a unit it placed by hand, radio reports held for the operator and what the operator did
+ * with them. Server only.
  */
 import type { AreaId } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
@@ -8,7 +9,7 @@ import type { Intent, LastPosition, Resolution } from "@/lib/geo/types";
 import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, missionRoster, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
-import { nextTrackNumber, plotPosition, type PlotInput } from "./plot";
+import { nextTrackNumber, plotPosition, type FixInput, type PlotInput } from "./plot";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { AUDIO_FILE, getStore, newEntryId, withSessionLock } from "./store";
 import { checkTask, checkUnit, trackInLog, type TaskInput, type UnitInput } from "./tasks";
@@ -16,6 +17,7 @@ import type {
   AnswerEntry,
   DismissEntry,
   EndEntry,
+  FixEntry,
   HeldEntry,
   HeldReason,
   JoinEntry,
@@ -513,7 +515,8 @@ export async function recordAnswer(session: string, reportId: string, choice: st
     // is it?") can only be closed; one the unit has moved past, by reporting again, is closed already.
     const asked = foldLog(entries).feed.find((f) => f.id === reportId);
     if (!asked?.question) return { ok: false, status: 400, error: "That report asked nothing." };
-    if (asked.overtaken) return { ok: false, status: 409, error: `${report.callsign} has reported again since, so that question is closed.` };
+    // Closed by the unit's next report [241], or by a person placing the unit by hand [243].
+    if (asked.overtaken) return { ok: false, status: 409, error: asked.byHand ? `${report.callsign} has been placed by hand since, so that question is closed.` : `${report.callsign} has reported again since, so that question is closed.` };
     if (report.resolution.status !== "ambiguous" && choice !== null) return { ok: false, status: 400, error: "That question had no choices: it can only be closed." };
     let position = null;
     // A question about a track: the choice places the track, and the speaker stays where they are.
@@ -536,6 +539,31 @@ export async function recordAnswer(session: string, reportId: string, choice: st
       ...(track ? { track } : {}),
       ...(by ? { by } : {}),
     };
+    await store.append(entry);
+    return { ok: true, entry };
+  });
+}
+
+// ---- a unit placed by hand at the command post ----
+
+/**
+ * Saves where a person at the command post put a unit [243]: a click on the map, or a place picked
+ * by name, checked against the mission's area and named from the gazetteer, as for a track. Only a
+ * unit on the roster: placing never makes a unit, as a transcript never does [200]. The unit's own
+ * question about where it is closes with it; the fold does that.
+ */
+export async function recordFix(session: string, input: FixInput, by: string, now = Date.now()): Promise<{ ok: true; entry: FixEntry } | Refusal> {
+  const store = getStore();
+  if (store.kind === "none") return NO_RECORD;
+  return withSessionLock(session, async () => {
+    const { entries } = await store.list(session);
+    const mission = missionOf(entries);
+    if (!mission) return NO_MISSION;
+    if (endOf(entries)) return ENDED;
+    if (!missionRoster(entries).includes(input.callsign)) return { ok: false, status: 404, error: `${input.callsign} is not on this mission's roster.` };
+    const position = plotPosition(input.where, input.radius_m, mission.area, loadGazetteer(mission.area));
+    if (typeof position === "string") return { ok: false, status: 400, error: position };
+    const entry: FixEntry = { kind: "fix", id: newEntryId(now), session, ts: now, by, callsign: input.callsign, position, note: input.note };
     await store.append(entry);
     return { ok: true, entry };
   });

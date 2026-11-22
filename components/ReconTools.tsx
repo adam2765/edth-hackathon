@@ -9,7 +9,7 @@
  * What can be sent [235]: a friendly drone or drone-team track on the map, or a unit on the net that
  * a person at the command post said is a drone or drone team. Never one read from its call sign.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { canLook, describeTrack, RECON_KINDS, TRACK_KIND_NAME, TRACK_KINDS } from "@/lib/geo/trackKinds";
 import type { TrackKind } from "@/lib/geo/types";
 import { unitKindWord, type RequestState, type TrackState, type UnitState } from "@/lib/reports/fold";
@@ -262,6 +262,8 @@ export function UnitRecon(props: {
   fmt: (ts: number) => string;
   onKind: (callsign: string, kind: TrackKind | null) => void;
   onTask: (body: TaskBody, done: string) => void;
+  /** More that a person can do to the unit, on the same line: placing it by hand [243]. Shown only while the mission can be changed. */
+  children?: ReactNode;
 }) {
   const u = props.unit;
   const looking = u.task ? `Looking at Track ${u.task.n} since ${props.fmt(u.task.ts)}` : null;
@@ -289,6 +291,7 @@ export function UnitRecon(props: {
       </select>
       {looking ? <span className={styles.hint}>{looking}</span> : null}
       {u.task ? <EndRecon label={u.callsign} n={u.task.n} busy={props.busy} onDone={() => props.onTask({ action: "done", unit: u.callsign }, `${u.callsign}: recon done`)} /> : null}
+      {props.children}
     </div>
   );
 }

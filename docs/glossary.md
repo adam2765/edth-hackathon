@@ -9,7 +9,7 @@
 | Block | The stretch of street from one crossing to the next. "Two blocks east" is counted in crossings along the street lines, never turned into metres [184] |
 | Call sign | The name a speaker reports under, such as ALPHA 2. Stored in capitals. On a radio net it is said at the start of the report and read from the words against the mission's roster [202] |
 | Check-in | A unit's first report that names a place. It replaces the start point |
-| Command post (CP) | The shared map at the base, with every call sign, the tracks and a replay, at `/cp` (`?session=<code>` for one mission). It opens and ends missions, places and edits tracks by hand, and answers a unit's open question from its Decisions list [240]. Called the receiver, at `/receiver`, before 21 Nov; the old address still leads there |
+| Command post (CP) | The shared map at the base, with every call sign, the tracks and a replay, at `/cp` (`?session=<code>` for one mission). It opens and ends missions, places and edits tracks by hand, places a unit by hand when the app got it wrong [243], and answers a unit's open question from its Decisions list [240]. Called the receiver, at `/receiver`, before 21 Nov; the old address still leads there |
 | Clock direction | "At 3 o'clock": a way given as an hour on a clock face. Read in code. 12 o'clock is north, as on the map, or the way the speaker said they face [198, 224] |
 | Bearing | "Bearing 060", "azimut 120", "1600 mils": a way given as an angle from north, in degrees or NATO mils (6400 to the circle). Read in code, to the degree [229] |
 | Coordinator | The server endpoint that turns a report into a placement |
@@ -24,6 +24,7 @@
 | Mission | A run of the demo or an exercise: a code (`vincennes-1`), a name, an area, an optional start point, open or ended. One log. The code calls it a session |
 | Overtaken | A question the unit has moved past by reporting again: it is closed, leaves the Decisions list, and an answer to it is refused [241] |
 | Recon done | The command post ends a drone's task: the line goes, and the drone is free to send again. Only a person ends a task [234] |
+| Placed by hand (a unit) | A unit the operator put on the map at the command post, because the app did not place it or placed it wrongly: a click, a dragged dot or a place by name, then a confirm. One `fix` line in the log; no model is involved. The units list says "placed by CP" until the unit's next report [243] |
 | Plot | A change to a track made by hand at the command post: place, change, move, gone or back. One `plot` line in the log; no model is involved |
 | Request (for recon) | A unit asking by radio for a drone to look at a track: "send the drone", "request eyes on", «envoyez le drone», «потрібна пташка». Read from the words in code and cut out before the model reads the rest. It waits in the command post's Recon requests tray until a person sends a drone or declines [234] |
 | Session | The code's word for a mission: one code, one append-only log |
