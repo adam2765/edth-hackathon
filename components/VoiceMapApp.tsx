@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
+import { loadBaseMap } from "@/lib/map/baseMap";
 import MapTools from "./MapTools";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
 import { loadingLabel, ukrainianVoice } from "@/lib/tts/ukrainianVoice";
@@ -63,7 +64,6 @@ const langStore = {
     return () => window.removeEventListener(LANG_EVENT, cb);
   },
 };
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const MAX_CLIP_MS = 15_000;
 const HOLD_THRESHOLD_MS = 400;
 const MIN_CLIP_MS = 350;
@@ -287,16 +287,16 @@ export default function VoiceMapApp() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ml = await import("maplibre-gl");
+      const [ml, base] = await Promise.all([import("maplibre-gl"), loadBaseMap()]);
       if (cancelled || !mapEl.current) return;
       ml.setWorkerUrl("/maplibre-gl-worker.mjs");
       mlRef.current = ml;
       const map = new ml.Map({
         container: mapEl.current,
-        style: STYLE_URL,
+        style: base.style,
         center: [AREAS[areaStore.get()].centre.lon, AREAS[areaStore.get()].centre.lat],
         zoom: AREAS[areaStore.get()].zoom,
-        attributionControl: { compact: false, customAttribution: "© OpenStreetMap contributors" },
+        attributionControl: { compact: false, customAttribution: base.attribution },
       });
       map.addControl(new ml.NavigationControl({ showCompass: true }), "top-right");
       map.on("load", () => {

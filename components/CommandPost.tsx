@@ -24,7 +24,7 @@ import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, TrackCard, Trac
 import { SendDrone, TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+import { loadBaseMap } from "@/lib/map/baseMap";
 const POLL_MS = 1000;
 /** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
@@ -658,17 +658,17 @@ export default function CommandPost() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ml = await import("maplibre-gl");
+      const [ml, base] = await Promise.all([import("maplibre-gl"), loadBaseMap()]);
       if (cancelled || !mapEl.current) return;
       ml.setWorkerUrl("/maplibre-gl-worker.mjs");
       mlRef.current = ml;
       const start = AREAS[DEFAULT_AREA];
       const map = new ml.Map({
         container: mapEl.current,
-        style: STYLE_URL,
+        style: base.style,
         center: [start.centre.lon, start.centre.lat],
         zoom: start.zoom,
-        attributionControl: { compact: false, customAttribution: "© OpenStreetMap contributors" },
+        attributionControl: { compact: false, customAttribution: base.attribution },
       });
       map.addControl(new ml.NavigationControl({ showCompass: true }), "top-right");
       // Moving the map by hand stops it following the units until "Follow" is pressed.
@@ -1867,7 +1867,7 @@ export default function CommandPost() {
           </div>)}
           {!mapReady ? (
             <div className={styles.mapNote} role="status">
-              {mapSlow ? "The map has not loaded yet. It needs the network for its tiles. Units and reports still show in the lists." : "Loading the map…"}
+              {mapSlow ? "The map has not loaded yet. Units and reports still show in the lists." : "Loading the map…"}
             </div>
           ) : null}
           {lost ? (

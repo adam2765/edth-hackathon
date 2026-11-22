@@ -31,6 +31,8 @@ lib/geo/requests.ts         a request for recon ("send the drone"), read from th
 lib/reports/radio.ts        a radio report: who sent it, or why it waits in the command post's Unassigned tray
 data/gazetteer.<area>.json  place data from OpenStreetMap (vincennes, kyiv, izium); rebuilt by a script, not by hand
 components/VoiceMapApp.tsx  the phone web page
+lib/map/                    which map style the map pages start with: OpenFreeMap's, the copy saved on the coordinator, or a plain background; what to save for an area
+public/glyphs/              the label fonts, in git, so labels draw with no internet; public/basemap/ is the saved map, fetched by a script, not in git
 lib/tts/                    Ukrainian voice in the browser (onnxruntime-web)
 scenarios/                  scripted reports with expected answers
 evals/                      extraction and reply evals: cases, baselines, saved runs, the prompt journal; the call-sign and request evals' cases; the stage lines
@@ -55,6 +57,7 @@ npm test                    # unit tests; no network or key needed
 npx tsc --noEmit            # type-check (excludes transmitter/)
 npm run lint
 npm run gazetteer -- kyiv   # rebuild data/gazetteer.<area>.json from Overpass (network)
+npm run basemap -- vincennes   # save the area's map for offline mode into public/basemap/ (network; one area a run)
 npm run scenarios           # regenerate scenario clips (macOS only, uses `say`)
 npm run eval:extract        # score intent extraction (evals/README.md); needs a key or PROVIDER_MODE=local
 npm run eval:outcomes -- --check   # check the eval's expected outcomes against the resolver (no model)

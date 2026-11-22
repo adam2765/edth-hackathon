@@ -33,7 +33,15 @@ npm ci
 npm ci --prefix transmitter
 npm run setup --prefix transmitter
 ollama pull ministral-3:3b
+npm run basemap -- vincennes
 ```
+
+The last line saves the map for offline mode: the Vincennes tiles, fonts and icons from
+OpenFreeMap, 28 MB of download, into `public/basemap/`, which is not in git. Run it once on
+each computer, with internet, before Start. Run it again for `kyiv` (13 MB) and `izium`
+(6 MB), one area a run; the three are 75 MB on disk. Check: each run ends with "Done" and
+the areas saved so far. Without it the map uses OpenFreeMap when there is internet, and a
+plain background with the units when there is none.
 
 The phone records compressed audio and sends it to the coordinator; no speech model is
 prepared or downloaded on the phone. Its setup command prepares the native launcher’s project-specific startup instructions. Existing native libraries stay compatible, so this change needs a JavaScript reload,
@@ -82,8 +90,10 @@ Voice-to-text is on the coordinator, with no phone provider/model controls.
 Android USB uses reverse forwarding; Start restores it without launching the app. On an
 iPhone the app reaches the host’s `.local` name. iPhone builds still need Mac/Xcode and
 signing; free provisioning expires after seven days. Windows and physical-phone deployment
-paths need validation on the relevant hardware. Offline inference works without internet;
-map tiles still need it.
+paths need validation on the relevant hardware. Offline inference works without internet,
+and so does the map for an area saved with `npm run basemap -- <area>`. The map's corner says
+"Map saved on this computer" when it is in use. `BASEMAP=hosted` or `BASEMAP=local` before
+Start picks the map whatever the mode.
 
 ## Advanced console use
 
@@ -98,6 +108,7 @@ component. The three normal commands above remain the daily procedure.
 | Local speech-to-text | `npm run start:stt` (after Build prepares models) |
 | Phone code server | `npm run start:phone` |
 | Web development server | `npm run dev -- -p 3117` |
+| Save the map for offline mode | `npm run basemap -- vincennes` (then restart the coordinator) |
 
 `npm start` selects regular mode: Whisper large-v3-turbo and a resident Ollama model.
 `npm start light` selects Whisper base and releases Ollama after 30 seconds of inactivity;
@@ -130,6 +141,8 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 - **Missing Ollama model:** install `ministral-3:3b` once, then Start.
 - **Phone not detected:** unlock, reconnect and accept trust/debugging; use one connected phone.
 - **Coordinator without a mission:** use Start mission on the command post.
+- **Map is a plain background, "Base map not available":** no internet and no saved map. Run `npm run basemap -- vincennes` with internet, then Start again. Units and tracks draw meanwhile.
+- **Map is coarse or empty away from the area:** only the tiles around the area are saved.
 - **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
 - **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
 
