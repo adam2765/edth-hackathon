@@ -110,6 +110,54 @@ describe("on replies written without seeing the reader", () => {
     // "узвіз" for "узвозом": the vowel changes with the case, and the reader does not follow it.
     expect(picks.filter((c) => readHeld(c)?.choice !== c.choice).map((c) => c.reply)).toEqual(["Володимирський узвіз."]);
   });
+
+  // A second round, by another agent that had seen neither the reader nor the first round: 110
+  // replies, 57 of them on ten questions of its own, with choice sets the reader had never met.
+  // The first run picked wrongly six times: «Да нет.» as yes; "Yes, the impasse." as yes to a rue;
+  // "Au 2, avenue de la République." as choice 2; «ближня» by distance, against a name; «перша»
+  // and «перша гімназія» as the first in the list, against Гімназія №1. Fixed, so no longer unseen.
+  interface NewQuestion {
+    choices: { name: string; category: Category; town?: string | null; distance_m?: number }[];
+  }
+  const second = JSON.parse(readFileSync(join(__dirname, "../evals/replies.heldout2.cases.json"), "utf8")) as { questions: Record<string, NewQuestion>; cases: Held[] };
+  const choicesFor = (key: string): PickChoice[] =>
+    second.questions[key]
+      ? second.questions[key].choices.map((c) => ({ name: c.name, category: c.category, town: c.town ?? undefined, distance_m: c.distance_m }))
+      : choicesOf(file.questions[key]);
+  const readSecond = (c: Held) => readPick(withoutClosing(c.reply), choicesFor(c.question));
+  const SAME_IN_BOTH_ROUNDS = ["Say again the second one.", "Stand by one.", "The middle one.", "Володимирський узвіз", "Об'єкт два.", "найдальша", "найближча"];
+
+  it("the second round: ten new questions, and no reply seen before", () => {
+    expect(second.cases.length).toBe(110);
+    expect(Object.keys(second.questions).length).toBe(10);
+    expect(second.cases.filter((c) => second.questions[c.question]).length).toBe(57);
+    const seen = new Set(file.cases.map((c) => c.reply));
+    for (const c of second.cases) {
+      expect(second.questions[c.question] ?? file.questions[c.question], c.id).toBeDefined();
+      expect(seen.has(c.reply), `${c.id}: ${c.reply}`).toBe(false);
+    }
+    // Its writer had not seen round one either, so a few short replies came out the same in both.
+    const first = new Set(held.map((c) => c.reply.toLowerCase().replace(/[.!?]+$/, "")));
+    expect(second.cases.filter((c) => first.has(c.reply.toLowerCase().replace(/[.!?]+$/, ""))).map((c) => c.reply)).toEqual(SAME_IN_BOTH_ROUNDS);
+  });
+
+  it("the second round: never picks a choice that was not meant", () => {
+    const wrong = second.cases.flatMap((c) => {
+      const got = readSecond(c);
+      if (!got) return [];
+      const fine = got.choice === c.choice && (c.expect === "pick" || c.ambiguous === true);
+      return fine ? [] : [`${c.id}: “${c.reply}” read as choice ${got.choice}`];
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it("the second round: settles 31 of the 39 clear picks, and reads the rest as nothing", () => {
+    const picks = second.cases.filter((c) => c.expect === "pick" && !c.ambiguous);
+    expect(picks.length).toBe(39);
+    // A transcriber's "marie" for mairie, a vowel that changes with the case, and the careful rules
+    // for a number that a name also holds ("La deuxième." beside Rue des Deux Communes).
+    expect(picks.filter((c) => readSecond(c)?.choice !== c.choice).length).toBe(8);
+  });
 });
 
 describe("the closed forms", () => {
@@ -157,6 +205,46 @@ describe("the closed forms", () => {
     expect(readPick("Собор.", churches)).toEqual({ choice: 1, how: "name" });
     // "У парку" is a park, not Парковий міст.
     expect(readPick("У парку.", [{ name: "Парковий міст", category: "bridge" }, { name: "Київський фунікулер", category: "bridge" }])).toBeNull();
+  });
+
+  it("what the second unseen round caught", () => {
+    // «Да нет» is a no; "yes, the impasse" names another street than the rue asked about.
+    expect(readPick("Да нет.", one)).toBeNull();
+    const rue: PickChoice[] = [{ name: "Rue des Quatre Ruelles", category: "street", distance_m: 350 }];
+    expect(readPick("Yes.", rue)).toEqual({ choice: 1, how: "yes" });
+    expect(readPick("Yes, the impasse.", rue)).toBeNull();
+    // A house number beside a street name two choices share is not choice 2.
+    const avenues: PickChoice[] = [
+      { name: "Avenue de la République", town: "Vincennes", category: "street", distance_m: 220 },
+      { name: "Avenue de la République", town: "Fontenay-sous-Bois", category: "street", distance_m: 1400 },
+      { name: "Place de la République", category: "park", distance_m: 240 },
+    ];
+    expect(readPick("Au 2, avenue de la République.", avenues)).toBeNull();
+    expect(readPick("fontenay sous bois", avenues)).toEqual({ choice: 2, how: "name" });
+    // "The near one": the nearer choice, or the one named after the Near Caves? Not sure, so nothing.
+    const towers: PickChoice[] = [
+      { name: "Дзвіниця Дальніх печер", category: "building", distance_m: 240 },
+      { name: "Дзвіниця Ближніх печер", category: "building", distance_m: 660 },
+    ];
+    expect(readPick("ближня", towers)).toBeNull();
+    expect(readPick("Ближніх печер.", towers)).toEqual({ choice: 2, how: "name" });
+    // "The first": first in the list, or Гімназія №1, which is third? Nothing. A number no name holds is fine.
+    const schools: PickChoice[] = [
+      { name: "Гімназія №3", category: "school", distance_m: 310 },
+      { name: "Школа № 2", category: "school", distance_m: 350 },
+      { name: "Гімназія №1", category: "school", distance_m: 1250 },
+    ];
+    expect(readPick("перша", schools)).toBeNull();
+    expect(readPick("перша гімназія", schools)).toBeNull();
+    expect(readPick("2-га", castle)).toEqual({ choice: 2, how: "number" });
+    // A compass adjective in another case names the street.
+    const streets: PickChoice[] = [
+      { name: "Південна вулиця", category: "street", distance_m: 120 },
+      { name: "Південний провулок", category: "street", distance_m: 135 },
+      { name: "Північна вулиця", category: "street", distance_m: 700 },
+    ];
+    expect(readPick("на Північній", streets)).toEqual({ choice: 3, how: "name" });
+    expect(readPick("Південна.", streets)).toBeNull();
   });
 
   it("the kind, when it tells the choices apart; a name both share tells nothing", () => {

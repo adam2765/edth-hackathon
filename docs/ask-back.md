@@ -99,7 +99,23 @@ For that, an agent that had not seen the reader wrote 80 more replies from the r
 | Replies that are not picks | 41 of 44 read as nothing, **3 picked wrongly** |
 | Ambiguous, by the writer's own mark | 7: no pick of the other choice |
 
-The three wrong picks: "Les deux." (both) read as choice 2; "Лікарня." read as the one choice with that word in its name, though it is the question's own word; "У парку." (a park) read as Парковий міст. All three are fixed, with four of the five misses ("à vous" and «приём» for over, "la seconde", "le 2ème"), and the 80 cases now run in `npm test` as a guard. So they are no longer unseen: the honest number for unseen words is the first run's, 3 wrong picks in 44 replies built to cause one. A second unseen round has not been run.
+The three wrong picks: "Les deux." (both) read as choice 2; "Лікарня." read as the one choice with that word in its name, though it is the question's own word; "У парку." (a park) read as Парковий міст. All three are fixed, with four of the five misses ("à vous" and «приём» for over, "la seconde", "le 2ème"), and the 80 cases now run in `npm test` as a guard. So they are no longer unseen: the honest number for unseen words is the first run's, 3 wrong picks in 44 replies built to cause one.
+
+A second round followed the same day, by another agent that had seen neither the reader nor the first round (`evals/replies.heldout2.cases.json`): 110 replies, 57 of them on ten questions of its own, with choices the reader had never met (two schools named by number, a bell tower of the Near Caves and one of the Far Caves, a street in two towns). Seven of its replies came out the same as in round one. On the first run, with round one's fixes in:
+
+| What | Result |
+|---|---|
+| Clear picks | 31 of 39 right, 8 read as nothing, none wrong |
+| Replies that are not picks | 56 of 61 read as nothing, **5 picked wrongly** |
+| Ambiguous, by the writer's own mark | 10: **1 picked the other choice** |
+
+The six wrong picks: «Да нет.» (Russian for no) read as yes; "Yes, the impasse." read as yes to Rue des Quatre Ruelles, though it names another street; "Au 2, avenue de la République." read as choice 2, from a house number; «ближня» read as the nearer choice, though the other one is named Ближніх печер; «перша» and «перша гімназія» read as the first in the list, though Гімназія №1 is the third. Five of the six were on the new questions. All six are fixed, and the 110 run in `npm test`.
+
+What the two rounds say:
+
+- **A plain answer is read right or not at all.** Of 68 clear picks, 55 were read right, 13 as nothing, none wrongly.
+- **An odd reply is sometimes read as a pick:** 8 of 105 replies built to cause that, 7% in the first round and 8% in the second. The first round's fixes did not bring the second round's rate down, so a third round would most likely find more.
+- **It is a suggestion, and has to stay one.** A wrong pick shows a wrong choice already picked, with the unit's words beside it. The operator's confirm is the check, which is one more reason not to build choosing without it.
 
 Not built: choosing without the operator's confirm. A mentor called that an optional switch (22 Nov), and Alex left it out. Not read here: the radio words (say again, wait one, disregard), "none", a correction, and every reply that needs a reading ("the one by the big roundabout"). A phone that names its call sign, and a held report the operator gives to a unit, are read as reports as before.
 

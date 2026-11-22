@@ -1,0 +1,245 @@
+{
+  "questions": {
+    "new-quatre-ruelles-en": {
+      "area": "vincennes",
+      "lang": "en",
+      "about": "self",
+      "text": "I can't find \"Cat Ruel\". Do you mean Rue des Quatre Ruelles?",
+      "choices": [
+        { "name": "Rue des Quatre Ruelles", "category": "street", "distance_m": 350 }
+      ]
+    },
+    "new-hotels-en": {
+      "area": "vincennes",
+      "lang": "en",
+      "about": "self",
+      "text": "Which hotel: Hôtel du Château, Motel One, or Le Home?",
+      "choices": [
+        { "name": "Hôtel du Château", "category": "hotel", "distance_m": 70 },
+        { "name": "Motel One", "category": "hotel", "distance_m": 60 },
+        { "name": "Le Home", "category": "hotel", "distance_m": 480 }
+      ]
+    },
+    "new-deux-communes-fr": {
+      "area": "vincennes",
+      "lang": "fr",
+      "about": "self",
+      "text": "Laquelle : Rue des Deux Communes ou Rue des Trois Territoires ?",
+      "choices": [
+        { "name": "Rue des Deux Communes", "category": "street", "distance_m": 260 },
+        { "name": "Rue des Trois Territoires", "category": "street", "distance_m": 610 }
+      ]
+    },
+    "new-fort-neuf-fr": {
+      "area": "vincennes",
+      "lang": "fr",
+      "about": "self",
+      "text": "Lequel : Fort Neuf ou Fort Neuf de Vincennes ?",
+      "choices": [
+        { "name": "Fort Neuf", "category": "stop", "distance_m": 180 },
+        { "name": "Fort Neuf de Vincennes", "category": "stop", "distance_m": 530 }
+      ]
+    },
+    "new-republique-fr": {
+      "area": "vincennes",
+      "lang": "fr",
+      "about": "self",
+      "text": "Laquelle : Avenue de la République (Vincennes), Avenue de la République (Fontenay-sous-Bois) ou Place de la République ?",
+      "choices": [
+        { "name": "Avenue de la République", "category": "street", "town": "Vincennes", "distance_m": 220 },
+        { "name": "Avenue de la République", "category": "street", "town": "Fontenay-sous-Bois", "distance_m": 1400 },
+        { "name": "Place de la République", "category": "park", "town": null, "distance_m": 240 }
+      ]
+    },
+    "new-dnipro-uk": {
+      "area": "kyiv",
+      "lang": "uk",
+      "about": "self",
+      "text": "Уточніть: Дніпро (готель), Дніпро (станція метро) чи Дніпро (річка)?",
+      "choices": [
+        { "name": "Дніпро", "category": "hotel", "distance_m": 150 },
+        { "name": "Дніпро", "category": "metro_station", "distance_m": 900 },
+        { "name": "Дніпро", "category": "water", "distance_m": 2400 }
+      ]
+    },
+    "new-pechery-uk": {
+      "area": "kyiv",
+      "lang": "uk",
+      "about": { "track": 5, "text": "ворожий безпілотник" },
+      "text": "Об'єкт 5. Яка дзвіниця: Дзвіниця Дальніх печер чи Дзвіниця Ближніх печер?",
+      "choices": [
+        { "name": "Дзвіниця Дальніх печер", "category": "building", "distance_m": 240 },
+        { "name": "Дзвіниця Ближніх печер", "category": "building", "distance_m": 660 }
+      ]
+    },
+    "new-gymnasium-uk": {
+      "area": "izium",
+      "lang": "uk",
+      "about": "self",
+      "text": "Яка школа: Гімназія №3, Школа № 2 чи Гімназія №1?",
+      "choices": [
+        { "name": "Гімназія №3", "category": "school", "distance_m": 310 },
+        { "name": "Школа № 2", "category": "school", "distance_m": 350 },
+        { "name": "Гімназія №1", "category": "school", "distance_m": 1250 }
+      ]
+    },
+    "new-apteka-uk": {
+      "area": "izium",
+      "lang": "uk",
+      "about": "self",
+      "text": "Яка аптека: Аптека доброго дня, Добра аптека чи Аптека 911?",
+      "choices": [
+        { "name": "Аптека доброго дня", "category": "pharmacy", "distance_m": 85 },
+        { "name": "Добра аптека", "category": "pharmacy", "distance_m": 410 },
+        { "name": "Аптека 911", "category": "pharmacy", "distance_m": 95 }
+      ]
+    },
+    "new-pivdenna-uk": {
+      "area": "izium",
+      "lang": "uk",
+      "about": "self",
+      "text": "Уточніть: Південна вулиця, Південний провулок чи Північна вулиця?",
+      "choices": [
+        { "name": "Південна вулиця", "category": "street", "distance_m": 120 },
+        { "name": "Південний провулок", "category": "street", "distance_m": 135 },
+        { "name": "Північна вулиця", "category": "street", "distance_m": 700 }
+      ]
+    }
+  },
+  "cases": [
+    { "id": "r2-001", "question": "chateau-en", "reply": "The castle one.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "kind word; \"one\" is a filler here, not the number 1" },
+    { "id": "r2-002", "question": "chateau-en", "reply": "Platform two.", "expect": "none", "choice": 1, "ambiguous": true, "why": "\"two\" counts a platform, not a choice; a pick of the castle is wrong, some would infer the station" },
+    { "id": "r2-003", "question": "chateau-en", "reply": "Your last was broken, say again.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"last\" means the last message, not the last choice; asks to repeat" },
+
+    { "id": "r2-004", "question": "chateau-fr", "reply": "le 1er", "expect": "pick", "choice": 1, "ambiguous": false, "why": "ordinal written with a digit, lower case" },
+    { "id": "r2-005", "question": "chateau-fr", "reply": "Le château d'eau.", "expect": "none", "choice": null, "ambiguous": false, "why": "a water tower, another thing whose name starts with the kind word" },
+    { "id": "r2-006", "question": "chateau-fr", "reply": "Au deuxième étage.", "expect": "none", "choice": null, "ambiguous": false, "why": "the ordinal belongs to a floor" },
+    { "id": "r2-007", "question": "chateau-fr", "reply": "Deux véhicules devant le château.", "expect": "none", "choice": null, "ambiguous": false, "why": "a sighting with a count that mentions a choice" },
+
+    { "id": "r2-008", "question": "townhall-en", "reply": "saint mande", "expect": "pick", "choice": 2, "ambiguous": false, "why": "town name as speech-to-text writes it: no hyphen, no accent, lower case" },
+    { "id": "r2-009", "question": "townhall-en", "reply": "The farther one.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "distance word; 1188 m against 423 m is clear" },
+    { "id": "r2-010", "question": "townhall-en", "reply": "Say again the second one.", "expect": "none", "choice": null, "ambiguous": false, "why": "asks the operator to repeat a choice, does not pick it" },
+    { "id": "r2-011", "question": "townhall-en", "reply": "Which one is closer?", "expect": "none", "choice": null, "ambiguous": false, "why": "a question back that holds a distance word" },
+    { "id": "r2-012", "question": "townhall-en", "reply": "Too far to tell.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"too\" sounds like two and \"far\" is not \"the far one\"" },
+
+    { "id": "r2-013", "question": "townhall-fr", "reply": "La marie de Saint-Mandé.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "town name; \"marie\" is the transcriber's homophone for mairie" },
+    { "id": "r2-014", "question": "townhall-fr", "reply": "N'importe laquelle.", "expect": "none", "choice": null, "ambiguous": false, "why": "quantifier: any of them" },
+    { "id": "r2-015", "question": "townhall-fr", "reply": "À deux rues de la mairie.", "expect": "none", "choice": null, "ambiguous": false, "why": "a measure in streets, not choice 2" },
+    { "id": "r2-016", "question": "townhall-fr", "reply": "Pas celle de Vincennes.", "expect": "none", "choice": 2, "ambiguous": true, "why": "exclusion; with two choices some would take the other one, a pick of Vincennes is wrong" },
+    { "id": "r2-017", "question": "townhall-fr", "reply": "Plus proche du lac que de la mairie.", "expect": "none", "choice": null, "ambiguous": false, "why": "comparative in another sense: closer to the lake than to the town hall" },
+
+    { "id": "r2-018", "question": "bero-en", "reply": "Affirmative, Bérault.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "yes-word and the name, one choice" },
+    { "id": "r2-019", "question": "bero-en", "reply": "Stand by one.", "expect": "none", "choice": null, "ambiguous": false, "why": "radio wait; \"one\" is not the number 1" },
+    { "id": "r2-020", "question": "bero-en", "reply": "Correction, Bercy.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"correction\" is not \"correct\"; names another place" },
+    { "id": "r2-021", "question": "bero-en", "reply": "Right side of the road, no station here.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"right\" as a side, and it denies the station" },
+
+    { "id": "r2-022", "question": "bero-fr", "reply": "Oui oui, Bérault.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "yes said twice and the name, one choice" },
+    { "id": "r2-023", "question": "bero-fr", "reply": "Un instant.", "expect": "none", "choice": null, "ambiguous": false, "why": "a wait; \"un\" is not the number 1" },
+
+    { "id": "r2-024", "question": "corner-en", "reply": "The Montreuil one.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "a street name only one crossing has; \"one\" is a filler" },
+    { "id": "r2-025", "question": "corner-en", "reply": "The middle one.", "expect": "pick", "choice": 2, "ambiguous": true, "why": "position in a list of three; clear to a person, not one of the listed forms" },
+    { "id": "r2-026", "question": "corner-en", "reply": "Third street on the left.", "expect": "none", "choice": null, "ambiguous": false, "why": "the ordinal belongs to a street, with a direction" },
+    { "id": "r2-027", "question": "corner-en", "reply": "Between Pompidou and Montreuil.", "expect": "none", "choice": null, "ambiguous": false, "why": "names two choices" },
+
+    { "id": "r2-028", "question": "voices-en", "reply": "Uh, it's 2.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "digit with fillers" },
+    { "id": "r2-029", "question": "voices-en", "reply": "Tell Bravo to hold at the town hall.", "expect": "none", "choice": null, "ambiguous": false, "why": "an order to someone else that mentions a choice" },
+
+    { "id": "r2-030", "question": "cemetery-track-en", "reply": "North.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "the compass word of one name, said in English" },
+    { "id": "r2-031", "question": "cemetery-track-en", "reply": "Heading north.", "expect": "none", "choice": null, "ambiguous": false, "why": "a direction of travel, not the name" },
+    { "id": "r2-032", "question": "cemetery-track-en", "reply": "Track 2.", "expect": "none", "choice": null, "ambiguous": false, "why": "a track number, not choice 2" },
+
+    { "id": "r2-033", "question": "cemetery-track-fr", "reply": "Celui du sud.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the compass word of one name, with fillers" },
+    { "id": "r2-034", "question": "cemetery-track-fr", "reply": "Nord-est.", "expect": "none", "choice": null, "ambiguous": false, "why": "north-east is a direction; \"est\" must not be dropped as a filler" },
+    { "id": "r2-035", "question": "cemetery-track-fr", "reply": "Oui, affirmatif.", "expect": "none", "choice": null, "ambiguous": false, "why": "yes to a question with two choices" },
+
+    { "id": "r2-036", "question": "khreshchatyk-uk", "reply": "на станції метро", "expect": "pick", "choice": 2, "ambiguous": false, "why": "kind words in the locative case" },
+    { "id": "r2-037", "question": "khreshchatyk-uk", "reply": "улица", "expect": "pick", "choice": 1, "ambiguous": false, "why": "the kind word in Russian" },
+    { "id": "r2-038", "question": "khreshchatyk-uk", "reply": "2-га", "expect": "pick", "choice": 2, "ambiguous": false, "why": "ordinal as speech-to-text writes it: digit and ending" },
+    { "id": "r2-039", "question": "khreshchatyk-uk", "reply": "Тут вуличні бої.", "expect": "none", "choice": null, "ambiguous": false, "why": "an adjective that shares a stem with \"вулиця\"; a new report" },
+    { "id": "r2-040", "question": "khreshchatyk-uk", "reply": "Друга рота на Хрещатику.", "expect": "none", "choice": null, "ambiguous": false, "why": "the ordinal belongs to a company; the name is in both choices" },
+
+    { "id": "r2-041", "question": "church-uk", "reply": "у церкві", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the kind word of one name, locative case" },
+    { "id": "r2-042", "question": "church-uk", "reply": "в соборе", "expect": "pick", "choice": 1, "ambiguous": false, "why": "the kind word of one name, Russian locative" },
+    { "id": "r2-043", "question": "church-uk", "reply": "Соборна вулиця.", "expect": "none", "choice": null, "ambiguous": false, "why": "a street; the adjective shares a stem with \"собор\"" },
+    { "id": "r2-044", "question": "church-uk", "reply": "Свято-Вознесенський собор.", "expect": "none", "choice": null, "ambiguous": false, "why": "another cathedral in the town, not the one on offer" },
+
+    { "id": "r2-045", "question": "hospital-uk", "reply": "у міській", "expect": "pick", "choice": 1, "ambiguous": false, "why": "the name in the locative case" },
+    { "id": "r2-046", "question": "hospital-uk", "reply": "У центрі міста.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"центр\" and \"місто\" share stems with two names; it is a place description" },
+    { "id": "r2-047", "question": "hospital-uk", "reply": "Потрібна перша допомога.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"перша\" belongs to first aid" },
+
+    { "id": "r2-048", "question": "one-uk", "reply": "Так, районна.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "yes and part of the name, one choice" },
+    { "id": "r2-049", "question": "one-uk", "reply": "Так собі.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"так\" in another sense: so-so" },
+    { "id": "r2-050", "question": "one-uk", "reply": "Да нет.", "expect": "none", "choice": null, "ambiguous": false, "why": "Russian \"да нет\" means no" },
+
+    { "id": "r2-051", "question": "bridge-track-uk", "reply": "Володимирський узвіз", "expect": "pick", "choice": 1, "ambiguous": false, "why": "part of one name in the nominative; the name holds the instrumental \"узвозом\"" },
+    { "id": "r2-052", "question": "bridge-track-uk", "reply": "У Маріїнському парку.", "expect": "none", "choice": null, "ambiguous": false, "why": "another place; \"парк\" shares a stem with \"Парковий\"" },
+    { "id": "r2-053", "question": "bridge-track-uk", "reply": "Володимирська гірка.", "expect": "none", "choice": null, "ambiguous": false, "why": "another place that shares an adjective with one choice" },
+
+    { "id": "r2-054", "question": "new-quatre-ruelles-en", "reply": "Correct.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "yes-word, one choice" },
+    { "id": "r2-055", "question": "new-quatre-ruelles-en", "reply": "Yes, Quatre Ruelles.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "yes and part of the name; \"quatre\" is not a number here" },
+    { "id": "r2-056", "question": "new-quatre-ruelles-en", "reply": "Villa des Quatre Ruelles.", "expect": "none", "choice": null, "ambiguous": false, "why": "another street with almost the same name" },
+    { "id": "r2-057", "question": "new-quatre-ruelles-en", "reply": "Checkpoint one.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"one\" numbers a checkpoint" },
+    { "id": "r2-058", "question": "new-quatre-ruelles-en", "reply": "Yes, the impasse.", "expect": "none", "choice": null, "ambiguous": false, "why": "yes, then another street: Impasse des Quatre Ruelles" },
+    { "id": "r2-059", "question": "new-quatre-ruelles-en", "reply": "I say again, yes.", "expect": "none", "choice": 1, "ambiguous": true, "why": "holds \"I\", so the rule says nothing; to a person it is a plain yes" },
+
+    { "id": "r2-060", "question": "new-hotels-en", "reply": "The first one.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "ordinal; \"one\" is a filler although choice 2 is named Motel One" },
+    { "id": "r2-061", "question": "new-hotels-en", "reply": "le home", "expect": "pick", "choice": 3, "ambiguous": false, "why": "the whole name, lower case; it starts with an article" },
+    { "id": "r2-062", "question": "new-hotels-en", "reply": "One.", "expect": "none", "choice": 1, "ambiguous": true, "why": "the number 1, or the \"One\" of Motel One: fits two; a person leans to the number" },
+    { "id": "r2-063", "question": "new-hotels-en", "reply": "We're heading home.", "expect": "none", "choice": null, "ambiguous": false, "why": "first person; \"home\" is not Le Home" },
+    { "id": "r2-064", "question": "new-hotels-en", "reply": "The closest one.", "expect": "none", "choice": null, "ambiguous": false, "why": "60 m against 70 m: no choice is clearly nearer" },
+    { "id": "r2-065", "question": "new-hotels-en", "reply": "Not the motel.", "expect": "none", "choice": null, "ambiguous": false, "why": "exclusion that leaves two choices" },
+
+    { "id": "r2-066", "question": "new-deux-communes-fr", "reply": "La deuxième.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "ordinal; \"deuxième\" is not the \"Deux\" in choice 1's name" },
+    { "id": "r2-067", "question": "new-deux-communes-fr", "reply": "Deux Communes.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "part of a name that holds a number word; not choice 2" },
+    { "id": "r2-068", "question": "new-deux-communes-fr", "reply": "Trois.", "expect": "pick", "choice": 2, "ambiguous": true, "why": "there is no third choice, so it can only be the name; one bare number word is thin" },
+    { "id": "r2-069", "question": "new-deux-communes-fr", "reply": "Euh, deux.", "expect": "none", "choice": 2, "ambiguous": true, "why": "number 2, or the \"Deux\" of choice 1: fits two; a person leans to the number" },
+    { "id": "r2-070", "question": "new-deux-communes-fr", "reply": "Toutes les deux.", "expect": "none", "choice": null, "ambiguous": false, "why": "both; \"deux\" is neither a number pick nor the name" },
+    { "id": "r2-071", "question": "new-deux-communes-fr", "reply": "On est trois.", "expect": "none", "choice": null, "ambiguous": false, "why": "a head count, said about the speakers" },
+
+    { "id": "r2-072", "question": "new-fort-neuf-fr", "reply": "Celui de Vincennes.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the only word the longer name adds" },
+    { "id": "r2-073", "question": "new-fort-neuf-fr", "reply": "À neuf heures.", "expect": "none", "choice": null, "ambiguous": false, "why": "a time or clock direction; \"neuf\" is in both names" },
+    { "id": "r2-074", "question": "new-fort-neuf-fr", "reply": "Vincennes RER.", "expect": "none", "choice": null, "ambiguous": false, "why": "another place that shares the word Vincennes" },
+    { "id": "r2-075", "question": "new-fort-neuf-fr", "reply": "Le premier, Fort Neuf de Vincennes.", "expect": "none", "choice": null, "ambiguous": false, "why": "the ordinal says choice 1 and the name says choice 2" },
+    { "id": "r2-076", "question": "new-fort-neuf-fr", "reply": "Fort Neuf.", "expect": "none", "choice": 1, "ambiguous": true, "why": "the words are in both names; they are also the whole of choice 1's name" },
+    { "id": "r2-077", "question": "new-fort-neuf-fr", "reply": "Le deuxième… non, attendez.", "expect": "none", "choice": null, "ambiguous": false, "why": "a pick taken back, then a wait" },
+
+    { "id": "r2-078", "question": "new-republique-fr", "reply": "fontenay sous bois", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the town of one street, no hyphens, lower case" },
+    { "id": "r2-079", "question": "new-republique-fr", "reply": "La place.", "expect": "pick", "choice": 3, "ambiguous": false, "why": "the kind word only one name has" },
+    { "id": "r2-080", "question": "new-republique-fr", "reply": "Le bois de Vincennes.", "expect": "none", "choice": null, "ambiguous": false, "why": "another place; its words touch the towns of two choices" },
+    { "id": "r2-081", "question": "new-republique-fr", "reply": "On reste sur place.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"sur place\" means staying put, not the square" },
+    { "id": "r2-082", "question": "new-republique-fr", "reply": "Au 2, avenue de la République.", "expect": "none", "choice": null, "ambiguous": false, "why": "a house number, and the street name fits two choices" },
+
+    { "id": "r2-083", "question": "new-dnipro-uk", "reply": "в готелі", "expect": "pick", "choice": 1, "ambiguous": false, "why": "kind word in the locative; all three share the name" },
+    { "id": "r2-084", "question": "new-dnipro-uk", "reply": "на річці", "expect": "pick", "choice": 3, "ambiguous": false, "why": "kind word in the locative, with the к to ц change" },
+    { "id": "r2-085", "question": "new-dnipro-uk", "reply": "Три хвилини.", "expect": "none", "choice": null, "ambiguous": false, "why": "a time, not choice 3" },
+    { "id": "r2-086", "question": "new-dnipro-uk", "reply": "Річковий вокзал.", "expect": "none", "choice": null, "ambiguous": false, "why": "another place; the adjective shares a stem with \"річка\"" },
+    { "id": "r2-087", "question": "new-dnipro-uk", "reply": "Два танки біля готелю.", "expect": "none", "choice": null, "ambiguous": false, "why": "a sighting with a count that mentions a choice" },
+
+    { "id": "r2-088", "question": "new-pechery-uk", "reply": "Ближніх печер.", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the words only one name has" },
+    { "id": "r2-089", "question": "new-pechery-uk", "reply": "Дальні печери.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "the words only one name has, in the nominative" },
+    { "id": "r2-090", "question": "new-pechery-uk", "reply": "ближня", "expect": "none", "choice": null, "ambiguous": false, "why": "\"the near one\": by name it is choice 2, by distance choice 1" },
+    { "id": "r2-091", "question": "new-pechery-uk", "reply": "Об'єкт два.", "expect": "none", "choice": null, "ambiguous": false, "why": "a track number, not choice 2" },
+    { "id": "r2-092", "question": "new-pechery-uk", "reply": "Рухається до Ближніх печер.", "expect": "none", "choice": null, "ambiguous": false, "why": "a movement report that mentions a choice" },
+    { "id": "r2-093", "question": "new-pechery-uk", "reply": "П’ятий.", "expect": "none", "choice": null, "ambiguous": false, "why": "a number larger than the number of choices; it is the track's own number" },
+
+    { "id": "r2-094", "question": "new-gymnasium-uk", "reply": "школа номер два", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the name and the position agree" },
+    { "id": "r2-095", "question": "new-gymnasium-uk", "reply": "найдальша", "expect": "pick", "choice": 3, "ambiguous": false, "why": "distance word; 1250 m against 350 m and 310 m is clear" },
+    { "id": "r2-096", "question": "new-gymnasium-uk", "reply": "перша", "expect": "none", "choice": null, "ambiguous": false, "why": "first in the list is Гімназія №3, and \"перша\" also names Гімназія №1" },
+    { "id": "r2-097", "question": "new-gymnasium-uk", "reply": "Школа номер чотири.", "expect": "none", "choice": null, "ambiguous": false, "why": "another school; four is more than the number of choices" },
+    { "id": "r2-098", "question": "new-gymnasium-uk", "reply": "перша гімназія", "expect": "none", "choice": 3, "ambiguous": true, "why": "a person hears the name Гімназія №1, which is choice 3; a pick of choice 1 is wrong" },
+    { "id": "r2-099", "question": "new-gymnasium-uk", "reply": "Перша рота, третій взвод.", "expect": "none", "choice": null, "ambiguous": false, "why": "the ordinals belong to a company and a platoon" },
+
+    { "id": "r2-100", "question": "new-apteka-uk", "reply": "у Добрій аптеці", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the name in the locative; choice 1 holds \"доброго\", another form of the same word" },
+    { "id": "r2-101", "question": "new-apteka-uk", "reply": "Добре, перша.", "expect": "pick", "choice": 1, "ambiguous": false, "why": "ordinal after \"добре\" as a filler, not the name of choice 2" },
+    { "id": "r2-102", "question": "new-apteka-uk", "reply": "Добре.", "expect": "none", "choice": null, "ambiguous": false, "why": "\"OK\" picks nothing among three; it is not \"Добра\"" },
+    { "id": "r2-103", "question": "new-apteka-uk", "reply": "Добрий день, повторіть.", "expect": "none", "choice": null, "ambiguous": false, "why": "a greeting and a request to repeat, not Аптека доброго дня" },
+    { "id": "r2-104", "question": "new-apteka-uk", "reply": "найближча", "expect": "none", "choice": null, "ambiguous": false, "why": "85 m against 95 m: no choice is clearly nearer" },
+
+    { "id": "r2-105", "question": "new-pivdenna-uk", "reply": "у провулку", "expect": "pick", "choice": 2, "ambiguous": false, "why": "the kind word only one name has, locative with a dropped vowel" },
+    { "id": "r2-106", "question": "new-pivdenna-uk", "reply": "на Північній", "expect": "pick", "choice": 3, "ambiguous": false, "why": "the compass adjective of one name, locative case" },
+    { "id": "r2-107", "question": "new-pivdenna-uk", "reply": "на Південній вулиці", "expect": "pick", "choice": 1, "ambiguous": false, "why": "adjective and kind word together fit only choice 1" },
+    { "id": "r2-108", "question": "new-pivdenna-uk", "reply": "Рухаємось на північ.", "expect": "none", "choice": null, "ambiguous": false, "why": "a direction of travel; the noun shares a stem with \"Північна\"" },
+    { "id": "r2-109", "question": "new-pivdenna-uk", "reply": "На північ від провулку.", "expect": "none", "choice": null, "ambiguous": false, "why": "a position north of the lane: a compass word and another choice's kind word" },
+    { "id": "r2-110", "question": "new-pivdenna-uk", "reply": "Південна.", "expect": "none", "choice": 1, "ambiguous": true, "why": "fits choices 1 and 2 but for the ending; the feminine form leans to the street" }
+  ]
+}

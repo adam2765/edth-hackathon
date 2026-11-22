@@ -12,8 +12,9 @@
  *
  * It picks nothing by itself: the coordinator stores what it heard, and the command post shows the
  * choice already picked for the operator to confirm. No model is involved, and the place is the
- * stored choice's. Measured in tests/replyPick.test.ts on evals/replies.cases.json, and on the 80
- * replies of evals/replies.heldout.cases.json, written without seeing this file (docs/ask-back.md).
+ * stored choice's. Measured in tests/replyPick.test.ts on evals/replies.cases.json, and on the 190
+ * replies of evals/replies.heldout.cases.json and replies.heldout2.cases.json, written without seeing
+ * this file. Both rounds found wrong picks on their first run (docs/ask-back.md).
  */
 import { canonTokens, isCategoryWord } from "./gazetteer";
 import { normalize } from "./normalize";
@@ -69,6 +70,15 @@ const YES = new Set([
   "oui", "ouais", "affirmatif", "exact", "exactement",
   "так", "да", "ага", "вірно", "правильно", "підтверджую", "верно", "подтверждаю",
 ]);
+/** With a yes-word these make a no, or nothing sure: «да нет», "yes, no". */
+const NO = new Set(["no", "nope", "non", "ні", "нет"]);
+/** What follows a digit in a written ordinal: "2-га", "2-я", "2 nd". */
+const ORDINAL_END = new Set(["га", "я", "е", "ша", "ге", "тя", "тій", "ий", "ая", "ой", "ый", "го", "st", "nd", "rd", "th", "e", "eme", "er", "ere"]);
+/** The compass adjectives of Ukrainian and Russian, by their stem: "на Північній" is the north one. */
+const COMPASS_STEMS: [string, string][] = [
+  ["північн", "nord"], ["південн", "sud"], ["східн", "est"], ["західн", "ouest"],
+  ["северн", "nord"], ["южн", "sud"], ["восточн", "est"], ["западн", "ouest"],
+];
 
 const NEARER = new Set(["closer", "closest", "nearer", "nearest", "proche", "proches", "ближче", "ближча", "ближчий", "найближча", "найближчий", "ближня", "ближній", "ближе", "ближайший", "ближайшая"]);
 const FARTHER = new Set(["further", "farther", "furthest", "farthest", "loin", "lointain", "lointaine", "далі", "дальша", "дальший", "найдальша", "найдальший", "дальше", "дальний", "дальняя"]);
@@ -109,10 +119,19 @@ function sameWord(a: string, b: string): boolean {
 function words(text: string): string[] {
   // "c'est", "qu'est": the verb, not the east.
   const cut = normalize(text).replace(/\b(?:c|qu|n) est\b/g, " ");
-  return canonTokens(cut).map((t) => COMPASS[t] ?? t);
+  return canonTokens(cut).map((t) => COMPASS[t] ?? COMPASS_STEMS.find(([stem]) => t.startsWith(stem))?.[1] ?? t);
 }
 
-type Reading = { set: Set<number> | null; name: Set<number>; kind: Set<number> };
+/** The numbers in a place's name, as values: "Гімназія №1" has 1, "Rue des Deux Communes" has 2. */
+function numbersIn(name: string): number[] {
+  return normalize(name)
+    .split(" ")
+    .map((t) => (/^\d+$/.test(t) ? Number(t) : (CARDINALS[t] ?? ORDINALS[t])))
+    .filter((x): x is number => typeof x === "number");
+}
+
+/** `counted`: the reading is a number or an ordinal, which words beside it must not contradict. */
+type Reading = { set: Set<number> | null; name: Set<number>; kind: Set<number>; counted?: boolean };
 
 /**
  * The choice a short spoken answer picks, or null when it is not one of the closed forms, or fits
@@ -138,6 +157,9 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
   // "Le château" names the castle by its kind. "Château de Vincennes" says the name both have:
   // two words of it or more are the name, and tell nothing.
   const sharedName = said.filter(shared).length >= 2;
+  /** A number that a name holds: "перша" may be the first in the list, or Гімназія №1, the third. */
+  const nameNumbers = new Set(choices.flatMap((c) => numbersIn(c.name)));
+  const saysNo = said.some((w) => NO.has(w));
 
   const hows = new Set<PickHow>();
   const readings: Reading[] = [];
@@ -147,14 +169,20 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
     // A number, an ordinal, "the last one".
     const counted = ONES.has(w) ? (content.length === 1 || NUMBER_LEAD.has(said[k - 1] ?? "") ? 1 : null) : (CARDINALS[w] ?? ORDINALS[w] ?? (LAST.has(w) ? n : null));
     if (counted != null) {
-      // A number that is also in a choice's name ("Rue des Deux Communes") could mean either.
-      if (counted > n || choices.some((_, i) => inName(i, w))) return null;
+      // A number that is also in a choice's name ("Rue des Deux Communes", "Гімназія №1") could mean either.
+      if (counted > n || nameNumbers.has(counted) || choices.some((_, i) => inName(i, w))) return null;
       hows.add("number");
-      readings.push({ set: new Set([counted - 1]), ...none });
+      readings.push({ set: new Set([counted - 1]), ...none, counted: true });
+      continue;
+    }
+    // The ending of an ordinal written with a digit: "2-га".
+    if (ORDINAL_END.has(w) && /^\d$/.test(said[k - 1] ?? "")) {
+      readings.push({ set: null, ...none });
       continue;
     }
     if (YES.has(w)) {
-      if (n !== 1) return null;
+      // «Да нет» is a no.
+      if (n !== 1 || saysNo) return null;
       hows.add("yes");
       readings.push({ set: new Set([0]), ...none });
       continue;
@@ -162,6 +190,8 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
     if (NEARER.has(w) || FARTHER.has(w)) {
       const d = choices.map((c) => c.distance_m);
       if (n < 2 || d.some((x) => typeof x !== "number" || !Number.isFinite(x))) return null;
+      // "Ближня" with a choice named Ближніх печер: the name, or the distance? Not sure.
+      if (choices.some((_, i) => inName(i, w))) return null;
       const order = choices.map((_, i) => i).sort((a, b) => (d[a] as number) - (d[b] as number));
       if (FARTHER.has(w)) order.reverse();
       const gap = Math.abs((d[order[0]] as number) - (d[order[1]] as number));
@@ -189,6 +219,8 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
       readings.push({ set: null, name, kind });
       continue;
     }
+    // A kind of street that no choice is ("the impasse", when the choice is a rue) names another street.
+    if (!shared(w) && !named.length && kind.size === n && isCategoryWord(w, "street")) return null;
     // Says nothing about which: a word of every name, the kind they all are, or a filler.
     if (shared(w) || kind.size === n || FILLER.has(w)) {
       readings.push({ set: null, ...none });
@@ -202,7 +234,12 @@ export function readPick(reply: string, choices: PickChoice[]): HeardPick | null
   const telling = readings.filter((r) => r.set || r.name.size || r.kind.size);
   if (!telling.length) return null;
   // A word in one choice's name means that choice; a word in no name is read as a kind.
-  const fit = meet(telling.map((r) => r.set ?? (r.name.size ? r.name : r.kind)));
+  const byWord = (r: Reading) => (r.name.size ? r.name : r.kind);
+  // Beside a number, the words must say which choice by themselves: "au 2, avenue de la République"
+  // is a house number on a street two choices are on, not choice 2.
+  const worded = telling.filter((r) => !r.set);
+  if (worded.length && telling.some((r) => r.counted) && meet(worded.map(byWord)).size !== 1) return null;
+  const fit = meet(telling.map((r) => r.set ?? byWord(r)));
   if (fit.size !== 1) return null;
   const how: PickHow = hows.has("name") ? "name" : hows.has("number") ? "number" : hows.has("nearest") ? "nearest" : "yes";
   return { choice: [...fit][0] + 1, how };
