@@ -163,7 +163,7 @@ function Transmitter() {
   useEffect(() => {
     let stopped = false;
     const scan = async () => {
-      // What the phone finds on the local network by itself (iOS), besides the addresses it knows.
+      // What the phone finds on the local network by itself, besides the addresses it knows.
       const nearby = await searchNearby();
       const found = await discoverHosts([DEFAULT_SERVER, LOCAL_COORDINATOR, serverUrl, saved.server, saved.mission?.server, "http://127.0.0.1:3117", ...nearby]);
       if (stopped) return;

@@ -2,7 +2,7 @@
 // A build step swaps in the copy the build needs and writes which one is in place to a
 // .last_build_configuration file. pod install deletes that file but keeps the copy, and with no
 // file the step assumes Debug. So a Release build, then a pod install, then a Debug build links
-// the Release core and fails: undefined RCTReconnectingWebSocket and Sealable (decision 253).
+// the Release core and fails: undefined RCTReconnectingWebSocket and Sealable (decision 254).
 //
 // This adds a few lines to the Podfile's post_install: after every pod install, mark the copy
 // unknown, so the next build puts the right one in place with React Native's own step.

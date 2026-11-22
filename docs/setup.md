@@ -88,9 +88,10 @@ address override, scenarios, test clips and timings. The area comes from the mis
 Voice-to-text is on the coordinator, with no phone provider/model controls.
 
 Android USB uses reverse forwarding; Start restores it without launching the app. On an
-iPhone the app reaches the host’s `.local` name and also searches the local network for
-coordinators itself; after Connect it follows that coordinator to a new address, so a Mac
-that macOS renamed, or that moved to another network, is found again. iPhone builds still need Mac/Xcode and
+iPhone the app reaches the host’s `.local` name. Both phones also search the local network for
+coordinators themselves; after Connect the app follows that coordinator to a new address, so a Mac
+that macOS renamed, or that moved to another network, is found again. An Android phone off the
+cable needs a release build: `transmitter/README.md`, "An Android phone off the cable". iPhone builds still need Mac/Xcode and
 signing; free provisioning expires after seven days. Windows and physical-phone deployment
 paths need validation on the relevant hardware. Offline inference works without internet,
 and so does the map for an area saved with `npm run basemap -- <area>`. The map's corner says
@@ -148,7 +149,7 @@ stays in `.data/sessions`. There are no release checkouts or separate launcher s
 - **Map is coarse or empty away from the area:** only the tiles around the area are saved.
 - **Unrelated process on a port:** stop it in its own console; unverified processes are not killed.
 - **Build/start error:** the console gives the cause; details are in `.run/launcher.log`.
-- **Phone build fails with `Undefined symbols` for `RCTReconnectingWebSocket` or `Sealable`:** the Debug app linked React Native's Release copy, left in `transmitter/ios/Pods` by a Release build before a `pod install` (decision 253). Run `LANG=en_US.UTF-8 npx expo prebuild --platform ios` in `transmitter/` once, then build the app again with `LANG=en_US.UTF-8 npx expo run:ios`. Prebuild makes `ios/` again from the config, so it takes a few minutes and downloads React Native's copies again.
+- **Phone build fails with `Undefined symbols` for `RCTReconnectingWebSocket` or `Sealable`:** the Debug app linked React Native's Release copy, left in `transmitter/ios/Pods` by a Release build before a `pod install` (decision 254). Run `LANG=en_US.UTF-8 npx expo prebuild --platform ios` in `transmitter/` once, then build the app again with `LANG=en_US.UTF-8 npx expo run:ios`. Prebuild makes `ios/` again from the config, so it takes a few minutes and downloads React Native's copies again.
 
 Each command retires old project controllers before using the current code. Shutdown
 scans processes by checkout path, working directory and parent/child ownership across all
