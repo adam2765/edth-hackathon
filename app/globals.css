@@ -370,3 +370,14 @@ input {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* The app's text is light and the attribution sits on a light pill: without this only its links can be read. */
+.maplibregl-ctrl-attrib {
+  color: #333;
+}
+
+/* The note in the map's corner when neither the hosted nor the saved base map could be loaded. */
+.basemap-note {
+  font-weight: 600;
+  color: #92400e;
+}

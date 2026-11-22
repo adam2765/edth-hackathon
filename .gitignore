@@ -46,6 +46,9 @@ next-env.d.ts
 /public/ort/
 /public/tts/
 
+# the saved base map, fetched by `npm run basemap` (docs/setup.md); the label fonts in public/glyphs/ are in git
+/public/basemap/
+
 # local copy of the voice model (see scripts/prepare-tts.mjs)
 /models/
 

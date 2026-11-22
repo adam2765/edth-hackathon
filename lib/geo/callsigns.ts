@@ -7,6 +7,12 @@
  * leaves the report unassigned for the operator. A near match counts only when exactly one roster
  * entry is close. When the number is in doubt ("Alpha to base": ALPHA 2, or ALPHA 1 with its
  * number lost), the answer is to ask, never a pick: moving the wrong unit is worse than clutter.
+ *
+ * A call sign at the end may be a sign-off [237], as pilots give it: "At the town hall, Alpha 1,
+ * over". It may also be who is spoken to ("Go ahead, Alpha 1"), so the answer is then a question
+ * for the operator with that one unit to confirm, never the unit itself. Only when nothing at the
+ * start named a sender, only after a written pause and with its number said, and never after a word
+ * that ties it into the sentence ("I'm at the church with Bravo 2").
  * Pure, like the resolver, and safe to import on the client.
  */
 import { normalize, transliterateUk } from "./normalize";
@@ -16,8 +22,12 @@ export type CallsignHow = "exact" | "near";
 export type CallsignMatch =
   /** One roster entry. `heard` is the words it was read from, as speech-to-text wrote them. */
   | { kind: "unit"; callsign: string; how: CallsignHow; heard: string; why: string }
-  /** More than one roster entry is close, or one is and the words may name a unit not on the roster. */
-  | { kind: "ask"; candidates: string[]; heard: string; why: string }
+  /**
+   * More than one roster entry is close, or one is and the words may name a unit not on the roster.
+   * `signoff` when the call sign came at the end of the transmission [237]: then even one candidate
+   * is a question, because it may be who is spoken to.
+   */
+  | { kind: "ask"; candidates: string[]; heard: string; why: string; signoff?: true }
   /**
    * No sender on the roster. `read` is a call sign heard that is not on it ("DELTA 4"), if any.
    * `station` is set when the command post is the one speaking ("ALPHA 1, this is BASE").
@@ -89,6 +99,38 @@ const INTRO_AFTER_STATION: string[][] = [...INTRO, ["from"], ["de"]];
 /** "this is ALPHA 1" counts within the first words only; later, a call sign is who the report is about. */
 const OPENING = 8;
 
+/**
+ * Words that close a transmission, after a sign-off [237]: "Alpha 1, over", "Alpha 1 out",
+ * "Alpha 1, standing by", «Сокіл, прийом». Longest first.
+ */
+const CLOSERS: string[][] = [
+  ["over", "and", "out"], ["standing", "by"], ["over"], ["out"], ["listening"],
+  ["a", "vous"], ["termine"], ["parlez"],
+  ["кінець", "звязку"], ["конец", "связи"], ["прийом"], ["прием"], ["приём"],
+  // Whisper writes these for the silence after the last word.
+  ["thank", "you"], ["thanks"], ["merci"], ["дякую"],
+];
+/**
+ * Words that speak to someone: "Are you at the church, Bravo 2", "Say again your position, Alpha 1".
+ * A call sign at the end of such a sentence is who is spoken to, not who speaks.
+ */
+const TO_SOMEONE = new Set(["you", "your", "yours", "tu", "toi", "ton", "ta", "ти", "тебе", "твій", "твоя", "ви", "вас", "ваш", "ты", "тебя", "вы"]);
+/** Right before a call sign at the end, these say it is the sender: "…, this is Alpha 1", "…, from Alpha 1". */
+const INTRO_AT_END: string[][] = [...INTRO, ["from"]];
+/**
+ * Words that tie a call sign at the end into the sentence, so it is not a sign-off [237]: "with
+ * Bravo 2", "near Charlie 3", "I see Alpha 2", "checkpoint Charlie 3", «біля Сокола». A report that
+ * ends this way names another unit, and giving it to that unit would move the wrong marker.
+ */
+const TIES = new Set([
+  "with", "near", "see", "sees", "seeing", "saw", "at", "to", "of", "and", "behind", "towards", "toward", "by", "is", "are", "was", "for", "on", "in",
+  "past", "after", "before", "between", "beside", "meet", "meeting", "met", "join", "joining", "joined", "support", "supporting", "cover", "covering",
+  "follow", "following", "relieve", "relieving", "call", "calling", "called", "tell", "ask", "contact", "reach", "reached", "help", "helping",
+  "or", "not", "than", "like", "about", "checkpoint", "point", "position", "objective",
+  "avec", "pres", "de", "a", "vers", "et", "voit", "vois", "derriere", "devant", "chez", "pour", "sur", "rejoins", "rejoindre", "appelle",
+  "з", "із", "зі", "біля", "бачу", "до", "і", "й", "та", "за", "перед", "коло", "поруч", "на", "у", "в", "для", "с", "со", "возле", "вижу", "к", "и", "около", "рядом",
+]);
+
 const CYRILLIC = /[Ѐ-ӿ]/;
 const VOWELS_UK = "аеєиіїоуюяыэё";
 /** Case endings, longest first. "Сокола", "Соколові" and "Соколом" are all «Сокіл». */
@@ -99,20 +141,33 @@ interface Tok {
   raw: string;
   /** As compared: lower case, accents folded (normalize). */
   norm: string;
+  /** A pause was written before it: a comma, a full stop, a dash. Not a hyphen ("Alpha-1"). */
+  brk: boolean;
+  /** A question mark comes right after it. */
+  asked: boolean;
 }
+
+/** What speech-to-text writes for a pause between two words. A hyphen with spaces round it is a dash. */
+const PAUSE = /[,.;:!?…—–\n]|\s-\s/;
 
 /** The words, as written and as compared. "Alpha1" is two words, "зв'язку" one. */
 function words(text: string): Tok[] {
   const out: Tok[] = [];
   const cleaned = text.replace(/(?<=[Ѐ-ӿ])['’ʼ`](?=[Ѐ-ӿ])/g, "");
-  for (const raw of cleaned.split(/[^\p{L}\p{N}]+/u)) {
-    if (!raw) continue;
-    const glued = raw.match(/^(\p{L}{2,})(\d{1,3})$/u);
-    for (const part of glued ? [glued[1], glued[2]] : [raw]) {
+  let at = 0;
+  for (const m of cleaned.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const before = cleaned.slice(at, m.index);
+    at = m.index + m[0].length;
+    if (out.length && before.includes("?")) out[out.length - 1].asked = true;
+    const glued = m[0].match(/^(\p{L}{2,})(\d{1,3})$/u);
+    let brk = PAUSE.test(before);
+    for (const part of glued ? [glued[1], glued[2]] : [m[0]]) {
       const norm = normalize(part).replace(/ /g, "");
-      if (norm) out.push({ raw: part, norm });
+      if (norm) out.push({ raw: part, norm, brk, asked: false });
+      brk = false;
     }
   }
+  if (out.length && cleaned.slice(at).includes("?")) out[out.length - 1].asked = true;
   return out;
 }
 
@@ -366,9 +421,80 @@ function unknownNameAt(toks: Tok[], i: number, stations: string[][]): CallsignMa
   return { kind: "unassigned", heard: t.raw, read: t.raw.toUpperCase(), why: `"${t.raw}" is a call sign not on the roster` };
 }
 
+/** Where the report's own words end: before "over", "out" and the like. */
+function beforeClosers(toks: Tok[], from: number): number {
+  let end = toks.length;
+  for (;;) {
+    const seq = CLOSERS.find((s) => s.length <= end - from && s.every((w, k) => toks[end - s.length + k].norm === w));
+    if (!seq) return end;
+    end -= seq.length;
+  }
+}
+
 /**
- * The sender's call sign, read from the opening words of a radio report, against the roster.
- * See the file comment for the rules; docs/callsigns.md has examples and the eval.
+ * The sender's call sign at the end of the transmission, as a sign-off [237]: "At the town hall,
+ * Alpha 1, over". Tried only when the opening words named no sender.
+ *
+ * The answer is a question for the operator, never a unit. Speaking to a unit looks the same as
+ * signing off ("Push up to the station, Bravo 2", "Go ahead, Alpha 1"), and two rounds of held-out
+ * cases showed no rule tells them apart: every one that named another unit after a pause was read
+ * as that unit. So the reader says who it may be, and a person confirms it with one tap.
+ *
+ * A sentence can also end with another unit's call sign in more ways than a list of words can hold
+ * ("linking up alongside Bravo 2", "200 metres from Alpha 2"), so even the question needs a sign
+ * that the call sign stands apart. Null unless all of this holds:
+ *   - it is the last thing said, but for closing words;
+ *   - it names a roster entry, with its number said ("Alpha" alone may be a checkpoint);
+ *   - a pause was written right before it, or before the words that say who is speaking ("…, this
+ *     is Alpha 1", "…, from Alpha 1"): with no pause it is part of the sentence, and the report
+ *     waits for the operator;
+ *   - the word before it does not tie it into the sentence all the same ("with, Bravo 2");
+ *   - it is not a question, and nothing before it speaks to someone ("Are you there, Bravo 2?");
+ *   - something was said before it.
+ */
+function signOff(toks: Tok[], from: number, roster: Entry[]): CallsignMatch | null {
+  const end = beforeClosers(toks, from);
+  const said = toks.slice(0, end);
+  const last = said[end - 1];
+  if (!last || last.asked) return null;
+  const numbered = numberOf(last.norm) != null || SOUNDS_LIKE[last.norm] != null;
+  // A call sign is at most a word in two parts and two number words: look back that far.
+  for (let k = Math.max(from + 1, end - 4); k < end; k++) {
+    const r = readAt(said, k, roster);
+    if (!r || r.end !== end) continue;
+    const hits = new Map([...r.hits].filter(([c]) => numbered || roster.find((e) => e.callsign === c)?.num == null));
+    if (!hits.size) continue;
+    const intro = INTRO_AT_END.find((seq) => seq.length <= k - from && seq.every((w, n) => said[k - seq.length + n].norm === w));
+    const apart = k - (intro?.length ?? 0);
+    if (!said[apart].brk || apart <= from) return null;
+    if (!intro && TIES.has(said[k - 1].norm)) return null;
+    if (said.slice(from, apart).some((t) => TO_SOMEONE.has(t.norm) || t.asked)) return null;
+    const m = decide(said, { ...r, hits }, roster, "at the end");
+    if (m.kind === "unassigned") return null;
+    const candidates = m.kind === "unit" ? [m.callsign] : m.candidates;
+    return { kind: "ask", candidates, heard: m.heard, signoff: true, why: `${m.why}; a call sign at the end may be a sign-off or who is spoken to, so the operator confirms` };
+  }
+  return null;
+}
+
+/**
+ * True when the transmission ends with the command post's own call sign, set apart by a pause:
+ * "Alpha 1, move to the station and report, Base out." The command post is speaking, to the unit
+ * named first. Not "Alpha 1 to Base, over": there the unit calls the command post.
+ */
+function stationSignsOff(toks: Tok[], from: number, stations: string[][]): boolean {
+  const end = beforeClosers(toks, from);
+  for (let k = Math.max(from + 1, end - 3); k < end; k++) {
+    if (toks[k].brk && stationOnce(toks.slice(0, end), k, stations) === end) return true;
+  }
+  return false;
+}
+
+/**
+ * The sender's call sign, read from the opening words of a radio report, against the roster. When
+ * the opening words name no one and the report ends with a call sign, the answer is a question
+ * about that unit [237]. See the file comment for the rules; docs/callsigns.md has examples and
+ * the eval.
  */
 export function matchCallsign(transcript: string, roster: string[], opts: CallsignOptions = {}): CallsignMatch {
   const toks = words(transcript);
@@ -383,7 +509,8 @@ export function matchCallsign(transcript: string, roster: string[], opts: Callsi
     const at = seqAt(toks, skipFillers(toks, st), INTRO_AFTER_STATION);
     const r = readAt(toks, at, entries);
     if (r) return decide(toks, r, entries, "after the command post's call sign");
-    return unknownNameAt(toks, at, stations) ?? { ...none, why: "the command post was called, but no sender was said" };
+    // "Base, at the town hall, Alpha 1": the sender signs off instead.
+    return signOff(toks, at, entries) ?? unknownNameAt(toks, at, stations) ?? { ...none, why: "the command post was called, but no sender was said" };
   }
 
   // The sender first: "ALPHA 1, at the château", "ALPHA 1 to base". Unless "this is" follows:
@@ -398,6 +525,9 @@ export function matchCallsign(transcript: string, roster: string[], opts: Callsi
       const second = readAt(toks, at, entries);
       if (second) return decide(toks, second, entries, `after "${heardOf(toks, first)}, ${heardOf(toks, { start: first.end, end: at })}"`);
     }
+    if (stationSignsOff(toks, first.end, stations)) {
+      return { ...none, station: true, why: `the command post signs off, speaking to "${heardOf(toks, first)}"` }; // "Alpha 1, report your position, Base out"
+    }
     return decide(toks, first, entries, "at the start");
   }
 
@@ -410,5 +540,28 @@ export function matchCallsign(transcript: string, roster: string[], opts: Callsi
     const name = unknownNameAt(toks, at, stations);
     if (name) return name;
   }
-  return none;
+  // Nothing at the start: the call sign may come last, as a sign-off [237].
+  return signOff(toks, i, entries) ?? none;
+}
+
+/** True when only closing words are left ("over", "out", «прийом»), or nothing: what may follow a sign-off. */
+export function onlyClosers(text: string): boolean {
+  const toks = words(text);
+  return beforeClosers(toks, 0) === 0;
+}
+
+/**
+ * The words before a sign-off, for the model: "At the town hall, this is" is "At the town hall".
+ * The words that say who is speaking go with the call sign.
+ */
+export function beforeSignOff(text: string): string {
+  let out = text.replace(/[^\p{L}\p{N}]+$/u, "");
+  for (const seq of INTRO_AT_END) {
+    const m = new RegExp(`(?<![\\p{L}\\p{N}])${seq.join("[^\\p{L}\\p{N}]+")}$`, "iu").exec(out);
+    if (m) {
+      out = out.slice(0, m.index).replace(/[^\p{L}\p{N}]+$/u, "");
+      break;
+    }
+  }
+  return out;
 }

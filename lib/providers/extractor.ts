@@ -185,7 +185,9 @@ export function checkLanguage(said: Intent["language"], transcript: string, hint
  */
 export function sanitizeIntent(raw: unknown, languageHint?: string | null, transcript?: string): Intent {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  // The offline model sometimes writes the word "null" where it means none: "the metro station"
+  // came back with landmark_name "null", and the question was 'I can't find "null"' (22 Nov).
+  const str = (v: unknown) => (typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "null" ? v.trim() : null);
   const hint = languageHint === "fr" ? "fr" : languageHint === "en" ? "en" : languageHint === "uk" || languageHint === "ru" ? "uk" : null;
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0.5;
   const tr = o.track && typeof o.track === "object" ? (o.track as Record<string, unknown>) : null;

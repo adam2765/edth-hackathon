@@ -1,0 +1,359 @@
+{
+ "base": "http://localhost:3147",
+ "voices": [
+  "Samantha",
+  "Daniel"
+ ],
+ "repeat": 1,
+ "runs": [
+  {
+   "id": "A4",
+   "said": "Alpha 1, at Bérault metro.",
+   "how": "Samantha",
+   "pass": false,
+   "misses": [
+    "status ambiguous, wanted resolved",
+    "place none, wanted node/9415191169"
+   ],
+   "transcript": "Alpha One, at Bayreault Metro.",
+   "sender": "ALPHA 1",
+   "got": "ambiguous; asks: I can't find \"Bayreault\". Which station: Château de Vincennes, Vincennes, or Bérault? [Château de Vincennes / Vincennes / Bérault]",
+   "ms": 4887
+  },
+  {
+   "id": "A4",
+   "said": "Alpha 1, at Bérault metro.",
+   "how": "Daniel",
+   "pass": false,
+   "misses": [
+    "status ambiguous, wanted resolved",
+    "place none, wanted node/9415191169"
+   ],
+   "transcript": "Alpha 1, at Bayrold Metro.",
+   "sender": "ALPHA 1",
+   "got": "ambiguous; asks: I can't find \"Bayrold\". Which station: Château de Vincennes, Vincennes, or Bérault? [Château de Vincennes / Vincennes / Bérault]",
+   "ms": 5177
+  },
+  {
+   "id": "A5",
+   "said": "Bravo 2, in front of the town hall.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo to, in front of the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; ±80 m",
+   "ms": 3669
+  },
+  {
+   "id": "A5",
+   "said": "Bravo 2, in front of the town hall.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, in front of the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; ±80 m",
+   "ms": 3475
+  },
+  {
+   "id": "A8",
+   "said": "Alpha 1, at Mairie de Vincennes.",
+   "how": "Samantha",
+   "pass": false,
+   "misses": [
+    "status unresolved, wanted resolved",
+    "place none, wanted way/83816816"
+   ],
+   "transcript": "Alpha One, at Mary de Vincennes.",
+   "sender": "ALPHA 1",
+   "got": "unresolved; named_none: I couldn't place that. Name a street or a landmark.",
+   "ms": 3542
+  },
+  {
+   "id": "A8",
+   "said": "Alpha 1, at Mairie de Vincennes.",
+   "how": "Daniel",
+   "pass": false,
+   "misses": [
+    "status unresolved, wanted resolved",
+    "place none, wanted way/83816816"
+   ],
+   "transcript": "Alpha 1, Admeri de Vincenis.",
+   "sender": "ALPHA 1",
+   "got": "unresolved; named_none: I couldn't place that. Name a street or a landmark.",
+   "ms": 4083
+  },
+  {
+   "id": "A9",
+   "said": "Bravo 2, at Château de Vincennes metro station.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, at Chateau de Vincennes metro station.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Château de Vincennes; ±30 m",
+   "ms": 3977
+  },
+  {
+   "id": "A9",
+   "said": "Bravo 2, at Château de Vincennes metro station.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, at Chateau de Vincennes metro station.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Château de Vincennes; ±30 m",
+   "ms": 3977
+  },
+  {
+   "id": "B3",
+   "said": "Bravo 2, 200 metres south of the town hall.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, 200 meters south of the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; ±80 m",
+   "ms": 3341
+  },
+  {
+   "id": "B3",
+   "said": "Bravo 2, 200 metres south of the town hall.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, 200 meters south of the town hall.",
+   "sender": "BRAVO 2",
+   "got": "resolved; Mairie de Vincennes; ±80 m",
+   "ms": 4419
+  },
+  {
+   "id": "B4",
+   "said": "Alpha 1, moved 300 metres east.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, moved 300 meters east.",
+   "sender": "ALPHA 1",
+   "got": "resolved; ±150 m",
+   "ms": 3301
+  },
+  {
+   "id": "B4",
+   "said": "Alpha 1, moved 300 metres east.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Moved 300 meters east.",
+   "sender": "ALPHA 1",
+   "got": "resolved; ±150 m",
+   "ms": 2756
+  },
+  {
+   "id": "B6",
+   "said": "Alpha 1, moving towards Avenue de Paris.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, moving towards Avenue de Paris.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Avenue de Paris; towards Avenue de Paris; ±125 m",
+   "ms": 3702
+  },
+  {
+   "id": "B6",
+   "said": "Alpha 1, moving towards Avenue de Paris.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1: Moving towards Avenue de Paris.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Avenue de Paris; towards Avenue de Paris; ±125 m",
+   "ms": 4645
+  },
+  {
+   "id": "D1",
+   "said": "Alpha 1, two enemy vehicles on Avenue de Paris, moving east.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, two enemy vehicles on Avenue de Paris, moving east.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile vehicle ×2, Avenue de Paris; Avenue de Paris",
+   "ms": 6861
+  },
+  {
+   "id": "D1",
+   "said": "Alpha 1, two enemy vehicles on Avenue de Paris, moving east.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Two enemy vehicles on Avenue de Paris, moving east.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile vehicle ×2, Avenue de Paris; Avenue de Paris",
+   "ms": 7159
+  },
+  {
+   "id": "D5",
+   "said": "Alpha 1, Track 1 is hostile.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Track 1 is hostile.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile ?",
+   "ms": 6569
+  },
+  {
+   "id": "D5",
+   "said": "Alpha 1, Track 1 is hostile.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Track 1 is hostile.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile ?",
+   "ms": 5914
+  },
+  {
+   "id": "E2",
+   "said": "Bravo 2, at grid Delta Quebec 586 101.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, at Grid Delta Quebec 586 101.",
+   "sender": "BRAVO 2",
+   "got": "resolved; ±71 m",
+   "ms": 4976
+  },
+  {
+   "id": "E2",
+   "said": "Bravo 2, at grid Delta Quebec 586 101.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, at Grid Delta Quebec 586 101.",
+   "sender": "BRAVO 2",
+   "got": "resolved; ±71 m",
+   "ms": 4946
+  },
+  {
+   "id": "E4",
+   "said": "Alpha 1, enemy vehicle at grid 588 106.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, enemy vehicle at grid 588-106.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile vehicle, grid DQ 588 106",
+   "ms": 9896
+  },
+  {
+   "id": "E4",
+   "said": "Alpha 1, enemy vehicle at grid 588 106.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1. Enemy vehicle at grid 588-106.",
+   "sender": "ALPHA 1",
+   "got": "resolved; Track 1: hostile vehicle, grid DQ 588 106",
+   "ms": 11836
+  },
+  {
+   "id": "F7",
+   "said": "Alpha 1, Track 1, request eyes on.",
+   "how": "Samantha",
+   "pass": false,
+   "misses": [
+    "read as a report about a track",
+    "no request read"
+   ],
+   "transcript": "Alpha 1, Track 1, Request ISON",
+   "sender": "ALPHA 1",
+   "got": "unresolved; Track 1: unknown ?; track_no_place: Where is it? Name a place near it, or a distance and a compass direction from you.",
+   "ms": 12649
+  },
+  {
+   "id": "F7",
+   "said": "Alpha 1, Track 1, request eyes on.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Alpha 1, Track 1, request eyes on.",
+   "sender": "ALPHA 1",
+   "got": "unresolved; request_only: ; request on Track 1",
+   "ms": 3091
+  },
+  {
+   "id": "F8",
+   "said": "Bravo 2, send the drone.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo 2, send the drone.",
+   "sender": "BRAVO 2",
+   "got": "unresolved; request_only: ; request, no track",
+   "ms": 3048
+  },
+  {
+   "id": "F8",
+   "said": "Bravo 2, send the drone.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Bravo too. Send the drone.",
+   "sender": "BRAVO 2",
+   "got": "unresolved; request_only: ; request, no track",
+   "ms": 4910
+  },
+  {
+   "id": "G1",
+   "said": "At Vincennes station, Alpha 1.",
+   "how": "Samantha",
+   "pass": false,
+   "misses": [
+    "ALPHA 1 is 537 m from where it should be (limit 5 m)"
+   ],
+   "transcript": "at Vincent Station, Alpha 1.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 3035
+  },
+  {
+   "id": "G1",
+   "said": "At Vincennes station, Alpha 1.",
+   "how": "Daniel",
+   "pass": false,
+   "misses": [
+    "ALPHA 1 is 537 m from where it should be (limit 5 m)"
+   ],
+   "transcript": "at Vincenna's station, Alpha 1.",
+   "sender": null,
+   "got": "held (which): Heard “Alpha 1” at the end. Was that ALPHA 1?",
+   "ms": 4204
+  },
+  {
+   "id": "G4",
+   "said": "Track 1 is hostile, Charlie 3.",
+   "how": "Samantha",
+   "pass": true,
+   "misses": [],
+   "transcript": "Track 1 is Hostile, Charlie 3.",
+   "sender": null,
+   "got": "held (which): Heard “Charlie 3” at the end. Was that CHARLIE 3?",
+   "ms": 1307
+  },
+  {
+   "id": "G4",
+   "said": "Track 1 is hostile, Charlie 3.",
+   "how": "Daniel",
+   "pass": true,
+   "misses": [],
+   "transcript": "Track 1 is hostile. Charlie 3.",
+   "sender": null,
+   "got": "held (which): Heard “Charlie 3” at the end. Was that CHARLIE 3?",
+   "ms": 2764
+  }
+ ]
+}

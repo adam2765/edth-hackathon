@@ -7,7 +7,7 @@
  * What may be left out is taken from the area: the zone ("31U"), and with a grid word, the 100 km
  * square ("DQ"): the square nearest the area's centre.
  */
-import type { LatLon } from "./geo";
+import { bearingDeg, distanceM, type LatLon } from "./geo";
 
 export interface GridRead {
   pin: LatLon;
@@ -215,4 +215,105 @@ function gridFrom(run: { t: string; announced: boolean }[], centre: LatLon, home
     text: `${zoneSaid ? `${zoneSaid}${band ?? ""} ` : ""}${best.square} ${digits.slice(0, k)} ${digits.slice(k)}`,
     from_centre_km: Math.round(best.km * 10) / 10,
   };
+}
+
+/**
+ * The grid of a point, the other way round [231]: "31U DQ 5860 1012" (8 figures, a 10 m cell).
+ * For the map's readout, so an operator can read a grid off the map and say it.
+ */
+export function toGrid(p: LatLon, figures: 6 | 8 | 10 = 8): string {
+  const u = toUtm(p);
+  const band = BANDS[Math.min(19, Math.max(0, Math.floor((p.lat + 80) / 8)))];
+  const k = figures / 2;
+  const cell = 10 ** (5 - k);
+  const e = String(Math.floor((u.easting % 100000) / cell)).padStart(k, "0");
+  const n = String(Math.floor((u.northing % 100000) / cell)).padStart(k, "0");
+  return `${u.zone}${band} ${squareOf(u.zone, u.easting, u.northing)} ${e} ${n}`;
+}
+
+/** Box of the map on screen. */
+export interface Bounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+/** The spacing of grid lines for a zoom, in metres: 1 km close in, 10 km further out, none beyond [232]. */
+export function gridSpacing(zoom: number): 1000 | 10000 | null {
+  if (zoom >= 12) return 1000;
+  if (zoom >= 9) return 10000;
+  return null;
+}
+
+/**
+ * Where a grid's figures go [233]: the eastings in a row at latitude `row`, the northings in a
+ * column at longitude `column`, and only those that fall `inside` the box. A map works these out
+ * from the part of the screen that nothing covers.
+ */
+export interface GridLabels {
+  row: number;
+  column: number;
+  inside: Bounds;
+}
+
+/**
+ * MGRS grid lines over a box, in the UTM zone of `centre` [232]: lines of equal easting and
+ * northing every `spacing` metres, each a few points long so it bends with the projection, and
+ * label points with the line's figures ("58", "10"). By default the eastings go along the
+ * bottom and the northings up the left, as on a printed map. GeoJSON, for a map layer. At most
+ * 60 lines a way.
+ */
+export function gridLines(b: Bounds, centre: LatLon, spacing: 1000 | 10000, labels?: GridLabels): GeoJSON.FeatureCollection {
+  const zone = toUtm(centre).zone;
+  const corners = [
+    toUtm({ lat: b.south, lon: b.west }, zone),
+    toUtm({ lat: b.south, lon: b.east }, zone),
+    toUtm({ lat: b.north, lon: b.west }, zone),
+    toUtm({ lat: b.north, lon: b.east }, zone),
+  ];
+  const minE = Math.floor(Math.min(...corners.map((c) => c.easting)) / spacing) * spacing;
+  const maxE = Math.ceil(Math.max(...corners.map((c) => c.easting)) / spacing) * spacing;
+  const minN = Math.floor(Math.min(...corners.map((c) => c.northing)) / spacing) * spacing;
+  const maxN = Math.ceil(Math.max(...corners.map((c) => c.northing)) / spacing) * spacing;
+  const features: GeoJSON.Feature[] = [];
+  if ((maxE - minE) / spacing > 60 || (maxN - minN) / spacing > 60) return { type: "FeatureCollection", features };
+  const pt = (e: number, n: number): [number, number] => {
+    const p = fromUtm(zone, e, n);
+    return [p.lon, p.lat];
+  };
+  /** The figures a line is read by: kilometres within the 100 km square, "58"; tens of km, "5". */
+  const figures = (m: number) => (spacing === 1000 ? String(Math.floor((m % 100000) / 1000)).padStart(2, "0") : String(Math.floor((m % 100000) / 10000)));
+  const steps = 8;
+  // Labels sit just inside the box when the map gives no place for them: eastings near the bottom, northings near the left.
+  const { row, column, inside } = labels ?? { row: b.south + (b.north - b.south) * 0.03, column: b.west + (b.east - b.west) * 0.01, inside: b };
+  for (let e = minE; e <= maxE; e += spacing) {
+    const coords = Array.from({ length: steps + 1 }, (_, i) => pt(e, minN + ((maxN - minN) * i) / steps));
+    const major = e % 100000 === 0;
+    features.push({ type: "Feature", properties: { kind: "line", major }, geometry: { type: "LineString", coordinates: coords } });
+    const at = toUtm({ lat: row, lon: fromUtm(zone, e, toUtm({ lat: row, lon: inside.west }, zone).northing).lon }, zone);
+    const p = fromUtm(zone, e, at.northing);
+    if (p.lon > inside.west && p.lon < inside.east) features.push({ type: "Feature", properties: { kind: "label", text: figures(e) }, geometry: { type: "Point", coordinates: [p.lon, row] } });
+  }
+  for (let n = minN; n <= maxN; n += spacing) {
+    const coords = Array.from({ length: steps + 1 }, (_, i) => pt(minE + ((maxE - minE) * i) / steps, n));
+    const major = n % 100000 === 0;
+    features.push({ type: "Feature", properties: { kind: "line", major }, geometry: { type: "LineString", coordinates: coords } });
+    const lat = fromUtm(zone, toUtm({ lat: inside.south, lon: column }, zone).easting, n).lat;
+    if (lat > inside.south && lat < inside.north) features.push({ type: "Feature", properties: { kind: "label", text: figures(n) }, geometry: { type: "Point", coordinates: [column, lat] } });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+/**
+ * What the ruler says, as a radio report would give it: "300 m · bearing 060° · 1067 mils" [232].
+ * The mils come from the exact bearing, not the rounded degrees: a mil is 18 times finer [233].
+ */
+export function measureText(a: LatLon, b: LatLon): string {
+  const d = distanceM(a, b);
+  const exact = (bearingDeg(a, b) + 360) % 360;
+  const deg = Math.round(exact) % 360;
+  const mils = Math.round((exact * 6400) / 360) % 6400;
+  const dist = d >= 1000 ? `${(d / 1000).toFixed(2)} km` : `${Math.round(d)} m`;
+  return `${dist} · bearing ${String(deg).padStart(3, "0")}° · ${mils} mils`;
 }

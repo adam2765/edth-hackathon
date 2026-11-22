@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bearingSaid, withFacing } from "../lib/geo/clock";
 import { loadGazetteer } from "../lib/geo/gazetteer";
 import { bearingDeg, distanceM } from "../lib/geo/geo";
-import { resolveReport } from "../lib/geo/tracks";
+import { resolveReport, sayBack } from "../lib/geo/tracks";
 import type { LastPosition } from "../lib/geo/types";
 import { sanitizeIntent } from "../lib/providers/extractor";
 
@@ -52,5 +52,24 @@ describe("a report with a bearing [229]", () => {
   it("sets the way when the model gave another one", () => {
     const r = run({ kind: "movement", distance_m: 200, direction: "north", language: "en" }, "Moved 200 metres, bearing 120");
     expect(bearingDeg(LAST, r.pin!)).toBeCloseTo(120, 0);
+  });
+});
+
+describe("the way said back as it was said [230]", () => {
+  const said = (raw: Record<string, unknown>, transcript: string) => sayBack(run(raw, transcript), sanitizeIntent(raw, null, transcript), transcript);
+
+  it("repeats a bearing, not the nearest compass word", () => {
+    const t = "Contact, two enemy vehicles, bearing 060, 300 metres";
+    const raw = { kind: "position", track: { kind: "vehicle", count: 2 }, distance_m: 300, direction: "north_east", language: "en" };
+    expect(said(raw, t)).toBe("Hostile vehicle, count 2, 300 metres, bearing 060. Not numbered: no mission.");
+    expect(run(raw, t).track?.label).toBe("300 m, bearing 060, from ALPHA 1");
+    expect(said({ ...raw, track: { kind: "armour" }, language: "uk" }, "Ворожий танк, азимут 75, 300 метрів")).toContain("300 метрів, азимут 075");
+  });
+
+  it("repeats a clock in the speaker's words, and keeps the compass way on the map", () => {
+    const t = "Véhicule ennemi à 2 heures, 300 mètres";
+    const raw = { kind: "position", track: { kind: "vehicle" }, distance_m: 300, direction: "north_east", language: "fr" };
+    expect(said(raw, t)).toContain("300 mètres, à 2 heures");
+    expect(run(raw, t).track?.label).toBe("300 m north-east of ALPHA 1");
   });
 });

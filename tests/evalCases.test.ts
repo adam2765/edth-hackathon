@@ -65,6 +65,15 @@ describe("extraction eval cases", () => {
   }, 30_000);
 });
 
+describe("what the model wrote, made into an intent", () => {
+  it("takes the word \"null\" for none, as the offline model sometimes writes it", () => {
+    // "Bravo 2, the metro station." came back with landmark_name "null", and the app asked
+    // 'I can't find "null"' (22 Nov).
+    const i = sanitizeIntent({ kind: "position", landmark_text: "the metro station", landmark_name: "null", landmark_name_lemma: "NULL", landmark_category: "metro_station", relation: "at" });
+    expect(i).toMatchObject({ landmark_text: "the metro station", landmark_name: null, landmark_name_lemma: null, landmark_category: "metro_station" });
+  });
+});
+
 describe("extraction eval scoring", () => {
   it("compares text loosely and lists as any of", () => {
     expect(normText("  Rue de  Fontenay. ")).toBe("rue de fontenay");

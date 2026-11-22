@@ -269,7 +269,7 @@ The uplink-off demo. Mandatory for Demo Day; target Saturday midday. About 1.5 t
 
 One switch, `PROVIDER_MODE=hosted|local`; nothing else in the app changes. The MacBook (M1 Pro, 32 GB) serves the app; phones reach it over a hotspot or travel router with no internet. Use local mode for the in-hall demo and hosted mode over mobile data for the outdoor field walk.
 
-The uplink-off setup. Dashed boxes and lines are not built yet, as of Saturday 21 November. The network is not set up either: the Mac's hotspot or a travel router.
+The uplink-off setup. Dashed boxes and lines are not built yet, as of Sunday 22 November. The network is not set up either: the Mac's hotspot or a travel router.
 
 ```mermaid
 flowchart LR
@@ -282,7 +282,7 @@ flowchart LR
             WHS["Whisper turbo by default, base with `npm start light`<br/>speech-to-text on the coordinator"]
             ST[("File store<br/>.data/sessions/")]
             RX["Command post<br/>on the Mac's screen"]
-            TILES[("Saved tiles, fonts, icons<br/>and a local map style")]:::todo
+            TILES[("Saved tiles, fonts, icons<br/>and a local map style")]
         end
     end
 
@@ -292,13 +292,13 @@ flowchart LR
     CO -- "audio" --> WHS
     CO --> ST
     RX --> CO
-    RX -. "map" .-> TILES
+    RX -- "map" --> TILES
     WEB -. "map" .-> TILES
 
     classDef todo stroke-dasharray: 5 5
 ```
 
-Until track C is done, the command post's map still loads from OpenFreeMap and needs the internet.
+Track C is built [239]: in local mode both maps read the copy saved on the Mac by `npm run basemap -- <area>`, and with no saved copy and no internet they still draw the units on a plain background. How it works is in [architecture.md](architecture.md#the-map-with-no-internet). Not yet checked on the stage Mac with its Wi-Fi off. The saved copy is not in git, so each computer fetches its own, one run an area.
 
 | Track | Item | Size |
 |---|---|---|
@@ -308,7 +308,7 @@ Until track C is done, the command post's map still loads from OpenFreeMap and n
 | B. Models | The `PROVIDER_MODE` switch | done |
 | B | Local speech-to-text: whisper-server with quantized turbo (base with `npm start light`), VAD and ffmpeg, about 635 MB of host models for both options and VAD | integrated; live validation pending setup |
 | B | Local extraction: Ministral 3 3B through Ollama with the same schema, 3 GB. Built; the prompt is not tuned for it yet | done |
-| C. Offline map | Save tiles, fonts and icons locally, plus a local map style | 2 to 3 h |
+| C. Offline map | Save tiles, fonts and icons locally, plus a local map style. Built 22 Nov: `npm run basemap -- <area>` | done |
 | D. Evidence | Record ten real clips, some with hall noise | 0.5 h |
 | D | `scripts/bench-local.ts`: run the clips through both modes, print per-step timings and whether the place matched; rehearse in the hall | 3 h |
 | E. Command post | A local file store behind the storage interface. Built: `FileStore` in `lib/reports/store.ts`, in `.data/sessions/` | done |
@@ -317,7 +317,7 @@ A, B and C can run in parallel.
 
 Things already found:
 
-- **No PMTiles needed.** Both areas together are 164 tiles with a margin for panning, so a plain folder of files does. OpenFreeMap allows offline downloads up to 3,000 tiles.
+- **No PMTiles needed.** Vincennes is 154 tiles with a margin for panning (Kyiv 210, Izium 253), so a plain folder of files does. OpenFreeMap allows an offline download of up to 3,000 tiles or 50 MB, 4 requests at a time [239].
 - **Fewer place names for Whisper.** Its prompt holds about 40 to 60 names against the 100 we send Mistral, so send the ones nearest the last position. On the coordinator, turbo gets no names at all: on the scenario clips they gained nothing and twice put a word in the transcript [195].
 - **Extraction was configuration.** Ollama takes the request the extractor already sends, schema included, and every reply was valid JSON. `PROVIDER_MODE=local` is built; see the README's [Offline](../README.md#offline-models-on-this-computer) section, and [setup.md](setup.md#3-offline-mode) to set it up on another computer.
 - **3B, not 8B.** On the 9 scenario texts: Mistral Small 9 of 9 at 0.8 s, Ministral 3 8B 8 of 9 at 5.1 s, Ministral 3 3B 8 of 9 at 2.0 s. Both local models miss "Golden Gate" with a question, not a wrong pin [84].

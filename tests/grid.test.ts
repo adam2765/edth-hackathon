@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadGazetteer } from "../lib/geo/gazetteer";
 import { distanceM } from "../lib/geo/geo";
-import { readGrid, toUtm } from "../lib/geo/grid";
+import { readGrid, toGrid, toUtm } from "../lib/geo/grid";
 import { resolve } from "../lib/geo/resolver";
 import { resolveReport } from "../lib/geo/tracks";
 import { positionFromReport } from "../lib/reports/position";
@@ -54,6 +54,15 @@ describe("a grid reference said out loud [223]", () => {
     }
   });
 
+  it("gives the grid of a point, as the mgrs library does [231]", () => {
+    expect(toGrid(CASTLE)).toBe("31U DQ 5860 1012");
+    expect(toGrid(CASTLE, 10)).toBe("31U DQ 58603 10123");
+    expect(toGrid({ lat: 50.4501, lon: 30.5234 })).toBe("36U UA 2418 9160");
+    expect(toGrid({ lat: 49.1912, lon: 37.2786 }, 6)).toBe("37U CQ 745 501");
+    // Read back, a grid lands within its own cell.
+    expect(distanceM(readGrid(`grid ${toGrid(CASTLE)}`, VINCENNES)!.pin, CASTLE)).toBeLessThan(10);
+  });
+
   it("agrees with the reference UTM for the area's centre", () => {
     const u = toUtm(VINCENNES);
     expect(u.zone).toBe(31);
@@ -76,6 +85,17 @@ describe("a grid in a report [223]", () => {
   it("shows the grid on the command post, not \"position\" [228]", () => {
     const r = resolve({ intent: intent({}), transcript: "Alpha 1, grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
     expect(positionFromReport(r, null)?.label).toBe("grid DQ 586 101");
+  });
+
+  it("places a thing off a grid by the distance and way said [230]", () => {
+    const self = resolve({ intent: intent({ distance_m: 200, direction: "north" }), transcript: "I'm at grid DQ 586 101, 200 metres north", now: NOW, gazetteer: gaz, areaCentre: VINCENNES });
+    const cell = readGrid("grid DQ 586 101", VINCENNES)!.pin;
+    expect(distanceM(cell, self.pin!)).toBeCloseTo(200, -1);
+    expect(self).toMatchObject({ evidence: { rule: "grid_reference" }, estimated: true });
+    expect(positionFromReport(self, null)?.label).toBe("200 m north of grid DQ 586 101");
+    const drone = resolveReport({ intent: intent({ subject: "track", track_kind: "drone", distance_m: 200, relation: "north_of", landmark_name: "grid DQ 586 101" }), transcript: "Enemy drone 200 metres north of grid DQ 586 101", now: NOW, gazetteer: gaz, areaCentre: VINCENNES, observer: "ALPHA 1" });
+    expect(drone.track?.label).toBe("200 m north of grid DQ 586 101");
+    expect(distanceM(cell, drone.track!.placement!.pin!)).toBeCloseTo(200, -1);
   });
 
   it("asks again for a grid far outside the area", () => {
