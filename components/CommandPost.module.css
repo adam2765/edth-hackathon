@@ -150,7 +150,8 @@
 }
 
 /* Top left of the map: "Follow units", then the palette or a track's card, one under the other.
-   It stops above the replay bar and scrolls if the screen is short. */
+   It stops above the replay bar and scrolls if the screen is short. Under `zoom` the 100% is
+   already in the dock's own pixels; only the replay bar's height and the margin are divided. */
 .dock {
   position: absolute;
   top: 12px;
@@ -160,7 +161,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  max-height: calc((100% - var(--sheet-h) - 36px) / var(--z));
+  max-height: calc(100% - (var(--sheet-h) + 36px) / var(--z));
   pointer-events: none;
 }
 
@@ -1382,15 +1383,18 @@
 }
 
 /* ---------- the command post's own changes: placing and changing tracks ---------- */
-/* The palette and a track's card: a panel over the map's top left, under "Follow units". */
+/* The palette and a track's card: a panel over the map's top left, under "Follow units".
+   Wide enough that the five "Whose" words, and "How many" beside "How sure", fit on one line
+   each even when a scroll bar takes 15 px; otherwise the panel scrolls sideways too. */
 .tool {
-  width: 340px;
+  width: 360px;
   max-width: calc(100vw - 24px);
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 12px 14px 14px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1424,13 +1428,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 12px 18px;
+  gap: 10px 14px;
 }
 
-/* Whose it is: five words, each in its own colour once picked, as its pill is in the lists. */
+/* Whose it is: five words, each in its own colour once picked, as its pill is in the lists.
+   Equal shares of the row; on a panel too narrow for all five they wrap, never overflow. */
 .affs {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -1448,6 +1453,7 @@
 }
 
 .affs button {
+  flex: 1 0 0;
   min-height: 34px;
   padding: 4px 2px;
 }
