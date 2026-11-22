@@ -236,7 +236,7 @@ type Tool =
   | { kind: "edit"; n: number; what: TrackWhat };
 
 /**
- * The decision open in the Decisions list [236]: by id, and where it stood in the list, so that
+ * The decision open in the Decisions list [239]: by id, and where it stood in the list, so that
  * when it is settled (here or on another screen) the one that takes its place opens next.
  */
 type Focus = { id: string; index: number };
@@ -250,7 +250,7 @@ type Selection = { id: string; option: DecisionOption };
  */
 function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): { tag: string; text: string; tone: UnitTone } {
   if (u.pending) return { tag: "Awaiting answer", text: u.pending.question, tone: "ask" };
-  // A question with no choices waits for the operator too [238].
+  // A question with no choices waits for the operator too [241].
   if (u.prompt) return { tag: "Awaiting answer", text: u.prompt.question, tone: "ask" };
   // On the roster, and no report from it yet [201].
   if (u.lastHeard === 0) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
@@ -487,7 +487,7 @@ export default function CommandPost() {
   /** Changes are made only to the present of an open mission that this coordinator keeps. */
   const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true;
 
-  // ---------- the Decisions list [236] ----------
+  // ---------- the Decisions list [239] ----------
   const decisions = useMemo(() => decisionsOf(view), [view]);
   /** Report id (or held or request id) to its place in the list. */
   const decisionAt = useMemo(() => new Map(decisions.map((d, i) => [d.id, i])), [decisions]);
@@ -1053,7 +1053,7 @@ export default function CommandPost() {
 
   // Open questions: each choice numbered on the map, ringed in its unit's colour and named with
   // its call sign, so two units' choices are not told apart by colour alone. The open decision's
-  // choices stand out and can be clicked; the others fade [236].
+  // choices stand out and can be clicked; the others fade [239].
   const pendings = useMemo(() => view.units.filter((u) => u.pending), [view]);
   const focusedQuestion = focused?.kind === "question" ? focused : null;
   const pickedChoice = picking?.kind === "choice" ? picking.choice : null;
@@ -1393,7 +1393,7 @@ export default function CommandPost() {
 
   /**
    * The command post answers a unit's question, as when the unit has only a radio [178], or closes
-   * one with no choices (`choice` null) [238]. True once it is saved.
+   * one with no choices (`choice` null) [241]. True once it is saved.
    */
   const sendAnswer = useCallback(
     async (reportId: string, choice: string | null, callsign: string, done: string): Promise<boolean> => {
@@ -1498,7 +1498,7 @@ export default function CommandPost() {
     [session],
   );
 
-  /** The operator confirms the option picked in the open decision; the next one opens by itself [236]. */
+  /** The operator confirms the option picked in the open decision; the next one opens by itself [239]. */
   const confirmPick = useCallback(async () => {
     if (!focused || !picking || busy || !canEdit) return;
     const d = focused;
@@ -1523,14 +1523,14 @@ export default function CommandPost() {
     moveMapTo(focused);
   }, [focused, focus, moveMapTo]);
 
-  // How many decisions wait, in the tab's title, so it shows from another window [236].
+  // How many decisions wait, in the tab's title, so it shows from another window [239].
   const waitingCount = mode === "live" && ended == null ? decisions.length : 0;
   useEffect(() => {
     document.title = waitingCount ? `(${waitingCount}) Command post · Voice-to-Map` : "Command post · Voice-to-Map";
   }, [waitingCount]);
 
   // Keys, while no field has the cursor: P to place, H S U C F and 1 to 9 in the palette, Esc to step back.
-  // With no tool open: ↑ ↓ (or J K) move through the Decisions list, 1 to 9 pick, N none, Enter confirms [236].
+  // With no tool open: ↑ ↓ (or J K) move through the Decisions list, 1 to 9 pick, N none, Enter confirms [239].
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target instanceof HTMLElement ? e.target : null;
@@ -1956,7 +1956,7 @@ export default function CommandPost() {
       </main>
 
       <aside className={styles.side}>
-        {/* Everything that waits on the operator, oldest first, one open at a time [236]. */}
+        {/* Everything that waits on the operator, oldest first, one open at a time [239]. */}
         {session ? (
           <DecisionQueue
             decisions={decisions}
@@ -2007,7 +2007,7 @@ export default function CommandPost() {
               {view.units.map((u) => {
                 const silent = isSilent(u);
                 const st = unitStatus(u, silent, atEnd ? fmtAgo(effNow - u.lastHeard) : null);
-                // A unit whose question waits: its row opens the question [236].
+                // A unit whose question waits: its row opens the question [239].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 return (
                   <li key={u.callsign}>
@@ -2155,7 +2155,7 @@ export default function CommandPost() {
                   </li>
                 );
               }
-              // Waiting in the Decisions list: answered there, not here [236].
+              // Waiting in the Decisions list: answered there, not here [239].
               const waiting = decisionAt.get(f.id);
               const open = waiting != null;
               // The same words as the units list, so a state has one name on the page.

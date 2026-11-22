@@ -1,6 +1,6 @@
 # Asking back by voice
 
-Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 236]). The unit's next report closes it [237]; a question with no choices is asked by radio, then closed [238]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
+Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 239]). The unit's next report closes it [240]; a question with no choices is asked by radio, then closed [241]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. The next step is to take the answer by voice: the unit presses talk and says "the metro", "two", "say again" or "disregard", as on a radio net.
 
 Status, 21 November: **measured, not built.** The reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199].
 
