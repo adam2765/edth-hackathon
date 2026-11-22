@@ -8,7 +8,7 @@ import type { Category } from "../lib/geo/types";
 import { expectedKinds, type ReplyCase, type ReplyCasesFile, type ReplyQuestion } from "../lib/evals/replies";
 import { afterCallsign, withoutClosing } from "../lib/reports/radio";
 
-// A spoken answer read in code [244]: the closed forms only, and never a wrong choice.
+// A spoken answer read in code [245]: the closed forms only, and never a wrong choice.
 
 const file = JSON.parse(readFileSync(join(__dirname, "../evals/replies.cases.json"), "utf8")) as ReplyCasesFile;
 const ROSTER = ["ALPHA 1", "ALPHA 2", "BRAVO 2", "CHARLIE 3"];

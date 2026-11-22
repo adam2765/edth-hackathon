@@ -21,7 +21,7 @@ Six things were not as the first plan assumed. Each is in [Results](#results).
 3. **", over" at the end lost the position.** The offline model read "at Vincennes station, over." as no place at all. Closing words are now cut before the model reads a radio report [237].
 4. **A call sign at the end is a question for the operator, not a sender** [237]. Alex asked for it to count as the sender, as a sign-off. Held-out tests showed that speaking to a unit ("Push up to the station, Bravo 2") looks the same, and the first two versions moved the wrong unit. So the report waits in the tray with "Was that ALPHA 1?", and one tap confirms it.
 5. **The far guard is real.** "Alpha 1, at Mairie de Vincennes" straight after "Alpha 1, at Vincennes station" was held as "moved 461 m in 0 s". After 25 seconds it went through.
-6. **A spoken answer to a question does not answer it.** "Bravo 2, the metro station" asked again. On stage the operator answers on the command post. Since decision 244 a short answer like that one is heard instead: the command post shows choice 1 picked, and the operator presses Enter. Checked with a typed report on 22 Nov, not with a voice and not in the passes below.
+6. **A spoken answer to a question does not answer it.** "Bravo 2, the metro station" asked again. On stage the operator answers on the command post. Since decision 245 a short answer like that one is heard instead: the command post shows choice 1 picked, and the operator presses Enter. Checked with a typed report on 22 Nov, not with a voice and not in the passes below.
 
 ## What can fail on stage
 
@@ -139,7 +139,7 @@ The other lines, once each:
 | B4 | "Alpha 1, moved 300 metres east." 15 s after its last report | 300 m east, as an estimate, ±150 m |
 | B5, B6 | "On Avenue de Paris, heading east." and "moving towards Avenue de Paris." | On the avenue; towards it, the marker half way |
 | C2 | "Alpha 1, enemy patrol near the cemetery." | Track, hostile people; asks which cemetery |
-| C3 | "Bravo 2, the metro station.", said as an answer to the château question | Asks again, "Which station: …". It first read "I can't find “null”"; that is fixed. A spoken answer does not answer the question. Since decision 244 this line is heard as choice 1 and waits for the operator's confirm; the pass was not run again |
+| C3 | "Bravo 2, the metro station.", said as an answer to the château question | Asks again, "Which station: …". It first read "I can't find “null”"; that is fixed. A spoken answer does not answer the question. Since decision 245 this line is heard as choice 1 and waits for the operator's confirm; the pass was not run again |
 | C4 | "Alpha 1, enemy vehicle to the east." | Not placed: "How far east is it? Or name a place near it." |
 | D1 | "Alpha 1, two enemy vehicles on Avenue de Paris, moving east." | Track, hostile vehicle ×2, on the avenue |
 | D3 | "Alpha 1, suspicious vehicle on Avenue de Paris." | Track, suspect vehicle |

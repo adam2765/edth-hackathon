@@ -10,7 +10,7 @@ import { createMission, recordAnswer, saveReply, saveReport } from "../lib/repor
 import { getStore } from "../lib/reports/store";
 import type { AnswerEntry, LogEntry, ReplyEntry, ReportEntry, UnitPosition } from "../lib/reports/types";
 
-// An answer heard for an open question [244]: kept in the log, shown picked, confirmed by a person.
+// An answer heard for an open question [245]: kept in the log, shown picked, confirmed by a person.
 
 const T0 = Date.UTC(2026, 10, 22, 12, 0, 0);
 const at = (s: number) => T0 + s * 1000;

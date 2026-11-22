@@ -1,6 +1,6 @@
 # Asking back by voice
 
-Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. Since 22 Nov a short spoken answer is heard: the unit says "two" or "the metro station", and the command post shows that choice already picked, for the operator to confirm [244].
+Today a question waits for the operator: it is a line in the command post's Decisions list, which shows its choices and answers for the unit (`POST /api/answer`, [178, 240]). The unit's next report closes it [241]; a question with no choices is asked by radio, then closed [242]. Since 21 Nov the phone no longer shows, speaks or answers questions, as a radio would not [208]; the web page still does [100]. Since 22 Nov a short spoken answer is heard: the unit says "two" or "the metro station", and the command post shows that choice already picked, for the operator to confirm [245].
 
 Status, 22 November: **the code layer is built; the model layer is measured, not built.** A short answer that picks one choice is read in code (`lib/geo/replies.ts`) and waits for the operator's confirm ([below](#built-the-code-reader)). The model reply reader and its eval exist (`lib/providers/replies.ts`, `npm run eval:replies`); nothing in the request path uses them yet [199]. The other kinds of reply ("say again", "disregard", "by the church") are still read as a report.
 
@@ -32,7 +32,7 @@ The difference only matters where the two readings draw different maps. Asked wh
 
 Code alone cannot list every way of saying these things ("hang on", "scratch that", "the one by the big roundabout"), and a model alone gets some of the shortest replies wrong (below). So:
 
-1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Built on 22 Nov for picks only [244]; the radio words are not read yet.
+1. **Code first,** for the closed forms: a number or ordinal, a word that names one choice and no other, and the radio words (say again, wait one, disregard, affirm, negative). The whole reply has to be one of these once filler words and call signs are taken out, so "two blocks east" is never choice 2. Built on 22 Nov for picks only [245]; the radio words are not read yet.
 2. **The reply reader for the rest:** a model call of its own, apart from the extraction prompt, that gets who the question is about, the question, the numbered choices and the reply, and returns a kind and a choice number. Code keeps the choice only if it was offered, and the place comes from the stored choice, so no model makes a coordinate.
 3. **Code checks where a miss is costly:** a pick of a reply that names its own subject or a movement asks again; a disregard needs the word itself.
 
@@ -67,7 +67,7 @@ Local, every round:
 
 ## Built: the code reader
 
-Since 22 November [244]. While a unit's question with choices is open, a radio report from that unit is checked in code before anything else (`readPick` in `lib/geo/replies.ts`). It is an answer when every word is one of these, or a filler:
+Since 22 November [245]. While a unit's question with choices is open, a radio report from that unit is checked in code before anything else (`readPick` in `lib/geo/replies.ts`). It is an answer when every word is one of these, or a filler:
 
 | Form | Examples |
 |---|---|

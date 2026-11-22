@@ -145,7 +145,7 @@ export interface FeedItem {
   /**
    * A report, a call sign joining, something the command post did to a track, or a note of what it
    * did with a held radio report (added a call sign, dismissed the report) or said a unit is [235].
-   * `reply`: what a unit said in answer to its open question, heard and waiting for a confirm [244].
+   * `reply`: what a unit said in answer to its open question, heard and waiting for a confirm [245].
    */
   kind: "report" | "join" | "plot" | "note" | "request" | "task" | "reply";
   /** The report's or the join's id. */
@@ -178,7 +178,7 @@ export interface FeedItem {
   byHand?: boolean;
   /**
    * For a question still open: what the unit said in answer, read in code as one of the choices
-   * [244]. Nothing has moved: the command post shows this choice picked, and the operator confirms.
+   * [245]. Nothing has moved: the command post shows this choice picked, and the operator confirms.
    * `n` counts from 1, as on the screen. The latest answer heard replaces an earlier one.
    */
   heard?: { ts: number; choice: string; n: number; name: string; words: string; how: HeardHow };
@@ -630,7 +630,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     }
 
     if (e.kind === "reply") {
-      // A few words heard as the answer to the unit's open question [244]. The unit spoke, so it was
+      // A few words heard as the answer to the unit's open question [245]. The unit spoke, so it was
       // heard; it does not move, and the question stays open until the command post confirms.
       const u = unitFor(e.callsign, mission?.area ?? area ?? "vincennes");
       u.lastHeard = Math.max(u.lastHeard, e.ts);
