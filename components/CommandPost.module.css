@@ -2236,3 +2236,255 @@
     font-size: 21px;
   }
 }
+
+/* ---------- the lanes' order, and the tracks' sort, groups and filter [259] ---------- */
+/* A strip can be dragged up or down its own list with a mouse or pen, or moved with Alt+↑ and Alt+↓.
+   A grip shows at its left edge under the pointer, in the strip's own padding. */
+.units > li {
+  position: relative;
+}
+
+.units > li::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 2px;
+  top: 50%;
+  width: 4px;
+  height: 16px;
+  translate: 0 -50%;
+  background: radial-gradient(circle, var(--muted) 1px, transparent 1.4px) 0 0 / 4px 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .units > li:hover::before {
+    opacity: 0.9;
+  }
+}
+
+/* The strip being dragged is lifted; the others make room for it as it goes. */
+.units > li[data-dragging]::before {
+  opacity: 0.9;
+}
+
+.units > li[data-dragging] > .unit {
+  border-color: var(--accent-2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  cursor: grabbing;
+}
+
+.resetBtn {
+  margin-left: auto;
+}
+
+.section > .h2 {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* One line under the heading says how the list is drawn ("Last seen · by state", "2 hidden"); it
+   opens to chips for the sort, the groups and what shows. Chips wrap, so a thin column fits them all. */
+.viewBtn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  margin: -2px 0 8px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.viewBtn svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.viewBtn:hover,
+.viewBtn[aria-expanded="true"] {
+  border-color: var(--accent-2);
+}
+
+/* Something is hidden: the line says so in the warning colour, so a short list is not taken for every track. */
+.viewBtn[data-hiding] {
+  border-color: var(--warn);
+}
+
+.viewText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewHidden {
+  flex: none;
+  color: var(--warn);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewBtn .foldMark {
+  flex: none;
+  color: var(--muted);
+}
+
+.viewPanel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -4px 0 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.viewRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.viewLabel {
+  flex: 0 0 100%;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.viewRow button {
+  min-height: 26px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.viewRow button:hover {
+  color: var(--text);
+}
+
+.viewRow button[aria-pressed="true"] {
+  border-color: var(--accent-2);
+  background: rgba(44, 156, 255, 0.16);
+  color: var(--text);
+}
+
+/* What shows: pressed means shown, in its own colour; a hidden one is struck out. */
+.viewRow button[data-hide] {
+  text-decoration: line-through;
+}
+
+.viewRow button[data-hide][aria-pressed="true"] {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+.viewRow button[data-hide="hostile"][aria-pressed="true"] {
+  border-color: var(--bad);
+}
+
+.viewRow button[data-hide="suspect"][aria-pressed="true"] {
+  border: 1px dashed var(--bad);
+}
+
+.viewRow button[data-hide="unknown"][aria-pressed="true"] {
+  border-color: var(--warn);
+}
+
+.viewRow button[data-hide="neutral"][aria-pressed="true"] {
+  border-color: var(--ok);
+}
+
+.viewRow button[data-hide="friendly"][aria-pressed="true"] {
+  border-color: #8cc8ff;
+}
+
+.viewRow button[data-hide="old"][aria-pressed="true"],
+.viewRow button[data-hide="gone"][aria-pressed="true"] {
+  border: 1px dashed var(--muted);
+}
+
+.viewBtn:focus-visible,
+.viewRow button:focus-visible,
+.linkBtn:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 1px;
+}
+
+/* The groups scroll together; each group's list is as tall as its strips. */
+.trackLists {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trackLists .units {
+  flex: none;
+  min-height: auto;
+  overflow: visible;
+}
+
+.groupHead {
+  margin: 0 0 4px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.groupHead .count {
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.hiddenNote {
+  margin: 0 2px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.linkBtn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-2);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
