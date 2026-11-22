@@ -1,5 +1,5 @@
 /**
- * A spoken answer to an open question, read in code [245]. On a radio net the operator asks the
+ * A spoken answer to an open question, read in code [246]. On a radio net the operator asks the
  * question and the unit answers in a few words: "two", "the metro station", "Saint-Mandé", "yes".
  * This reads only those closed forms, and only as a pick of one of the choices on offer:
  *   - a number or an ordinal ("two", "the second one", "numéro deux", "другий", "the last one");

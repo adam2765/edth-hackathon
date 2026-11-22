@@ -24,7 +24,7 @@ export const REQUEST_ONLY: Resolution = {
 
 /**
  * The resolution sent back when the words were taken as an answer to the unit's open question
- * [245]: nothing is placed by them, and no new question is asked. The command post confirms.
+ * [246]: nothing is placed by them, and no new question is asked. The command post confirms.
  */
 export const ANSWER_HEARD: Resolution = {
   status: "unresolved",
@@ -33,7 +33,7 @@ export const ANSWER_HEARD: Resolution = {
 };
 
 /**
- * A few words that answer a unit's open question, and are not a report [245]: "two", "the metro
+ * A few words that answer a unit's open question, and are not a report [246]: "two", "the metro
  * station". Null when the unit has no open question with choices, or the words are not one of the
  * closed forms `readPick` reads: they are then read as a report, as before. `words` are the words
  * after the sender's call sign.

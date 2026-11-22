@@ -29,7 +29,7 @@ function fmtWait(ms: number): string {
 }
 
 /**
- * The answer heard for a question, when the coordinator read one from the unit's words [245]:
+ * The answer heard for a question, when the coordinator read one from the unit's words [246]:
  * the words without their last full stop, and the choice with its kind, since two choices can
  * have one name ("Château de Vincennes (metro station)").
  */
@@ -136,7 +136,7 @@ export default function DecisionQueue(props: {
   focused: Decision | null;
   /** The option picked in the open decision, waiting for its confirm. */
   selection: DecisionOption | null;
-  /** The pick is the answer the coordinator heard, not the operator's own [245]. */
+  /** The pick is the answer the coordinator heard, not the operator's own [246]. */
   heardPick?: boolean;
   roster: string[];
   tracks: TrackState[];
@@ -243,7 +243,7 @@ export default function DecisionQueue(props: {
                 <span className={styles.said}>{transcript ? `“${transcript}”` : "(no words heard)"}</span>
                 {question ? <span className={styles.heldQuestion}>{question}</span> : null}
                 {heardOf(d) ? (
-                  // What the unit said in answer, read in code [245]. Its choice is picked below; nothing is saved without the confirm.
+                  // What the unit said in answer, read in code [246]. Its choice is picked below; nothing is saved without the confirm.
                   <span className={styles.heardAnswer}>
                     Heard at {fmtTime(heardOf(d)!.ts)}: “{heardOf(d)!.said}”. That is choice {heardOf(d)!.n}, {heardOf(d)!.what}.
                   </span>
