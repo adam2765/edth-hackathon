@@ -560,7 +560,7 @@ export interface ReplyInput {
 }
 
 /**
- * Keeps what a unit said as an answer heard for its open question [243]. It moves nothing: the
+ * Keeps what a unit said as an answer heard for its open question [244]. It moves nothing: the
  * command post confirms the choice. Null when that question is no longer the unit's open one, or
  * the choice is not one of its own (answered, closed or overtaken while the clip was read, or the
  * mission ended): the caller then reads the words as a report.

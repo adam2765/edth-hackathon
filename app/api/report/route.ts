@@ -237,7 +237,7 @@ export async function POST(req: Request) {
       lastPosition = c.lastPosition;
       tracks = c.tracks;
       Object.assign(meta, { callsign, lastPosition });
-      // A few words that answer the unit's open question are not a report [243]: "two", "the metro
+      // A few words that answer the unit's open question are not a report [244]: "two", "the metro
       // station". They are kept as what was heard, and the command post confirms the choice. Nothing
       // moves, and no model reads them. Anything else is read as a report, as before.
       const answer = answerHeard(m.entries, callsign, afterCallsign(transcript, sender.heard), now);
