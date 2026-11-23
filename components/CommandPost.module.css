@@ -965,7 +965,187 @@
   line-height: 1.4;
 }
 
+/* The card's History link opens the larger provenance panel [271]. */
+.toolActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolActions .linkBtn {
+  margin-left: 0;
+}
+
+.provenanceHead {
+  color: var(--accent-2);
+}
+
+.provenanceCount {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.provenancePanel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  width: min(420px, 46vw);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(22, 33, 44, 0.985);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.provenanceBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+/* The name and what the drawer shows, stacked, so a long track name keeps its row. */
+.drawerTitle {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.drawerTitle h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.drawerTitle span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.drawerClose {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .provenancePanel {
+    top: 12px;
+    left: auto;
+    right: 12px;
+    width: min(420px, calc(100vw - 24px));
+    bottom: 12px;
+  }
+}
+
+.provMeta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+
+.provMeta div {
+  min-width: 0;
+}
+
+.provMeta dt,
+.provMetaLabel {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.provMeta dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.provMetaLabel {
+  display: block;
+  margin: 8px 0 4px;
+}
+
+.provTrail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.provTrail li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
 .provList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.provList li {
+  border-bottom: 1px solid var(--line);
+}
+
+.provList li:last-child {
+  border-bottom: none;
+}
+
+.provRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 3px 8px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provRow:hover,
+.provRow:focus-visible {
+  background: var(--panel-2);
+}
+
+.provRow:disabled {
+  cursor: default;
+}
+
+.provRow:disabled:hover {
+  background: none;
+}
+
+.provListUnit {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -974,12 +1154,21 @@
   gap: 4px;
 }
 
-.provList li {
+.provListUnit li {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.provListUnit .provPlace {
+  grid-column: 2;
+}
+
+.unitHistory {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 .provTime {
@@ -1004,25 +1193,25 @@
 
 /* ---------- the mission timeline [271] ---------- */
 .timelinePanel {
-  position: fixed;
-  top: 84px;
+  position: absolute;
+  top: 12px;
   right: 12px;
   bottom: 12px;
   z-index: 5;
-  width: min(390px, 44vw);
+  width: min(420px, 46vw);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(22, 33, 44, 0.97);
+  background: rgba(22, 33, 44, 0.985);
+  backdrop-filter: blur(6px);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
 .timelinePanelHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
@@ -1036,6 +1225,7 @@
 .timelinePanelHint {
   margin: 0;
   padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
@@ -1044,11 +1234,10 @@
 .timelinePanelList {
   list-style: none;
   margin: 0;
-  padding: 0 6px 8px;
+  padding: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .timelinePanelList button {
@@ -1056,15 +1245,20 @@
   display: grid;
   grid-template-columns: auto auto auto minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 6px;
-  padding: 7px 6px;
+  gap: 8px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 6px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   background: none;
   color: var(--text);
   text-align: left;
   font: inherit;
   cursor: pointer;
+}
+
+.timelinePanelList li:last-child button {
+  border-bottom: none;
 }
 
 .timelinePanelList button:hover,
@@ -1086,23 +1280,25 @@
 }
 
 .timelinePanelWho {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
 .timelinePanelText {
   min-width: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .timelinePanelTag {
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 5px;
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .timelinePanelEmpty {
@@ -1112,10 +1308,10 @@
 
 @media (max-width: 900px) {
   .timelinePanel {
-    top: 90px;
-    left: 12px;
+    top: 12px;
+    left: auto;
     right: 12px;
-    width: auto;
+    width: min(420px, calc(100vw - 24px));
     bottom: 12px;
   }
 }

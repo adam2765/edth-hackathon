@@ -335,15 +335,13 @@ export function TrackCard(props: {
   children?: ReactNode;
   /** The reports and command-post acts about this track, oldest first: its provenance [271]. */
   history?: FeedItem[];
-  /** The clock used for the provenance's times. */
-  format?: (ts: number) => string;
+  /** Opens the larger provenance panel. */
+  onProvenance?: () => void;
 }) {
   const t = props.track;
   const [confirmGone, setConfirmGone] = useState(false);
   const p = t.position;
   const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
-  const when = props.format ?? ((ts: number) => new Date(ts).toLocaleTimeString());
-  const history = (props.history ?? []).slice(-6).reverse();
   return (
     <div className={styles.tool} role="dialog" aria-label={`Track ${t.n}`}>
       <div className={styles.toolHead}>
@@ -357,9 +355,21 @@ export function TrackCard(props: {
             Gone
           </span>
         ) : null}
-        <button type="button" className={styles.linkBtn} onClick={props.onClose}>
-          Close
-        </button>
+        <span className={styles.toolActions}>
+          {props.onProvenance ? (
+            <button
+              type="button"
+              className={`${styles.linkBtn} ${styles.provenanceHead}`}
+              onClick={props.onProvenance}
+              title="Who opened it, who saw it last, and the reports behind it"
+            >
+              History <span className={styles.provenanceCount}>{props.history?.length ?? 0}</span>
+            </button>
+          ) : null}
+          <button type="button" className={styles.linkBtn} onClick={props.onClose}>
+            Close
+          </button>
+        </span>
       </div>
       <p className={styles.cardLine}>{describeTrack(t)}</p>
       <p className={styles.hint}>
@@ -368,31 +378,6 @@ export function TrackCard(props: {
         {t.changed ? ` · changed by ${t.changed.by}` : ""}
         {t.note ? ` · source: ${t.note}` : ""}
       </p>
-      <details className={styles.provenance}>
-        <summary>Provenance and history ({history.length})</summary>
-        <p className={styles.provLine}>
-          Opened by <b>{t.openedBy}</b> at {when(t.openedTs)} · last seen by <b>{t.seenBy}</b> at {when(t.seenTs)}
-          {p ? ` · ±${p.radius_m} m${p.estimated ? ", estimated" : ""}` : ""} · {t.trail.length} earlier position{t.trail.length === 1 ? "" : "s"}.
-        </p>
-        {history.length ? (
-          <ol className={styles.provList}>
-            {history.map((f) => (
-              <li key={f.id}>
-                <span className={styles.provTime}>{when(f.ts)}</span>
-                <span className={styles.provWho}>{f.callsign}</span>
-                <span className={styles.provWhat}>{f.transcript || f.outcome}</span>
-                {f.position ? (
-                  <span className={styles.provPlace}>
-                    <GridTag at={f.position} />
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className={styles.provLine}>No report about this track in the log yet.</p>
-        )}
-      </details>
       {props.children}
       {props.error ? (
         <p className={styles.error} role="alert">
@@ -436,6 +421,108 @@ export function TrackCard(props: {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The larger provenance panel [271]: the same facts as the card's button, with room for the
+ * earlier positions and the reports behind the track.
+ */
+export function TrackProvenance(props: {
+  track: TrackState;
+  symbols: MilSymbol | null;
+  history: FeedItem[];
+  format: (ts: number) => string;
+  onClose: () => void;
+  /** Replays the mission just after one of the history's reports. */
+  onJump?: (ts: number) => void;
+}) {
+  const t = props.track;
+  const p = t.position;
+  const history = props.history.slice(-10).reverse();
+  const when = props.format;
+  return (
+    <div className={styles.provenancePanel} role="dialog" aria-label={`Track ${t.n} provenance`}>
+      <div className={styles.timelinePanelHead}>
+        <Sym lib={props.symbols} what={t} size={22} />
+        <div className={styles.drawerTitle}>
+          <h2>Track {t.n}</h2>
+          <span>Provenance and history</span>
+        </div>
+        <span className={styles.pill} data-status={t.affiliation}>
+          {AFFILIATION_LABEL[t.affiliation]}
+        </span>
+        <button type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={props.onClose}>
+          Close
+        </button>
+      </div>
+      <div className={styles.provenanceBody}>
+        <p className={styles.cardLine}>{describeTrack(t)}</p>
+        <p className={styles.hint}>
+          {p ? `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m` : "Not placed yet."}
+          <GridTag at={p} />
+        </p>
+        <dl className={styles.provMeta}>
+          <div>
+            <dt>Opened</dt>
+            <dd>{t.openedBy} · {when(t.openedTs)}</dd>
+          </div>
+          <div>
+            <dt>Last seen</dt>
+            <dd>{t.seenBy} · {when(t.seenTs)}</dd>
+          </div>
+          <div>
+            <dt>Accuracy</dt>
+            <dd>{p ? `±${p.radius_m} m${p.estimated ? " (estimated)" : ""}` : "Not placed"}</dd>
+          </div>
+          <div>
+            <dt>Positions</dt>
+            <dd>{t.trail.length} earlier</dd>
+          </div>
+        </dl>
+        {t.trail.length ? (
+          <div className={styles.provTrail}>
+            <span className={styles.provMetaLabel}>Earlier positions</span>
+            <ol>
+              {t.trail
+                .slice(-8)
+                .reverse()
+                .map((x) => (
+                  <li key={`${x.ts}-${x.lat}-${x.lon}`}>
+                    <span className={styles.provTime}>{when(x.ts)}</span>
+                    <span className={styles.gridTag}>{shortGrid({ lat: x.lat, lon: x.lon })}</span>
+                  </li>
+                ))}
+            </ol>
+          </div>
+        ) : null}
+        <span className={styles.provMetaLabel}>
+          Reports and acts {props.onJump ? "· choose one to replay it" : ""}
+        </span>
+        {history.length ? (
+          <ol className={styles.provList}>
+            {history.map((f) => (
+              <li key={f.id}>
+                <button
+                  type="button"
+                  className={styles.provRow}
+                  onClick={() => props.onJump?.(f.ts)}
+                  disabled={!props.onJump}
+                  title={props.onJump ? `Replay the mission just after ${when(f.ts)}` : undefined}
+                >
+                  <span className={styles.provTime}>{when(f.ts)}</span>
+                  <span className={styles.provWho}>{f.callsign}</span>
+                  <span className={styles.provWhat}>{f.transcript || f.outcome}</span>
+                  {f.position ? <span className={styles.provPlace}>{shortGrid(f.position)}</span> : null}
+                </button>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className={styles.provLine}>No report about this track in the log yet.</p>
+        )}
+      </div>
     </div>
   );
 }

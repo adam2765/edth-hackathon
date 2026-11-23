@@ -25,7 +25,7 @@ import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
 import MapTools from "./MapTools";
 import MissionPanel from "./MissionPanel";
-import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
+import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, TrackProvenance, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
@@ -432,6 +432,8 @@ export default function CommandPost() {
   const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
   /** The mission's events, newest first, to jump back to a moment [271]. */
   const [timelineOpen, setTimelineOpen] = useState(false);
+  /** The larger provenance panel for the picked track [271]. */
+  const [provenanceOpen, setProvenanceOpen] = useState(false);
   /** The map has taken long to load: with no network it never does, and the page should say so. */
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
@@ -2332,7 +2334,11 @@ export default function CommandPost() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
-        if (picking) unpick();
+        if (timelineOpen || provenanceOpen) {
+          setTimelineOpen(false);
+          setProvenanceOpen(false);
+        } else if (findOpen) setFindOpen(false);
+        else if (picking) unpick();
         else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
         else if (activeTool) setTool(null);
         else setPicked(null);
@@ -2378,7 +2384,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, provenanceOpen, findOpen]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2477,15 +2483,21 @@ export default function CommandPost() {
     setFollow(false);
     map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 15) });
   };
-  /** A timeline event: show the mission as it was just after it [271]. */
-  const jumpTimeline = (f: FeedItem) => {
+  /** Shows the mission as it was just after an event, and closes the drawers [271]. */
+  const jumpTo = (ts: number, track?: number | null) => {
     setTimelineOpen(false);
+    setProvenanceOpen(false);
     setFollow(false);
     setPlaying(false);
     setReplayOpen(true);
-    scrub(Math.min(rangeEnd, Math.max(rangeStart, f.ts + 1)));
-    if (f.track != null) setPicked(f.track);
+    scrub(Math.min(rangeEnd, Math.max(rangeStart, ts + 1)));
+    if (track != null) setPicked(track);
   };
+  /** A timeline event: show the mission as it was just after it [271]. */
+  const jumpTimeline = (f: FeedItem) => jumpTo(f.ts, f.track);
+  /** The small tag at the end of a timeline row: a track, an open question, or what the command post did. */
+  const timelineTag = (f: FeedItem): string =>
+    f.track != null ? `T${f.track}` : f.question && !f.expired && !f.answer ? "question" : f.kind !== "report" ? f.kind : "";
 
   return (
     <div
@@ -2574,7 +2586,10 @@ export default function CommandPost() {
           <span className={styles.connDot} aria-hidden="true" />
           {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
         </div>
-        <button type="button" className={styles.ghostBtn} onClick={() => setTimelineOpen(true)} title="The mission's events, newest first; choose one to replay it">
+        <button type="button" className={styles.ghostBtn} onClick={() => {
+          setProvenanceOpen(false);
+          setTimelineOpen(true);
+        }} title="The mission's events, newest first; choose one to replay it">
           Timeline
         </button>
         <button type="button" className={styles.ghostBtn} onClick={() => setFindOpen(true)} title="Find a call sign, a track or a place (Ctrl+K)">
@@ -2773,9 +2788,15 @@ export default function CommandPost() {
               onMove={() => startMove(pickedTrack)}
               onGone={() => markGone(pickedTrack.n, true)}
               onRestore={() => markGone(pickedTrack.n, false)}
-              onClose={() => setPicked(null)}
+              onClose={() => {
+                setPicked(null);
+                setProvenanceOpen(false);
+              }}
+              onProvenance={() => {
+                setTimelineOpen(false);
+                setProvenanceOpen(true);
+              }}
               history={pickedHistory}
-              format={fmtTime}
             >
               <TrackRecon track={pickedTrack} tracks={view.tracks} units={view.units} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
             </TrackCard>
@@ -2922,7 +2943,8 @@ export default function CommandPost() {
 
         {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
             the map: on the side away from the open decision's points, or where the operator dragged it [258]. */}
-        {session ? (
+        {/* An idle deck says nothing a tool open on the map does not; keep it out of the way [271]. */}
+        {session && (decisions.length > 0 || (!activeTool && !pickedTrack)) ? (
           <div
             ref={deckEl}
             className={styles.deck}
@@ -2983,6 +3005,50 @@ export default function CommandPost() {
               if (t) flyToTrack(t);
             }}
           />
+          </div>
+        ) : null}
+
+        {provenanceOpen && pickedTrack ? (
+          <TrackProvenance
+            track={pickedTrack}
+            symbols={symbols}
+            history={pickedHistory}
+            format={fmtTime}
+            onJump={(ts) => jumpTo(ts)}
+            onClose={() => setProvenanceOpen(false)}
+          />
+        ) : null}
+
+        {timelineOpen ? (
+          <div className={styles.timelinePanel} role="dialog" aria-label="Timeline">
+            <div className={styles.timelinePanelHead}>
+              <h2>Timeline</h2>
+              <button type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={() => setTimelineOpen(false)}>
+                Close
+              </button>
+            </div>
+            <p className={styles.timelinePanelHint}>
+              {view.feed.length} event{view.feed.length === 1 ? "" : "s"} · newest first. Choose one to replay the mission just after it.
+            </p>
+            <ol className={styles.timelinePanelList}>
+              {[...view.feed]
+                .sort((a, b) => b.ts - a.ts)
+                .map((f) => {
+                  const tag = timelineTag(f);
+                  return (
+                    <li key={f.id}>
+                      <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
+                        <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
+                        <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
+                        <span className={styles.timelinePanelWho}>{f.callsign}</span>
+                        <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
+                        {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              {view.feed.length === 0 ? <li className={styles.timelinePanelEmpty}>No events yet.</li> : null}
+            </ol>
           </div>
         ) : null}
       </main>
@@ -3092,6 +3158,7 @@ export default function CommandPost() {
                 // A unit whose question waits: its strip opens the question [240].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 const moving = activeTool?.kind === "unit" && activeTool.callsign === u.callsign;
+                const unitFeed = view.feed.filter((f) => f.callsign === u.callsign);
                 // A strip opens to its whole line and what can be done to the unit [258].
                 const open = openUnit === u.callsign || moving;
                 return (
@@ -3149,6 +3216,43 @@ export default function CommandPost() {
                         >
                           {u.position && !u.atStart ? "Move" : "Place"}
                         </button>
+                        <div className={styles.unitHistory}>
+                          <details className={styles.provenance}>
+                            <summary>History ({unitFeed.length})</summary>
+                            <ol className={styles.provListUnit}>
+                              {unitFeed
+                                .slice(-4)
+                                .reverse()
+                                .map((f) => (
+                                  <li key={f.id}>
+                                    <span className={styles.provTime}>{fmtTime(f.ts)}</span>
+                                    <span className={styles.provWhat}>{f.transcript || f.outcome}</span>
+                                    {f.position ? (
+                                      <span className={styles.provPlace}>
+                                        {shortGrid(f.position)}
+                                      </span>
+                                    ) : null}
+                                  </li>
+                                ))}
+                            </ol>
+                            {u.trail.length ? (
+                              <div className={styles.provTrail}>
+                                <span className={styles.provMetaLabel}>Earlier positions</span>
+                                <ol>
+                                  {u.trail
+                                    .slice(-4)
+                                    .reverse()
+                                    .map((x) => (
+                                      <li key={`${x.ts}-${x.lat}-${x.lon}`}>
+                                        <span className={styles.provTime}>{fmtTime(x.ts)}</span>
+                                        <span className={styles.gridTag}>{shortGrid({ lat: x.lat, lon: x.lon })}</span>
+                                      </li>
+                                    ))}
+                                </ol>
+                              </div>
+                            ) : null}
+                          </details>
+                        </div>
                       </UnitRecon>
                     ) : null}
                   </li>
@@ -3450,34 +3554,6 @@ export default function CommandPost() {
       <div className={styles.srOnly} aria-live="polite">
         {mode === "live" && latest ? `${latest.callsign}: ${latest.outcome}` : ""}
       </div>
-
-      {timelineOpen ? (
-        <div className={styles.timelinePanel} role="dialog" aria-modal="true" aria-label="Timeline">
-          <div className={styles.timelinePanelHead}>
-            <h2>Timeline</h2>
-            <button type="button" className={styles.linkBtn} onClick={() => setTimelineOpen(false)}>
-              Close
-            </button>
-          </div>
-          <p className={styles.timelinePanelHint}>Newest first. Choose an event to replay the mission just after it.</p>
-          <ol className={styles.timelinePanelList}>
-            {[...view.feed]
-              .sort((a, b) => b.ts - a.ts)
-              .map((f) => (
-                <li key={f.id}>
-                  <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
-                    <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
-                    <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
-                    <span className={styles.timelinePanelWho}>{f.callsign}</span>
-                    <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
-                    {f.track != null ? <span className={styles.timelinePanelTag}>T{f.track}</span> : null}
-                  </button>
-                </li>
-              ))}
-            {view.feed.length === 0 ? <li className={styles.timelinePanelEmpty}>No events yet.</li> : null}
-          </ol>
-        </div>
-      ) : null}
 
       {findOpen ? (
         <div
