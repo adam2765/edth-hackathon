@@ -209,8 +209,13 @@
   font-weight: 700;
 }
 
-.spacer {
-  flex: 1;
+.headActions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
 }
 
 .segmented,
@@ -1316,6 +1321,23 @@
   }
 }
 
+/* Where the map cannot hold the card and a drawer side by side, the card was only the way in,
+   so it steps aside while a drawer is open [271]. Above 900 the columns squeeze the map; below
+   810 the card and a 420 px drawer overlap. Between them both fit. */
+@media (max-width: 810px), (min-width: 901px) and (max-width: 1230px) {
+  .mapCol[data-drawer] .dock {
+    visibility: hidden;
+  }
+}
+
+/* On a phone the drawer takes the map's width, so no sliver of the card shows beside it. */
+@media (max-width: 600px) {
+  .provenancePanel,
+  .timelinePanel {
+    width: calc(100% - 24px);
+  }
+}
+
 .unit[data-tone="none"] .unitStatus,
 .unit[data-tone="silent"] .unitStatus {
   color: var(--muted);
@@ -2072,6 +2094,7 @@
   font-size: 14px;
   color: var(--muted);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .places,
@@ -2187,8 +2210,9 @@
 
 .toolHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
 }
 
 .toolHead .pill {

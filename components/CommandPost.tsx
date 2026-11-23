@@ -2496,8 +2496,12 @@ export default function CommandPost() {
   /** A timeline event: show the mission as it was just after it [271]. */
   const jumpTimeline = (f: FeedItem) => jumpTo(f.ts, f.track);
   /** The small tag at the end of a timeline row: a track, an open question, or what the command post did. */
-  const timelineTag = (f: FeedItem): string =>
-    f.track != null ? `T${f.track}` : f.question && !f.expired && !f.answer ? "question" : f.kind !== "report" ? f.kind : "";
+  const timelineTag = (f: FeedItem): string => {
+    if (f.track != null) return `T${f.track}`;
+    if (f.question && !f.expired && !f.answer) return "Question";
+    if (f.kind === "report") return "";
+    return f.kind[0].toUpperCase() + f.kind.slice(1);
+  };
 
   return (
     <div
@@ -2580,28 +2584,30 @@ export default function CommandPost() {
             {actionError}
           </span>
         ) : null}
-        <div className={styles.spacer} />
-        {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
-        <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
-          <span className={styles.connDot} aria-hidden="true" />
-          {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
+        {/* The connection, the drawers and the missions menu wrap together, not one by one [271]. */}
+        <div className={styles.headActions}>
+          {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
+          <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
+            <span className={styles.connDot} aria-hidden="true" />
+            {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
+          </div>
+          <button type="button" className={styles.ghostBtn} onClick={() => {
+            setProvenanceOpen(false);
+            setTimelineOpen(true);
+          }} title="The mission's events, newest first; choose one to replay it">
+            Timeline
+          </button>
+          <button type="button" className={styles.ghostBtn} onClick={() => setFindOpen(true)} title="Find a call sign, a track or a place (Ctrl+K)">
+            Find
+          </button>
+          <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
+            Missions ▾
+          </button>
         </div>
-        <button type="button" className={styles.ghostBtn} onClick={() => {
-          setProvenanceOpen(false);
-          setTimelineOpen(true);
-        }} title="The mission's events, newest first; choose one to replay it">
-          Timeline
-        </button>
-        <button type="button" className={styles.ghostBtn} onClick={() => setFindOpen(true)} title="Find a call sign, a track or a place (Ctrl+K)">
-          Find
-        </button>
-        <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
-          Missions ▾
-        </button>
         {panelOpen ? <MissionPanel current={session} defaultArea={mission?.area ?? area} onPick={pickSession} onClose={closePanel} /> : null}
       </header>
 
-      <main className={styles.mapCol}>
+      <main className={styles.mapCol} data-drawer={timelineOpen || provenanceOpen ? "" : undefined}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
         {/* The grid's lines, a ruler and "go to grid", behind one button, and the grid under the
             pointer at the map's edge [232, 245]. A click here already places or picks, so it copies
@@ -3023,7 +3029,7 @@ export default function CommandPost() {
           <div className={styles.timelinePanel} role="dialog" aria-label="Timeline">
             <div className={styles.timelinePanelHead}>
               <h2>Timeline</h2>
-              <button type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={() => setTimelineOpen(false)}>
+              <button autoFocus type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={() => setTimelineOpen(false)}>
                 Close
               </button>
             </div>
@@ -3219,10 +3225,12 @@ export default function CommandPost() {
                         <div className={styles.unitHistory}>
                           <details className={styles.provenance}>
                             <summary>History ({unitFeed.length})</summary>
+                            <span className={styles.provMetaLabel}>
+                              {unitFeed.length > 4 ? `Last 4 of ${unitFeed.length} events` : "Events"}
+                            </span>
                             <ol className={styles.provListUnit}>
                               {unitFeed
-                                .slice(-4)
-                                .reverse()
+                                .slice(0, 4)
                                 .map((f) => (
                                   <li key={f.id}>
                                     <span className={styles.provTime}>{fmtTime(f.ts)}</span>
@@ -3237,7 +3245,9 @@ export default function CommandPost() {
                             </ol>
                             {u.trail.length ? (
                               <div className={styles.provTrail}>
-                                <span className={styles.provMetaLabel}>Earlier positions</span>
+                                <span className={styles.provMetaLabel}>
+                                  {u.trail.length > 4 ? `Last 4 of ${u.trail.length} positions` : "Earlier positions"}
+                                </span>
                                 <ol>
                                   {u.trail
                                     .slice(-4)

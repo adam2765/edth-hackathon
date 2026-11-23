@@ -333,7 +333,7 @@ export function TrackCard(props: {
   onClose: () => void;
   /** What the card says about recon, and its buttons [234]. */
   children?: ReactNode;
-  /** The reports and command-post acts about this track, oldest first: its provenance [271]. */
+  /** The reports and command-post acts about this track, newest first: its provenance [271]. */
   history?: FeedItem[];
   /** Opens the larger provenance panel. */
   onProvenance?: () => void;
@@ -440,7 +440,7 @@ export function TrackProvenance(props: {
 }) {
   const t = props.track;
   const p = t.position;
-  const history = props.history.slice(-10).reverse();
+  const history = props.history.slice();
   const when = props.format;
   return (
     <div className={styles.provenancePanel} role="dialog" aria-label={`Track ${t.n} provenance`}>
@@ -453,7 +453,7 @@ export function TrackProvenance(props: {
         <span className={styles.pill} data-status={t.affiliation}>
           {AFFILIATION_LABEL[t.affiliation]}
         </span>
-        <button type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={props.onClose}>
+        <button autoFocus type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={props.onClose}>
           Close
         </button>
       </div>
@@ -486,7 +486,7 @@ export function TrackProvenance(props: {
             <span className={styles.provMetaLabel}>Earlier positions</span>
             <ol>
               {t.trail
-                .slice(-8)
+                .slice()
                 .reverse()
                 .map((x) => (
                   <li key={`${x.ts}-${x.lat}-${x.lon}`}>
@@ -498,7 +498,7 @@ export function TrackProvenance(props: {
           </div>
         ) : null}
         <span className={styles.provMetaLabel}>
-          Reports and acts {props.onJump ? "· choose one to replay it" : ""}
+          Reports and acts · newest first{props.onJump ? " · choose one to replay it" : ""}
         </span>
         {history.length ? (
           <ol className={styles.provList}>
