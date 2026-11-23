@@ -25,7 +25,7 @@ import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
 import MapTools from "./MapTools";
 import MissionPanel from "./MissionPanel";
-import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, TrackProvenance, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
+import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
@@ -428,8 +428,6 @@ export default function CommandPost() {
   const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
   /** The mission's events, newest first, to jump back to a moment [271]. */
   const [timelineOpen, setTimelineOpen] = useState(false);
-  /** The larger provenance panel for the picked track [271]. */
-  const [provenanceOpen, setProvenanceOpen] = useState(false);
   /** The map has taken long to load: with no network it never does, and the page should say so. */
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
@@ -1197,7 +1195,7 @@ export default function CommandPost() {
             "icon-offset": ["array", "number", 2, ["get", "off"]],
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
-            "text-field": ["format", ["get", "name"], { "text-font": ["literal", ["Noto Sans Bold"]] }, "\n", {}, ["get", "when"], { "font-scale": 0.9 }],
+            "text-field": ["get", "trackLabel"],
             "text-font": ["Noto Sans Regular"],
             "text-size": 14,
             "text-line-height": 1.25,
@@ -1479,11 +1477,13 @@ export default function CommandPost() {
         const what = describeTrack(t);
         const name = `T${t.n} · ${what}`;
         const when = old ? `Last known ${fmtTime(t.positionTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
-        const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
+        const pickedNow = t.n === picked;
+        const label = [`T${t.n}`];
+        const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, trackLabel: `T${t.n}`, n: t.n, picked: pickedNow, textOff: [0, -lift / trackText] };
         // The bands flow while the sighting is fresh. On an old one the arrow is still: the way it
         // was moving is what was said then, not what is known now.
         if (heading != null) Object.assign(props, { heading, arrow: canFlow && !old ? flowIcon : arrowIcon });
-        drawn.push({ n: t.n, id: `T${t.n}`, p: q, color, op, icon, label: [name, when], props, lift, arrow });
+        drawn.push({ n: t.n, id: `T${t.n}`, p: q, color, op, icon, label, props, lift, arrow });
         // A track not seen for a while keeps a ring on where it was last known [265].
         if (old) last.push({ type: "Feature", properties: { color, radius: 22 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
       }
@@ -1915,12 +1915,16 @@ export default function CommandPost() {
 
   const flyToTrack = useCallback(
     (t: TrackState) => {
+      setTimelineOpen(false);
       setPicked(t.n);
       const map = mapRef.current;
       if (!map || !t.position || t.gone != null) return;
       setFollow(false);
       if (t.area !== area) setManualArea(t.area);
-      map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
+      // The picked track's panel covers the map's left: frame the track in the rest of it.
+      const box = map.getContainer();
+      const padLeft = box.clientWidth > 600 ? Math.min(432, box.clientWidth - 120) : 0;
+      map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700, padding: { left: padLeft, top: 0, right: 0, bottom: 0 } });
     },
     [area, setPicked],
   );
@@ -2034,6 +2038,7 @@ export default function CommandPost() {
       }
       if (activeTool) return;
       const n = map.queryRenderedFeatures(e.point, { layers: ["track-sym"] })[0]?.properties?.n;
+      if (typeof n === "number") setTimelineOpen(false);
       setPicked(typeof n === "number" ? n : null);
     };
   });
@@ -2330,9 +2335,8 @@ export default function CommandPost() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
-        if (timelineOpen || provenanceOpen) {
+        if (timelineOpen) {
           setTimelineOpen(false);
-          setProvenanceOpen(false);
         } else if (findOpen) setFindOpen(false);
         else if (picking) unpick();
         else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
@@ -2380,7 +2384,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, provenanceOpen, findOpen]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2482,7 +2486,6 @@ export default function CommandPost() {
   /** Shows the mission as it was just after an event, and closes the drawers [271]. */
   const jumpTo = (ts: number, track?: number | null) => {
     setTimelineOpen(false);
-    setProvenanceOpen(false);
     setBarCompact(false);
     setFollow(false);
     setPlaying(false);
@@ -2515,11 +2518,8 @@ export default function CommandPost() {
         </h1>
         {mission ? (
           <div className={styles.missionHead}>
-            <span className={styles.missionTitle} title={mission.name}>
+            <span className={styles.missionTitle} title={`${mission.name} · code ${session}`}>
               {mission.name}
-            </span>
-            <span className={styles.chip} title="Phones join this mission by picking it from the list on the coordinator">
-              code <strong>{session}</strong>
             </span>
             {/* What is on screen, in words: an ended mission, a replay, or the present. */}
             {ended != null ? (
@@ -2536,10 +2536,15 @@ export default function CommandPost() {
               </span>
             ) : (
               <span className={styles.stateChip} data-state="live">
-                <span className={styles.stateDot} aria-hidden="true" />
+                <span className={styles.stateDot} data-state={connected ? "on" : "wait"} aria-hidden="true" />
                 Live
               </span>
             )}
+            {stored === false ? (
+              <span className={styles.chip} data-state="warn" title="This coordinator keeps no record: missions and reports vanish on reload">
+                No record
+              </span>
+            ) : null}
           </div>
         ) : session ? (
           <div className={styles.chip} title="A session from before missions">
@@ -2584,12 +2589,8 @@ export default function CommandPost() {
         {/* The connection, the drawers and the missions menu wrap together, not one by one [271]. */}
         <div className={styles.headActions}>
           {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
-          <div className={styles.conn} data-state={stored === false ? "off" : connected ? "on" : "wait"} role="status">
-            <span className={styles.connDot} aria-hidden="true" />
-            {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
-          </div>
           <button type="button" className={styles.ghostBtn} onClick={() => {
-            setProvenanceOpen(false);
+            setPicked(null);
             setTimelineOpen(true);
           }} title="The mission's events, newest first; choose one to replay it">
             Timeline
@@ -2604,7 +2605,7 @@ export default function CommandPost() {
         {panelOpen ? <MissionPanel current={session} defaultArea={mission?.area ?? area} onPick={pickSession} onClose={closePanel} /> : null}
       </header>
 
-      <main className={styles.mapCol} data-drawer={timelineOpen || provenanceOpen ? "" : undefined}>
+      <main className={styles.mapCol} data-drawer={timelineOpen ? "" : undefined} data-panel={pickedTrack && !activeTool ? "" : undefined}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
         {/* The grid's lines, a ruler and "go to grid", behind one button, and the grid under the
             pointer at the map's edge [232, 245]. A click here already places or picks, so it copies
@@ -2779,30 +2780,6 @@ export default function CommandPost() {
                 </div>
               }
             />
-          ) : pickedTrack ? (
-            <TrackCard
-              key={pickedTrack.n}
-              track={pickedTrack}
-              symbols={symbols}
-              canEdit={canEdit}
-              busy={busy}
-              error={toolError}
-              onChange={() => startEdit(pickedTrack)}
-              onMove={() => startMove(pickedTrack)}
-              onGone={() => markGone(pickedTrack.n, true)}
-              onRestore={() => markGone(pickedTrack.n, false)}
-              onClose={() => {
-                setPicked(null);
-                setProvenanceOpen(false);
-              }}
-              onProvenance={() => {
-                setTimelineOpen(false);
-                setProvenanceOpen(true);
-              }}
-              history={pickedHistory}
-            >
-              <TrackRecon track={pickedTrack} tracks={view.tracks} units={view.units} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
-            </TrackCard>
           ) : null}
         </div>
         {/* A frame round the map says "this is a replay" from across the room. */}
@@ -3017,15 +2994,28 @@ export default function CommandPost() {
           </div>
         ) : null}
 
-        {provenanceOpen && pickedTrack ? (
-          <TrackProvenance
+        {pickedTrack && !activeTool ? (
+          <TrackCard
+            key={pickedTrack.n}
             track={pickedTrack}
             symbols={symbols}
+            canEdit={canEdit}
+            busy={busy}
+            error={toolError}
+            onChange={() => startEdit(pickedTrack)}
+            onMove={() => startMove(pickedTrack)}
+            onGone={() => markGone(pickedTrack.n, true)}
+            onRestore={() => markGone(pickedTrack.n, false)}
+            onClose={() => setPicked(null)}
             history={pickedHistory}
             format={fmtTime}
-            onJump={(ts) => jumpTo(ts)}
-            onClose={() => setProvenanceOpen(false)}
-          />
+            onJump={(ts) => {
+              jumpTo(ts);
+              setPicked(null);
+            }}
+          >
+            <TrackRecon track={pickedTrack} tracks={view.tracks} units={view.units} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
+          </TrackCard>
         ) : null}
 
         {timelineOpen ? (

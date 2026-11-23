@@ -195,6 +195,13 @@
   font-weight: 600;
 }
 
+/* The mission name and the state are enough on a laptop: "Command post" is the page [271]. */
+@media (max-width: 1400px) {
+  .brandSub {
+    display: none;
+  }
+}
+
 .chip {
   padding: 5px 10px;
   border-radius: 999px;
@@ -207,6 +214,10 @@
 .chip strong {
   color: var(--text);
   font-weight: 700;
+}
+
+.chip[data-state="warn"] {
+  color: var(--warn);
 }
 
 .headActions {
@@ -248,35 +259,6 @@
 .segmentedSmall button[aria-pressed="true"] {
   background: var(--text);
   color: var(--bg);
-}
-
-.conn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.connDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--warn);
-}
-
-.conn[data-state="on"] .connDot {
-  background: var(--ok);
-}
-
-.conn[data-state="off"],
-.conn[data-state="wait"] {
-  color: var(--warn);
-}
-
-.conn[data-state="off"] .connDot {
-  background: var(--bad);
 }
 
 /* ---------- map ---------- */
@@ -987,21 +969,6 @@
 }
 
 /* The card's History link opens the larger provenance panel [271]. */
-.toolActions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.toolActions .linkBtn {
-  margin-left: 0;
-}
-
-.provenanceHead {
-  color: var(--accent-2);
-}
-
 .provenanceCount {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1012,13 +979,14 @@
   letter-spacing: 0;
 }
 
-.provenancePanel {
+/* The picked track, on the map's left: the same height as the map, with its tabs and actions [271]. */
+.trackPanel {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   bottom: 12px;
   z-index: 5;
-  width: min(420px, 46vw);
+  width: min(420px, calc(100% - 24px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1029,11 +997,60 @@
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-.provenanceBody {
+.mapCol[data-panel] .dock {
+  visibility: hidden;
+}
+
+.trackTabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.trackTabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.trackTabs button:hover {
+  color: var(--text);
+}
+
+.trackTabs button[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent-2);
+}
+
+.trackBody {
   flex: 1 1 auto;
   min-height: 0;
   padding: 12px;
   overflow-y: auto;
+}
+
+.trackSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .trackPanel {
+    width: calc(100% - 24px);
+  }
 }
 
 /* The name and what the drawer shows, stacked, so a long track name keeps its row. */
@@ -1062,47 +1079,14 @@
   margin-left: auto;
 }
 
-@media (max-width: 900px) {
-  .provenancePanel {
-    top: 12px;
-    left: auto;
-    right: 12px;
-    width: min(420px, calc(100vw - 24px));
-    bottom: 12px;
-  }
-}
-
-.provMeta {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 12px;
-  margin: 8px 0;
-}
-
-.provMeta div {
-  min-width: 0;
-}
-
-.provMeta dt,
 .provMetaLabel {
+  display: block;
+  margin: 8px 0 4px;
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.provMeta dd {
-  margin: 2px 0 0;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.provMetaLabel {
-  display: block;
-  margin: 8px 0 4px;
 }
 
 .provTrail ol {
@@ -1348,7 +1332,6 @@
 
 /* On a phone the drawer takes the map's width, so no sliver of the card shows beside it. */
 @media (max-width: 600px) {
-  .provenancePanel,
   .timelinePanel {
     width: calc(100% - 24px);
   }
@@ -1898,6 +1881,10 @@
   background: var(--ok);
 }
 
+.stateDot[data-state="wait"] {
+  background: var(--warn);
+}
+
 .ghostBtn,
 .menuBtn,
 .primaryBtn,
@@ -2218,23 +2205,9 @@
   gap: 6px 8px;
 }
 
-/* The picked track's card: the head and the actions stay put; the middle scrolls [271]. */
-.trackCard {
-  overflow: hidden;
-}
-
-.toolBody {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .toolFoot {
   flex: none;
-  padding-top: 8px;
+  padding: 10px 12px;
   border-top: 1px solid var(--line);
 }
 
