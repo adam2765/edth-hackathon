@@ -317,22 +317,18 @@ function headingArrowImages(s: number): { still: ImageData; flow: ImageData[] } 
 }
 
 /**
- * A track in two lines: what it is and where, then who saw it or placed it. An open question comes
- * first, as for a unit. A track is a sighting, so the second line always names who reported it:
- * a unit, or the command post when a person placed it there.
+ * A track in one line beside its name: what it is and where, and a tone for the strip. Who saw it
+ * or placed it, its grid and its last known time stay in the card and its history.
  */
-function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; tone: UnitTone } {
+function trackStatus(t: TrackState, old: boolean): { main: string; tone: UnitTone } {
   // "hostile vehicle ×2" without its first word: the pill beside the name already says whose it is.
   const what = describeTrack(t).replace(/^\S+\s*/, "") || "kind not said";
-  const extra = `${t.changed && !t.plotted ? ` · changed by ${t.changed.by}` : ""}${t.note ? ` · ${t.note}` : ""}`;
-  if (t.pendingReport) return { main: `${what} · where it is waits for an answer`, sub: `asked ${t.seenBy}`, tone: "ask" };
+  if (t.pendingReport) return { main: `${what} · where it is waits for an answer`, tone: "ask" };
   const p = t.position;
-  if (t.gone != null) return { main: `${what} · off the map`, sub: `marked gone by ${COMMAND_POST}`, tone: "silent" };
-  if (!p) return { main: `${what} · not placed`, sub: `reported by ${t.seenBy}${extra}`, tone: "none" };
+  if (t.gone != null) return { main: `${what} · off the map`, tone: "silent" };
+  if (!p) return { main: `${what} · not placed`, tone: "none" };
   const moving = t.heading ? ` · moving ${t.heading.replace("_", "-")}, as said` : "";
-  const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
-  const lastKnown = old ? ` · last known ${fmtTime(t.positionTs ?? t.seenTs)}` : "";
-  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `${who}${moving}${extra}${lastKnown}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
+  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m${moving}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
 }
 
 /**
@@ -420,7 +416,7 @@ export default function CommandPost() {
   const listsDrag = useRef<{ y: number; h: number } | null>(null);
   /** The Decisions card can fold to its heading, and the replay bar to one button, to clear the map [263]. */
   const [deckCollapsed, setDeckCollapsed] = useState(false);
-  const [barCompact, setBarCompact] = useState(false);
+  const [barCompact, setBarCompact] = useState(true);
   /** The command post's lock [266]: viewing is open, changing needs the PIN when CP_PIN is set. */
   const [auth, setAuth] = useState<"checking" | "open" | "locked">("checking");
   const [pin, setPin] = useState("");
@@ -2487,6 +2483,7 @@ export default function CommandPost() {
   const jumpTo = (ts: number, track?: number | null) => {
     setTimelineOpen(false);
     setProvenanceOpen(false);
+    setBarCompact(false);
     setFollow(false);
     setPlaying(false);
     setReplayOpen(true);
@@ -2840,7 +2837,10 @@ export default function CommandPost() {
 
         <div ref={replayEl} className={styles.replayBar} data-compact={barShut ? "" : undefined}>
           {barShut ? (
-            <button type="button" className={styles.liveBtn} disabled={mapShort} onClick={() => setBarCompact(false)} title={mapShort ? "Enlarge the map to show the replay bar" : "Show the replay bar"} aria-label="Show the replay bar">
+            <button type="button" className={styles.liveBtn} disabled={mapShort} onClick={() => {
+              setBarCompact(false);
+              if (entries.length) setReplayOpen(true);
+            }} title={mapShort ? "Enlarge the map to show the replay bar" : entries.length ? "Open the replay" : "Nothing to replay yet"} aria-label="Show the replay bar">
               Replay <span aria-hidden="true">▴</span>
             </button>
           ) : (
@@ -2849,7 +2849,10 @@ export default function CommandPost() {
             <span aria-hidden="true">▾</span>
           </button>
           <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} title={!entries.length ? "Nothing to replay yet: no report, track or unit placed in this mission" : replayOpen ? "Back to the live view and close the replay" : "Read this mission from its log, from a moment you choose"} onClick={() => {
-            if (replayOpen) goLive();
+            if (replayOpen) {
+              goLive();
+              setBarCompact(true);
+            }
             setReplayOpen(!replayOpen);
           }}>{replayOpen ? "Close replay" : "Replay"}</button>
           {replayOpen ? <>
@@ -2949,8 +2952,8 @@ export default function CommandPost() {
 
         {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
             the map: on the side away from the open decision's points, or where the operator dragged it [258]. */}
-        {/* An idle deck says nothing a tool open on the map does not; keep it out of the way [271]. */}
-        {session && (decisions.length > 0 || (!activeTool && !pickedTrack)) ? (
+        {/* An idle deck says nothing a tool open on the map does not; with no decisions, no card [271]. */}
+        {session && decisions.length > 0 ? (
           <div
             ref={deckEl}
             className={styles.deck}
@@ -3422,11 +3425,6 @@ export default function CommandPost() {
                                       </span>
                                     ) : null}
                                     {st.main}
-                                    {t.pendingReport || t.gone != null ? null : <GridTag at={t.position} />}
-                                  </span>
-                                  <span className={styles.trackWhere}>
-                                    {st.sub}
-                                    {t.seenTs && !atEnd ? ` · ${fmtTime(t.seenTs)}` : null}
                                   </span>
                                 </span>
                               </button>

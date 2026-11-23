@@ -517,6 +517,13 @@
 .replayBar[data-compact] {
   right: auto;
   width: auto;
+  padding: 4px 6px;
+  border-radius: 999px;
+}
+
+.replayBar[data-compact] .liveBtn {
+  min-height: 30px;
+  padding: 0 12px;
 }
 
 .barToggle {
@@ -937,6 +944,15 @@
   white-space: normal;
   overflow-wrap: anywhere;
   color: var(--text);
+}
+
+/* A track's strip stays two lines in every state: name and time, then what and where [271]. */
+.tracks .unitStatus,
+.tracks .unit[data-selected] .unitStatus,
+.tracks .unit[data-tone="ask"] .unitStatus {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A position's grid, after the words that say where it is [245]. It is read out figure by
@@ -1486,19 +1502,6 @@
 /* A track nobody has reported for a while: the symbol fades as it does on the map, the words do not. */
 .unit[data-tone="silent"] .trackSym svg {
   opacity: 0.5;
-}
-
-/* Who saw it and how it moves: only in the picked track's strip. */
-.trackWhere {
-  display: none;
-  font-size: 13px;
-  line-height: 1.3;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.unit[data-selected] .trackWhere {
-  display: block;
 }
 
 /* Whose a track is, as a word. Red is kept for hostile and suspect; a suspect is dashed, as its
@@ -2213,6 +2216,26 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
+}
+
+/* The picked track's card: the head and the actions stay put; the middle scrolls [271]. */
+.trackCard {
+  overflow: hidden;
+}
+
+.toolBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toolFoot {
+  flex: none;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .toolHead .pill {

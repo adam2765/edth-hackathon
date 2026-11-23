@@ -343,7 +343,7 @@ export function TrackCard(props: {
   const p = t.position;
   const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
   return (
-    <div className={styles.tool} role="dialog" aria-label={`Track ${t.n}`}>
+    <div className={`${styles.tool} ${styles.trackCard}`} role="dialog" aria-label={`Track ${t.n}`}>
       <div className={styles.toolHead}>
         <Sym lib={props.symbols} what={t} size={22} />
         <h2 className={styles.toolTitle}>Track {t.n}</h2>
@@ -371,56 +371,62 @@ export function TrackCard(props: {
           </button>
         </span>
       </div>
-      <p className={styles.cardLine}>{describeTrack(t)}</p>
-      <p className={styles.hint}>
-        {p ? `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m` : "Not placed yet."}
-        <GridTag at={p} /> · {who}
-        {t.changed ? ` · changed by ${t.changed.by}` : ""}
-        {t.note ? ` · source: ${t.note}` : ""}
-      </p>
-      {props.children}
-      {props.error ? (
-        <p className={styles.error} role="alert">
-          {props.error}
+      <div className={styles.toolBody}>
+        <p className={styles.cardLine}>{describeTrack(t)}</p>
+        <p className={styles.hint}>
+          {p ? `${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m` : "Not placed yet."}
+          <GridTag at={p} /> · {who}
+          {t.changed ? ` · changed by ${t.changed.by}` : ""}
+          {t.note ? ` · source: ${t.note}` : ""}
         </p>
+        {props.children}
+        {props.error ? (
+          <p className={styles.error} role="alert">
+            {props.error}
+          </p>
+        ) : null}
+      </div>
+      {props.canEdit ? (
+        <div className={styles.toolFoot}>
+          {t.gone != null ? (
+            <div className={styles.draftButtons}>
+              <button type="button" className={styles.ghostBtn} onClick={props.onRestore} disabled={props.busy}>
+                Put back on the map
+              </button>
+            </div>
+          ) : confirmGone ? (
+            <div className={styles.confirm} role="group" aria-label={`Take Track ${t.n} off the map?`}>
+              <span className={styles.confirmText}>Take Track {t.n} off the map? It stays in the list and the log.</span>
+              <button
+                type="button"
+                className={styles.dangerBtn}
+                onClick={() => {
+                  setConfirmGone(false);
+                  props.onGone();
+                }}
+                disabled={props.busy}
+              >
+                Mark gone
+              </button>
+              <button type="button" className={styles.linkBtn} onClick={() => setConfirmGone(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className={styles.draftButtons}>
+              <button type="button" className={styles.ghostBtn} onClick={props.onChange} disabled={props.busy}>
+                Change
+              </button>
+              <button type="button" className={styles.ghostBtn} onClick={props.onMove} disabled={props.busy || !!t.pendingReport}>
+                Move
+              </button>
+              <button type="button" className={styles.ghostBtn} onClick={() => setConfirmGone(true)} disabled={props.busy}>
+                Gone
+              </button>
+            </div>
+          )}
+        </div>
       ) : null}
-      {!props.canEdit ? null : t.gone != null ? (
-        <div className={styles.draftButtons}>
-          <button type="button" className={styles.ghostBtn} onClick={props.onRestore} disabled={props.busy}>
-            Put back on the map
-          </button>
-        </div>
-      ) : confirmGone ? (
-        <div className={styles.confirm} role="group" aria-label={`Take Track ${t.n} off the map?`}>
-          <span className={styles.confirmText}>Take Track {t.n} off the map? It stays in the list and the log.</span>
-          <button
-            type="button"
-            className={styles.dangerBtn}
-            onClick={() => {
-              setConfirmGone(false);
-              props.onGone();
-            }}
-            disabled={props.busy}
-          >
-            Mark gone
-          </button>
-          <button type="button" className={styles.linkBtn} onClick={() => setConfirmGone(false)}>
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div className={styles.draftButtons}>
-          <button type="button" className={styles.ghostBtn} onClick={props.onChange} disabled={props.busy}>
-            Change
-          </button>
-          <button type="button" className={styles.ghostBtn} onClick={props.onMove} disabled={props.busy || !!t.pendingReport}>
-            Move
-          </button>
-          <button type="button" className={styles.ghostBtn} onClick={() => setConfirmGone(true)} disabled={props.busy}>
-            Gone
-          </button>
-        </div>
-      )}
     </div>
   );
 }
