@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { parseFix } from "@/lib/reports/plot";
 import { recordFix } from "@/lib/reports/record";
 import { COMMAND_POST, sessionCode, type FixReply } from "@/lib/reports/types";
@@ -11,6 +12,8 @@ import { COMMAND_POST, sessionCode, type FixReply } from "@/lib/reports/types";
  * outside the mission's area is refused. The position comes from the person, never from a model.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]/units/position">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const session = sessionCode((await ctx.params).code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   let body: unknown;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { AREAS } from "@/lib/geo/areas";
 import type { Resolution } from "@/lib/geo/types";
 import { missionRoster } from "@/lib/reports/mission";
@@ -20,6 +21,8 @@ type Action = (typeof ACTIONS)[number];
  * The first decision stands: a report settled already returns `already: true` and changes nothing.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]/held/[id]">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const { code, id } = await ctx.params;
   const session = sessionCode(code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });

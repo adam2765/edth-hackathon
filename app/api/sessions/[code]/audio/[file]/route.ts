@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { AUDIO_FILE, getStore } from "@/lib/reports/store";
 import { sessionCode } from "@/lib/reports/types";
 
@@ -15,7 +16,9 @@ const TYPES: Record<string, string> = {
 };
 
 /** A held radio report's recording, for the operator to listen to [203]: `GET /api/sessions/<code>/audio/<file>`. */
-export async function GET(_req: Request, ctx: RouteContext<"/api/sessions/[code]/audio/[file]">) {
+export async function GET(req: Request, ctx: RouteContext<"/api/sessions/[code]/audio/[file]">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const { code, file } = await ctx.params;
   const session = sessionCode(code);
   if (!session || !AUDIO_FILE.test(file)) return NextResponse.json({ error: "No such recording." }, { status: 404 });

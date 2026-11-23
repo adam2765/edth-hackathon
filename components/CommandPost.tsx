@@ -7,7 +7,7 @@
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { shortGrid, type GridRead } from "@/lib/geo/grid";
@@ -30,6 +30,7 @@ import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
+import { addSatelliteLayers, setSatelliteVisible } from "@/lib/map/satellite";
 const POLL_MS = 1000;
 /** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
@@ -119,7 +120,7 @@ function unitSpots(units: UnitState[], isSilent: (u: UnitState) => boolean, draw
     const newest = Math.max(...group.map((x) => x.positionTs ?? 0));
     const allSilent = group.every(isSilent);
     const name = group.map((x) => (isSilent(x) && !allSilent ? `${x.callsign} (silent)` : x.callsign)).join(" · ");
-    const when = `${p.estimated ? "≈ " : ""}${fmtTime(newest)}${allSilent ? " · silent" : ""}`;
+    const when = allSilent ? `Last known ${p.estimated ? "≈ " : ""}${fmtTime(newest)}` : `${p.estimated ? "≈ " : ""}${fmtTime(newest)}`;
     out.set(k, { lat: at.lat, lon: at.lon, name, when, allSilent });
   }
   return out;
@@ -330,7 +331,8 @@ function trackStatus(t: TrackState, old: boolean): { main: string; sub: string; 
   if (!p) return { main: `${what} · not placed`, sub: `reported by ${t.seenBy}${extra}`, tone: "none" };
   const moving = t.heading ? ` · moving ${t.heading.replace("_", "-")}, as said` : "";
   const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
-  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `${who}${moving}${extra}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
+  const lastKnown = old ? ` · last known ${fmtTime(t.positionTs ?? t.seenTs)}` : "";
+  return { main: `${what} · ${p.estimated ? "≈ " : ""}${p.label} · ±${p.radius_m} m`, sub: `${who}${moving}${extra}${lastKnown}`, tone: old ? "silent" : p.estimated ? "estimate" : "placed" };
 }
 
 /**
@@ -368,7 +370,7 @@ function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): 
   if (u.lastHeard === 0 && !p) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const where = p ? `${p.label} · ±${p.radius_m} m${u.placedBy ? ` · placed by ${u.placedBy}` : ""}` : "";
   if (silent) {
-    const last = p ? `Last at ${p.estimated ? "≈ " : ""}${where}` : "Never placed.";
+    const last = p ? `Last known at ${p.estimated ? "≈ " : ""}${where}` : "Never placed.";
     return { tag: "Silent", text: silentAtEnd ? `Silent for ${silentAtEnd} when the mission ended. ${last}` : last, tone: "silent" };
   }
   if (!p) return { tag: "Not placed", text: u.joined != null ? "Joined. Waiting for a check-in." : "Waiting for a check-in.", tone: "none" };
@@ -409,10 +411,38 @@ export default function CommandPost() {
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [satellite, setSatellite] = useState(false);
+  /** On a narrow screen the lists below the map can fold away, so the map takes the height [262]. */
+  const [listsOpen, setListsOpen] = useState(true);
+  /** The lists' height while open, in pixels: dragged by the grip above them [263]. null is the default. */
+  const [listsHeight, setListsHeight] = useState<number | null>(null);
+  /** The pointer's place during a drag of the lists' grip. */
+  const listsDrag = useRef<{ y: number; h: number } | null>(null);
+  /** The Decisions card can fold to its heading, and the replay bar to one button, to clear the map [263]. */
+  const [deckCollapsed, setDeckCollapsed] = useState(false);
+  const [barCompact, setBarCompact] = useState(false);
+  /** The command post's lock [266]: viewing is open, changing needs the PIN when CP_PIN is set. */
+  const [auth, setAuth] = useState<"checking" | "open" | "locked">("checking");
+  const [pin, setPin] = useState("");
+  const [authError, setAuthError] = useState("");
+  /** Find a unit, a track or a place from the keyboard [268]. */
+  const [findOpen, setFindOpen] = useState(false);
+  const [find, setFind] = useState("");
+  const [findAt, setFindAt] = useState(0);
+  const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
+  /** The mission's events, newest first, to jump back to a moment [271]. */
+  const [timelineOpen, setTimelineOpen] = useState(false);
   /** The map has taken long to load: with no network it never does, and the page should say so. */
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
   const [mapSize, setMapSize] = useState("");
+  /** Too short for the full card and bar beside the dock and the tools: those fold, or the map is lost [263]. */
+  const mapShort = useMemo(() => {
+    const [, h] = (mapSize || "").split("x").map(Number);
+    return h > 0 && h < 260;
+  }, [mapSize]);
+  const barShut = barCompact || mapShort;
+  const cardShut = deckCollapsed || mapShort;
   /** Placing, moving or changing a track; null when the command post is only watching. */
   const [tool, setTool] = useState<Tool | null>(null);
   /** The track picked on the map or in the list, shown in its card. */
@@ -498,6 +528,101 @@ export default function CommandPost() {
   }, []);
   /** "Go to grid" moves the map away from the units: it stays there until "Follow units" [245]. */
   const stopFollowing = useCallback(() => setFollow(false), []);
+
+  // The lists' grip on a narrow screen [263]. Dragging up grows the lists and shrinks the map;
+  // 40 px or less shuts them, leaving the tabs. The arrow keys do the same without a pointer.
+  const listsMax = useCallback(() => Math.max(0, window.innerHeight - 380), []);
+  const startListsDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      // The bar's bottom is the lists' top: the grip sits on the bar's top edge [263].
+      const bar = e.currentTarget.parentElement?.getBoundingClientRect().bottom;
+      const bottom = bar ?? e.currentTarget.getBoundingClientRect().bottom;
+      listsDrag.current = { y: e.clientY, h: listsOpen ? Math.max(0, window.innerHeight - bottom) : 0 };
+    },
+    [listsOpen],
+  );
+  const moveListsDrag = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = listsDrag.current;
+    if (!drag) return;
+    const next = Math.max(0, Math.min(listsMax(), drag.h + drag.y - e.clientY));
+    setListsOpen(next >= 40);
+    setListsHeight(next);
+  }, [listsMax]);
+  const endListsDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      listsDrag.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      if (listsHeight != null && listsHeight < 40) {
+        setListsOpen(false);
+        setListsHeight(0);
+      }
+    },
+    [listsHeight],
+  );
+  const nudgeLists = useCallback(
+    (delta: number) => {
+      const now = listsHeight ?? Math.round(window.innerHeight * 0.18);
+      const next = Math.max(0, Math.min(listsMax(), now + delta));
+      setListsOpen(next >= 40);
+      setListsHeight(next);
+    },
+    [listsHeight, listsMax],
+  );
+  // A taller window keeps the dragged height; a shorter one gives the map its floor back.
+  useEffect(() => {
+    const onResize = () => setListsHeight((h) => (h == null ? h : Math.min(h, Math.max(0, window.innerHeight - 380))));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  // The lock, read once: with CP_PIN unset the coordinator says it needs no PIN [266].
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/cp/login", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((said: { required?: boolean; signedIn?: boolean } | null) => {
+        if (!cancelled) setAuth(said?.required && !said.signedIn ? "locked" : "open");
+      })
+      .catch(() => {
+        if (!cancelled) setAuth("open");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const unlock = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const r = await fetch("/api/cp/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin }),
+      });
+      if (r.ok) {
+        setPin("");
+        setAuth("open");
+        return;
+      }
+      const said = (await r.json().catch(() => null)) as { error?: string } | null;
+      setAuthError(said?.error ?? "Wrong PIN.");
+    } catch {
+      setAuthError("The coordinator did not answer.");
+    }
+  };
+  // Ctrl+K (or Cmd+K) opens the find box wherever the operator is [268].
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setFindOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   /** The replay bar lies over the bottom of the map, with the map's credits above it: the grid's figures stay above both [245]. */
   const replayEl = useRef<HTMLDivElement>(null);
   const coveredBelow = useCallback(() => {
@@ -666,6 +791,24 @@ export default function CommandPost() {
   // units do not all read as silent for the hours since.
   const effNow = mode === "live" ? (ended ?? now) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
+  // Place names from the area's gazetteer, beside the call signs and tracks [268].
+  useEffect(() => {
+    const q = find.trim();
+    if (!findOpen || q.length < 2) return;
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/places?area=${area}&q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        if (!r.ok) return;
+        const said = (await r.json()) as { places?: StartPoint[] };
+        setPlaceResults(said.places ?? []);
+      } catch {}
+    }, 180);
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [find, findOpen, area]);
   // From when it was last heard, or placed by hand if that is later [243].
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - knownAt(u) > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
@@ -935,9 +1078,14 @@ export default function CommandPost() {
         style: base.style,
         center: [start.centre.lon, start.centre.lat],
         zoom: start.zoom,
-        attributionControl: { compact: false, customAttribution: base.attribution },
+        // The credits are long now that the photos add IGN and EOX: behind the "i" they no longer
+        // run under the Decisions card or the grid's figures [261, 262].
+        attributionControl: { compact: true, customAttribution: base.attribution },
       });
       map.addControl(new ml.NavigationControl({ showCompass: true }), "top-right");
+      // MapLibre starts a compact attribution expanded: close it, so the long list of sources,
+      // IGN and Sentinel included, waits behind the "i" [261].
+      map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
       // Moving the map by hand stops it following the units until "Follow" is pressed.
       map.on("movestart", (e) => {
         if ((e as { originalEvent?: Event }).originalEvent) setFollow(false);
@@ -952,7 +1100,7 @@ export default function CommandPost() {
       // One handler for the life of the map; what a click does depends on what the command post is doing.
       map.on("click", (e) => mapClick.current(e));
       map.on("load", () => {
-        for (const id of ["start", "trail", "accuracy", "arrow", "arrow-flow", "target", "pos", "track-acc", "track-trail", "track-sight", "track-task", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
+        for (const id of ["start", "trail", "accuracy", "unit-last", "arrow", "arrow-flow", "target", "pos", "track-acc", "track-last", "track-trail", "track-sight", "track-task", "track-leader", "track", "draft"]) map.addSource(id, { type: "geojson", data: EMPTY_FC });
         // The mission's start point: a dashed grey circle with its name, under everything else.
         map.addLayer({ id: "start-fill", type: "fill", source: "start", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#475569", "fill-opacity": 0.06 } });
         map.addLayer({ id: "start-line", type: "line", source: "start", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [1, 2] } });
@@ -972,10 +1120,36 @@ export default function CommandPost() {
         map.addLayer({ id: "acc-line", type: "line", source: "accuracy", filter: ["!=", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": ["*", 0.85, op] } });
         // An estimate (from a movement) has a dashed circle, like the ≈ before its time.
         map.addLayer({ id: "acc-line-est", type: "line", source: "accuracy", filter: ["==", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [3, 2], "line-opacity": ["*", 0.85, op] } });
+        // A silent unit's last known place, ringed so it is not lost among the live ones [265].
+        map.addLayer({
+          id: "unit-last-ring",
+          type: "circle",
+          source: "unit-last",
+          paint: {
+            "circle-radius": ["get", "radius"],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": ["get", "color"],
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.9,
+          },
+        });
         // Tracks: what a unit saw. Their circles and trails lie under every unit's own markings.
         map.addLayer({ id: "track-acc-fill", type: "fill", source: "track-acc", paint: { "fill-color": ["get", "color"], "fill-opacity": ["*", 0.12, op] } });
         map.addLayer({ id: "track-acc-line", type: "line", source: "track-acc", filter: ["!=", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": ["*", 0.85, op] } });
         map.addLayer({ id: "track-acc-line-est", type: "line", source: "track-acc", filter: ["==", "estimated", true], paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [3, 2], "line-opacity": ["*", 0.85, op] } });
+        // A track nobody has seen for a while keeps a ring on its last known place [265].
+        map.addLayer({
+          id: "track-last-ring",
+          type: "circle",
+          source: "track-last",
+          paint: {
+            "circle-radius": ["get", "radius"],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": ["get", "color"],
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.9,
+          },
+        });
         map.addLayer({ id: "track-trail-line", type: "line", source: "track-trail", paint: { "line-color": ["get", "color"], "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": ["*", 0.7, op] } });
         // The line of sight: from where the observer was to what they saw, dotted in the observer's
         // colour. It has no arrowhead: it says who saw it from where, and nothing else.
@@ -1065,6 +1239,11 @@ export default function CommandPost() {
         map.on("mouseleave", "track-sym", () => {
           if (map.getCanvas().style.cursor === "pointer") map.getCanvas().style.cursor = "";
         });
+        // The photo view [260]: added under the units and tracks, hidden until the operator asks.
+        // With the saved map, it reads the photos saved beside it too, so it works with no internet [261].
+        addSatelliteLayers(map, base.source === "hosted" ? "online" : "saved");
+        // The style's own sources may have added the compact attribution expanded; keep it shut [262].
+        map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
         setMapReady(true);
       });
       mapRef.current = map;
@@ -1076,6 +1255,14 @@ export default function CommandPost() {
       mapRef.current = null;
     };
   }, []);
+
+  // The photo view follows the button. The layers were added with the map's own, so showing them
+  // only changes their visibility [260].
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    setSatelliteVisible(map, satellite);
+  }, [satellite, mapReady]);
 
   // The symbol library is only needed once a track is reported, so it loads beside the map.
   useEffect(() => {
@@ -1130,6 +1317,7 @@ export default function CommandPost() {
       const arrows: GeoJSON.Feature[] = [];
       const targets: GeoJSON.Feature[] = [];
       const shafts: { from: LatLon; to: LatLon }[] = [];
+      const last: GeoJSON.Feature[] = [];
       // Units on the same spot share one label: the first unit of the spot carries it.
       const spots = unitSpots(view.units, isSilent);
       const labelled = new Set<string>();
@@ -1151,6 +1339,8 @@ export default function CommandPost() {
         const name = first ? (spot?.name ?? u.callsign) : "";
         const when = first ? (spot?.when ?? "") : "";
         pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
+        // A silent unit is drawn where it was last known, with a ring saying the place is old [265].
+        if (silent) last.push({ type: "Feature", properties: { color, radius: 16 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
         acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(q, p.radius_m)] } });
         if (p.heading_to) {
           // From the marker, the middle of the circle, so the trail stays visible up to it.
@@ -1167,6 +1357,7 @@ export default function CommandPost() {
       flowShafts.current = shafts;
       const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
       set("pos", pos);
+      set("unit-last", last);
       set("accuracy", acc);
       set("trail", trail);
       set("arrow", arrows);
@@ -1214,6 +1405,7 @@ export default function CommandPost() {
       const sym: GeoJSON.Feature[] = [];
       const acc: GeoJSON.Feature[] = [];
       const trail: GeoJSON.Feature[] = [];
+      const last: GeoJSON.Feature[] = [];
       const sight: GeoJSON.Feature[] = [];
       const leader: GeoJSON.Feature[] = [];
       // Where a unit or a track is drawn: its place, or a point on the way there while it slides.
@@ -1288,12 +1480,14 @@ export default function CommandPost() {
         }
         const what = describeTrack(t);
         const name = `T${t.n} · ${what}`;
-        const when = old ? `not seen for ${fmtAgo(effNow - t.seenTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
+        const when = old ? `Last known ${fmtTime(t.positionTs)}` : `${p.estimated ? "≈ " : ""}${fmtTime(t.positionTs)} · ${t.seenBy}`;
         const props: Record<string, unknown> = { icon, off, op, labelOp: old ? 0.75 : 1, name, when, n: t.n, picked: t.n === picked, textOff: [0, -lift / trackText] };
         // The bands flow while the sighting is fresh. On an old one the arrow is still: the way it
         // was moving is what was said then, not what is known now.
         if (heading != null) Object.assign(props, { heading, arrow: canFlow && !old ? flowIcon : arrowIcon });
         drawn.push({ n: t.n, id: `T${t.n}`, p: q, color, op, icon, label: [name, when], props, lift, arrow });
+        // A track not seen for a while keeps a ring on where it was last known [265].
+        if (old) last.push({ type: "Feature", properties: { color, radius: 22 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
       }
 
       // Where each symbol is drawn: on its point, unless it would hide a unit's dot or label, or a
@@ -1344,6 +1538,7 @@ export default function CommandPost() {
 
       const set = (id: string, features: GeoJSON.Feature[]) => (map.getSource(id) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
       set("track", sym);
+      set("track-last", last);
       set("track-acc", acc);
       set("track-trail", trail);
       set("track-sight", sight);
@@ -1736,6 +1931,8 @@ export default function CommandPost() {
   /** In a replay or an ended mission the tools close by themselves. */
   const activeTool = canEdit ? tool : null;
   const pickedTrack = picked != null ? (view.tracks.find((t) => t.n === picked) ?? null) : null;
+  /** The reports and acts about the picked track: its provenance [271]. */
+  const pickedHistory = useMemo(() => (pickedTrack ? view.feed.filter((f) => f.track === pickedTrack.n) : []), [view.feed, pickedTrack]);
   /** The number a new track will most likely get; the coordinator gives the real one. */
   const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
   const tracksUrl = session ? `/api/sessions/${encodeURIComponent(session)}/tracks` : "";
@@ -2250,8 +2447,54 @@ export default function CommandPost() {
     deck.addEventListener("pointercancel", up);
   };
 
+  const findResults = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    if (!q) return [] as { key: string; label: string; detail: string; unit: UnitState | null; track: TrackState | null; place: StartPoint | null }[];
+    const units = view.units
+      .filter((u) => u.callsign.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((u) => ({ key: `u:${u.callsign}`, label: u.callsign, detail: u.position ? `${u.position.label} · ±${u.position.radius_m} m` : "not placed", unit: u, track: null, place: null }));
+    const tracks = view.tracks
+      .filter((t) => `t${t.n} track ${t.n} ${describeTrack(t)}`.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((t) => ({ key: `t:${t.n}`, label: `Track ${t.n}`, detail: describeTrack(t), unit: null, track: t, place: null }));
+    const places = placeResults
+      .slice(0, 5)
+      .map((p) => ({ key: `p:${p.id}`, label: p.name, detail: p.category.replace("_", " "), unit: null, track: null, place: p }));
+    return [...units, ...tracks, ...places].slice(0, 8);
+  }, [find, view, placeResults]);
+  const pickFind = (r: (typeof findResults)[number]) => {
+    setFindOpen(false);
+    setFind("");
+    setFindAt(0);
+    if (r.track) {
+      flyToTrack(r.track);
+      return;
+    }
+    const p = r.unit?.position ?? r.place;
+    const map = mapRef.current;
+    if (!p || !map) return;
+    setFollow(false);
+    map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 15) });
+  };
+  /** A timeline event: show the mission as it was just after it [271]. */
+  const jumpTimeline = (f: FeedItem) => {
+    setTimelineOpen(false);
+    setFollow(false);
+    setPlaying(false);
+    setReplayOpen(true);
+    scrub(Math.min(rangeEnd, Math.max(rangeStart, f.ts + 1)));
+    if (f.track != null) setPicked(f.track);
+  };
+
   return (
-    <div className={styles.root} data-tab={tab}>
+    <div
+      className={styles.root}
+      data-tab={tab}
+      data-lists={listsOpen ? undefined : "closed"}
+      data-bar={barShut ? "compact" : undefined}
+      style={listsHeight != null ? ({ "--lists-h": `${listsHeight}px` } as CSSProperties) : undefined}
+    >
       <header className={styles.header}>
         <h1 className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true" />
@@ -2331,6 +2574,12 @@ export default function CommandPost() {
           <span className={styles.connDot} aria-hidden="true" />
           {stored === false ? "This coordinator keeps no record" : connected ? "Connected" : lastOk ? `No contact since ${fmtTime(lastOk)}` : "Connecting…"}
         </div>
+        <button type="button" className={styles.ghostBtn} onClick={() => setTimelineOpen(true)} title="The mission's events, newest first; choose one to replay it">
+          Timeline
+        </button>
+        <button type="button" className={styles.ghostBtn} onClick={() => setFindOpen(true)} title="Find a call sign, a track or a place (Ctrl+K)">
+          Find
+        </button>
         <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
           Missions ▾
         </button>
@@ -2347,20 +2596,33 @@ export default function CommandPost() {
           ready={mapReady}
           centre={AREAS[area].centre}
           below="start-fill"
-          top="calc(110px / var(--z))"
+          top="calc(90px / var(--z))"
+          right="calc(60px / var(--z))"
           covered={coveredBelow}
           onMeasuring={setMeasuring}
           scale={mapSize ? screenScale() : 1}
           folded
           onGo={stopFollowing}
         />
-        {/* Top left of the map: "Follow units", then the palette or the picked track's card. */}
+        {/* Top left of the map: Satellite and "Follow units" in one row, then the palette or the
+            picked track's card, so the map keeps its height. */}
         <div className={styles.dock}>
-          {!follow ? (
-            <button type="button" className={styles.followBtn} onClick={() => setFollow(true)}>
-              Follow units
+          <div className={styles.dockActions}>
+            <button
+              type="button"
+              className={`${styles.followBtn} ${satellite ? styles.toggleOn : ""}`}
+              aria-pressed={satellite}
+              title={satellite ? "Back to the drawn map" : "Photograph view, needs internet"}
+              onClick={() => setSatellite((on) => !on)}
+            >
+              {satellite ? "Map" : "Satellite"}
             </button>
-          ) : null}
+            {!follow ? (
+              <button type="button" className={styles.followBtn} onClick={() => setFollow(true)}>
+                Follow units
+              </button>
+            ) : null}
+          </div>
           {activeTool?.kind === "place" ? (
             <TrackPalette
               title={`Place Track ${nextN}`}
@@ -2512,6 +2774,8 @@ export default function CommandPost() {
               onGone={() => markGone(pickedTrack.n, true)}
               onRestore={() => markGone(pickedTrack.n, false)}
               onClose={() => setPicked(null)}
+              history={pickedHistory}
+              format={fmtTime}
             >
               <TrackRecon track={pickedTrack} tracks={view.tracks} units={view.units} requests={view.requests} canEdit={canEdit} busy={busy} fmt={fmtTime} onTask={sendTask} />
             </TrackCard>
@@ -2547,8 +2811,17 @@ export default function CommandPost() {
           ) : null}
         </div>
 
-        <div ref={replayEl} className={styles.replayBar}>
-          <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} onClick={() => {
+        <div ref={replayEl} className={styles.replayBar} data-compact={barShut ? "" : undefined}>
+          {barShut ? (
+            <button type="button" className={styles.liveBtn} disabled={mapShort} onClick={() => setBarCompact(false)} title={mapShort ? "Enlarge the map to show the replay bar" : "Show the replay bar"} aria-label="Show the replay bar">
+              Replay <span aria-hidden="true">▴</span>
+            </button>
+          ) : (
+            <>
+          <button type="button" className={styles.barToggle} onClick={() => setBarCompact(true)} title="Hide the replay bar, to see the map" aria-label="Hide the replay bar">
+            <span aria-hidden="true">▾</span>
+          </button>
+          <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} title={!entries.length ? "Nothing to replay yet: no report, track or unit placed in this mission" : replayOpen ? "Back to the live view and close the replay" : "Read this mission from its log, from a moment you choose"} onClick={() => {
             if (replayOpen) goLive();
             setReplayOpen(!replayOpen);
           }}>{replayOpen ? "Close replay" : "Replay"}</button>
@@ -2643,6 +2916,8 @@ export default function CommandPost() {
             ))}
           </div>
           </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
+            </>
+          )}
         </div>
 
         {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
@@ -2654,24 +2929,38 @@ export default function CommandPost() {
             data-side={deckPin ? undefined : deckSide}
             data-pinned={deckPin ? "" : undefined}
             data-idle={decisions.length ? undefined : ""}
+            data-collapsed={cardShut ? "" : undefined}
             style={deckAt ?? undefined}
             onPointerDown={dragDeck}
           >
           <DecisionQueue
             head={
-              deckPin ? (
-                <button
-                  type="button"
-                  className={styles.unpinBtn}
-                  onClick={() => {
-                    setDeckPin(null);
-                    deckFor.current = null;
-                  }}
-                  title="Let the card move off each decision again"
-                >
-                  Unpin
-                </button>
-              ) : null
+              <>
+                {decisions.length ? (
+                  <button
+                    type="button"
+                    className={styles.unpinBtn}
+                    onClick={() => setDeckCollapsed((collapsed) => !collapsed)}
+                    disabled={mapShort}
+                    title={mapShort ? "Enlarge the map to show the decisions" : cardShut ? "Show the decisions, over the map" : "Hide the decisions, to see the map"}
+                  >
+                    {cardShut ? "Show" : "Hide"}
+                  </button>
+                ) : null}
+                {deckPin ? (
+                  <button
+                    type="button"
+                    className={styles.unpinBtn}
+                    onClick={() => {
+                      setDeckPin(null);
+                      deckFor.current = null;
+                    }}
+                    title="Let the card move off each decision again"
+                  >
+                    Unpin
+                  </button>
+                ) : null}
+              </>
             }
             decisions={decisions}
             focused={focused}
@@ -2698,28 +2987,70 @@ export default function CommandPost() {
         ) : null}
       </main>
 
-      {/* On a phone the lists take turns under the map [258]. */}
-      <div className={styles.tabs} role="tablist" aria-label="Lists">
-        {(
-          [
-            ["units", "Units", view.units.length],
-            ["tracks", "Tracks", view.tracks.length],
-            ["reports", "Reports", view.feed.filter((f) => f.kind === "report").length],
-          ] as const
-        ).map(([id, label, n]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => {
-              setTab(id);
-              if (id === "reports") setReportsOpen(true);
-            }}
-          >
-            {label} <span className={styles.count}>{n}</span>
-          </button>
-        ))}
+      {/* On a phone the lists take turns under the map [258]. The box's top edge drags the whole box
+          taller or shorter with a mouse or a finger, and the chevron shuts it entirely [262, 263]. */}
+      <div className={styles.tabsBar}>
+        <div
+          className={styles.listsGrip}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize the lists"
+          title="Drag the top edge to resize the lists, or use the arrow keys"
+          tabIndex={0}
+          onPointerDown={startListsDrag}
+          onPointerMove={moveListsDrag}
+          onPointerUp={endListsDrag}
+          onPointerCancel={endListsDrag}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              nudgeLists(24);
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              nudgeLists(-24);
+            }
+          }}
+        />
+        <div className={styles.tabs} role="tablist" aria-label="Lists">
+          {(
+            [
+              ["units", "Units", view.units.length],
+              ["tracks", "Tracks", view.tracks.length],
+              ["reports", "Reports", view.feed.filter((f) => f.kind === "report").length],
+            ] as const
+          ).map(([id, label, n]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => {
+                setTab(id);
+                setListsOpen(true);
+                if (listsHeight != null && listsHeight < 80) setListsHeight(null);
+                if (id === "reports") setReportsOpen(true);
+              }}
+            >
+              {label} <span className={styles.count}>{n}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={styles.tabsToggle}
+          aria-expanded={listsOpen}
+          title={listsOpen ? "Hide the lists and give the map the height" : "Show the units, tracks and reports"}
+          aria-label={listsOpen ? "Hide the lists" : "Show the lists"}
+          onClick={() => {
+            if (listsOpen) setListsOpen(false);
+            else {
+              setListsOpen(true);
+              if (listsHeight == null || listsHeight < 80) setListsHeight(null);
+            }
+          }}
+        >
+          <span aria-hidden="true">{listsOpen ? "▾" : "▴"}</span>
+        </button>
       </div>
 
       {/* Units on the left, one strip each [258]. */}
@@ -3119,6 +3450,115 @@ export default function CommandPost() {
       <div className={styles.srOnly} aria-live="polite">
         {mode === "live" && latest ? `${latest.callsign}: ${latest.outcome}` : ""}
       </div>
+
+      {timelineOpen ? (
+        <div className={styles.timelinePanel} role="dialog" aria-modal="true" aria-label="Timeline">
+          <div className={styles.timelinePanelHead}>
+            <h2>Timeline</h2>
+            <button type="button" className={styles.linkBtn} onClick={() => setTimelineOpen(false)}>
+              Close
+            </button>
+          </div>
+          <p className={styles.timelinePanelHint}>Newest first. Choose an event to replay the mission just after it.</p>
+          <ol className={styles.timelinePanelList}>
+            {[...view.feed]
+              .sort((a, b) => b.ts - a.ts)
+              .map((f) => (
+                <li key={f.id}>
+                  <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
+                    <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
+                    <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
+                    <span className={styles.timelinePanelWho}>{f.callsign}</span>
+                    <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
+                    {f.track != null ? <span className={styles.timelinePanelTag}>T{f.track}</span> : null}
+                  </button>
+                </li>
+              ))}
+            {view.feed.length === 0 ? <li className={styles.timelinePanelEmpty}>No events yet.</li> : null}
+          </ol>
+        </div>
+      ) : null}
+
+      {findOpen ? (
+        <div
+          className={styles.find}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Find"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setFindOpen(false);
+          }}
+        >
+          <div className={styles.findCard}>
+            <input
+              autoFocus
+              value={find}
+              onChange={(e) => {
+                setFind(e.target.value);
+                setFindAt(0);
+                if (e.target.value.trim().length < 2) setPlaceResults([]);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setFindOpen(false);
+                else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setFindAt((i) => Math.min(findResults.length - 1, i + 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setFindAt((i) => Math.max(0, i - 1));
+                } else if (e.key === "Enter" && findResults[findAt]) {
+                  pickFind(findResults[findAt]);
+                }
+              }}
+              placeholder="Call sign, track, drone, place…"
+              aria-label="Find a unit, a track or a place"
+            />
+            {find.trim() ? (
+              findResults.length ? (
+                <ul className={styles.findList}>
+                  {findResults.map((r, i) => (
+                    <li key={r.key}>
+                      <button type="button" data-active={i === findAt || undefined} onMouseEnter={() => setFindAt(i)} onClick={() => pickFind(r)}>
+                        <b>{r.label}</b>
+                        <span>{r.detail}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.findHint}>Nothing matches.</p>
+              )
+            ) : (
+              <p className={styles.findHint}>Type a call sign (ALPHA 1), a track (T2), a kind (drone, vehicle) or a place name.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {auth !== "open" ? (
+        <div className={styles.lock} role="dialog" aria-modal="true" aria-label="Command post locked">
+          <form className={styles.lockCard} onSubmit={unlock}>
+            <h2>Command post</h2>
+            {auth === "checking" ? (
+              <p>Checking the coordinator…</p>
+            ) : (
+              <>
+                <p>Enter the operator PIN to change the mission. Viewing stays open.</p>
+                <input
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  autoComplete="current-password"
+                  aria-label="Operator PIN"
+                  autoFocus
+                />
+                {authError ? <p className={styles.lockError} role="alert">{authError}</p> : null}
+                <button type="submit">Unlock</button>
+              </>
+            )}
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

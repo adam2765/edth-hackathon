@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { recordUnit } from "@/lib/reports/record";
 import { parseUnit } from "@/lib/reports/tasks";
 import { COMMAND_POST, sessionCode, type UnitReply } from "@/lib/reports/types";
@@ -11,6 +12,8 @@ import { COMMAND_POST, sessionCode, type UnitReply } from "@/lib/reports/types";
  * team until a person ends that. The same kind again writes nothing and returns `entry: null`.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]/units">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const session = sessionCode((await ctx.params).code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   let body: unknown;

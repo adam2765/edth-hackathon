@@ -252,9 +252,12 @@ export default function DecisionQueue(props: {
                   </span>
                 ) : null}
                 {h?.audio && props.session ? (
-                  <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(props.session)}/audio/${encodeURIComponent(h.audio)}`}>
-                    The recording.
-                  </audio>
+                  <>
+                    <span className={styles.heldAudioLabel}>Recording of the report</span>
+                    <audio className={styles.heldAudio} controls preload="none" src={`/api/sessions/${encodeURIComponent(props.session)}/audio/${encodeURIComponent(h.audio)}`}>
+                      The recording.
+                    </audio>
+                  </>
                 ) : null}
                 {d.kind === "request" ? (
                   <>

@@ -4,7 +4,7 @@
  * Grid tools on a map [232]: the MGRS grid under the pointer, the grid's lines, a ruler that gives
  * distance and bearing between two points, and a box to go to a grid. On the map page a click also
  * copies the grid under it. Used by the map page, and by the command post, where the tools are
- * `folded` behind one button and the grid under the pointer is a line at the map's edge [245].
+ * `folded` behind one button and the grid under the pointer sits beside that button [245, 262].
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { GeoJSONSource, Map as MLMap, MapMouseEvent } from "maplibre-gl";
@@ -26,6 +26,8 @@ interface Props {
   copyOnClick?: boolean;
   /** Pixels from the top of the map: under the zoom buttons. */
   top?: string;
+  /** Pixels from the right edge: beside the zoom buttons, clear of the map's credits. */
+  right?: string;
   /** Pixels at the bottom of the map that the page covers, such as a bar: the grid's figures stay above it. */
   covered?: () => number;
   /** Told when the ruler goes on or off, so the page's own clicks on the map can stand down. */
@@ -45,7 +47,7 @@ interface Props {
 /** The size of the grid's figures on the map, before `scale`. */
 const LABEL_SIZE = 12;
 
-export default function MapTools({ mapRef, ready, centre, below, copyOnClick = false, top = "110px", covered, onMeasuring, scale = 1, folded = false, onGo }: Props) {
+export default function MapTools({ mapRef, ready, centre, below, copyOnClick = false, top = "110px", right, covered, onMeasuring, scale = 1, folded = false, onGo }: Props) {
   const [grid, setGrid] = useState("");
   const [open, setOpen] = useState(false);
   const [over, setOver] = useState(false);
@@ -265,9 +267,10 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
   const shown = !folded || open;
   return (
     <>
-      <div ref={toolsRef} className={styles.tools} style={{ top }}>
+      <div ref={toolsRef} className={styles.tools} style={right ? { top, right } : { top }}>
         {folded ? (
           <div className={styles.row}>
+            {over ? <div className={styles.grid} aria-hidden="true">{grid}</div> : null}
             <button type="button" className={styles.btn} aria-expanded={open} onClick={toggleOpen} title="Grid lines, a ruler and go to a grid">
               Map tools <span aria-hidden="true">{open ? "▴" : "▾"}</span>
             </button>
@@ -302,12 +305,6 @@ export default function MapTools({ mapRef, ready, centre, below, copyOnClick = f
           </div>
         ) : null}
       </div>
-      {/* For the eye that follows the pointer, not for a screen reader: every position on the page has its grid in words. */}
-      {folded && over ? (
-        <div className={`${styles.grid} ${styles.edge}`} aria-hidden="true">
-          {grid}
-        </div>
-      ) : null}
     </>
   );
 }

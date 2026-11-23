@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { deleteMission } from "@/lib/reports/record";
 import { getStore } from "@/lib/reports/store";
 import { sessionCode, type SessionLogReply } from "@/lib/reports/types";
@@ -25,7 +26,9 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/sessions/[co
 }
 
 /** Deletes an ended mission: `DELETE /api/sessions/<code>`. The file moves to `deleted/`; an open mission gets 409. */
-export async function DELETE(_req: NextRequest, ctx: RouteContext<"/api/sessions/[code]">) {
+export async function DELETE(req: NextRequest, ctx: RouteContext<"/api/sessions/[code]">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const session = sessionCode((await ctx.params).code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   try {

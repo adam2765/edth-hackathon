@@ -181,6 +181,8 @@ and starting/stopping missions are separate actions.
 Hosts lists reachable coordinators discovered through the USB/Metro host, LAN advertisements and, on an iPhone, the phone's own search of the local network. Tap Connect beside the server you want. Manual host override,
 scenarios and test settings are under Developer tools. The phone records audio; voice-to-text runs on the coordinator. The mission supplies the area. Replay controls open through **Replay**.
 
+The phone page's language switch changes its whole interface and its spoken questions (EN/FR/UK); a phone with no saved choice starts in its browser's language. **My position** centres the phone's own map and draws a blue dot; it is never sent and is not a report [269, 270]. The command post's interface stays English.
+
 Local inference is the default; install Ollama, whisper.cpp and ffmpeg on the host once. No AI model is installed on the phone. Advanced developers can
 still run components directly; see [setup](docs/setup.md#advanced-console-use). Logs are in
 `.run/launcher.log`. Shutdown scans project processes across all ports, including old
@@ -193,7 +195,7 @@ Unrelated processes are left alone.
 
 Install the host tools and Ollama model using [setup](docs/setup.md#install-once). On macOS the tools are `brew install ollama whisper.cpp ffmpeg`. Then use Build followed by Start above; Build prepares the Whisper models once.
 
-The map works offline too. `npm run basemap -- vincennes` saves the area's tiles, fonts and icons from OpenFreeMap into `public/basemap/` once, with internet (28 MB; `kyiv` and `izium` are one run each, 13 and 6 MB). In offline mode both maps read that copy and ask no other host. With no saved copy and no internet, the units and tracks draw on a plain background and the map's corner says so. `BASEMAP=hosted` or `BASEMAP=local` picks the map whatever the mode [239].
+The map works offline too. `npm run basemap -- vincennes` saves the area's tiles, fonts and icons from OpenFreeMap, and the photographs the command post's Satellite button shows, into `public/basemap/` once, with internet (101 MB, 118 MB on disk; `kyiv` and `izium` are one run each, 13 and 6 MB of map plus Sentinel's photos, and the three are 150 MB on disk). In offline mode both maps read that copy and ask no other host. With no saved copy and no internet, the units and tracks draw on a plain background and the map's corner says so. `BASEMAP=hosted` or `BASEMAP=local` picks the map whatever the mode [239, 261].
 
 `LOCAL_EXTRACT_MODEL` picks another model (for example `ministral-3:8b`), `OLLAMA_URL` another address. At start the server warms the model and each area's prompt. The launcher waits for this before showing Ready.
 
@@ -218,6 +220,12 @@ Checked in the iPhone simulator against the live site on 20 Nov: the Vincennes s
 ## Command post
 
 The shared map for the base station: open `http://localhost:3117/cp` on the computer that runs the coordinator, ideally on a big screen. It was called the receiver; `/receiver` still leads here [176].
+
+A **Satellite** button at the top left switches the base map to photographs: IGN's orthophotos where they cover France, and a Sentinel-2 cloudless mosaic elsewhere. It is off at first and asks for no photograph until pressed; the units and tracks keep their symbols over it. It works from the internet, or from the photos `npm run basemap -- <area>` saves beside the offline map, so it works with no internet too [260, 261].
+
+On a narrow screen, the top edge of the Units, Tracks and Reports box drags the whole box taller or shorter with a mouse or a finger; the chevron only shuts it. The Decisions card folds to its heading with **Hide**, and the replay bar to one **Replay** pill with **▾**, so the map can be seen. A silent unit or a track not seen for a while stays at its **last known place**, ringed and labelled **Last known HH:MM**; a held radio report with a recording has a **Recording of the report** player in its card. A picked track's card has a fold-out **Provenance and history** (who opened it, who saw it last, the reports behind it); **Timeline** lists the mission's events and replays the moment after the one chosen [271]. **Find** (Ctrl+K) jumps to a call sign or a track. The map's sources (OpenStreetMap, IGN, Sentinel) sit behind the ⓘ at the bottom right, and Map tools and the grid under the pointer share the top right [262, 263, 265, 268].
+
+Set `CP_PIN` in `.env.local` before sharing the coordinator: `/cp` then asks for the operator PIN and requires it for every change, while reading and the phone stay open [266]. On the phone page, **Join mission** puts its reports in a mission; the command post then sees the unit, and the base's answer comes back to the phone [267].
 
 The map is in the middle, between two thin columns [258]. The units are on the left and the tracks on the right, one strip each: the call sign or track number, how long since it was heard, and one line that says where it is or what differs. Click a strip to open it: the whole line, the time, and for a unit "What is it?" and Move. On a 1024 px projector the strips keep to one line, and a track is "T1", as on the map. The reports fold under the tracks to the newest one; click "Reports" to open them all. The Decisions card floats over the map. On a phone the map is on top, with Units, Tracks and Reports as tabs under it.
 

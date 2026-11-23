@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { recordTask } from "@/lib/reports/record";
 import { parseTask } from "@/lib/reports/tasks";
 import { COMMAND_POST, sessionCode, type TaskReply } from "@/lib/reports/types";
@@ -14,6 +15,8 @@ import { COMMAND_POST, sessionCode, type TaskReply } from "@/lib/reports/types";
  * settled already returns `already: true` and changes nothing.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]/tasks">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const session = sessionCode((await ctx.params).code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   let body: unknown;

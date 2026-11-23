@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { AREAS, isAreaId } from "@/lib/geo/areas";
 import { loadGazetteer } from "@/lib/geo/gazetteer";
 import { startPointFrom } from "@/lib/reports/mission";
@@ -23,6 +24,8 @@ const PARIS_TIME = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", 
  * lines [201]. Returns 201 with the mission and its new code.
  */
 export async function POST(req: Request) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   let body: { area?: unknown; name?: unknown; start?: unknown; roster?: unknown };
   try {
     body = await req.json();

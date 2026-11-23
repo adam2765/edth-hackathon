@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { recordAnswer } from "@/lib/reports/record";
 import { COMMAND_POST, sessionCode } from "@/lib/reports/types";
 
@@ -23,6 +24,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Send `session`, `report` and `choice` (a candidate id, or null)." }, { status: 400 });
   }
   if (body.by != null && body.by !== COMMAND_POST) return NextResponse.json({ error: `\`by\` is "${COMMAND_POST}" or left out.` }, { status: 400 });
+  // The phone answers for itself; only the command post's own answer is behind the PIN [266].
+  if (body.by === COMMAND_POST) {
+    const denied = operatorDenied(req);
+    if (denied) return denied;
+  }
   try {
     const r = await recordAnswer(session, report, choice, Date.now(), body.by === COMMAND_POST ? COMMAND_POST : null);
     if (!r.ok) return NextResponse.json({ error: r.error, ended: r.ended }, { status: r.status });

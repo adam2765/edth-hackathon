@@ -11,7 +11,7 @@ import { AREAS, type AreaId } from "@/lib/geo/areas";
 import { shortGrid, typedGrid, type GridRead } from "@/lib/geo/grid";
 import { AFFILIATION_LABEL, AFFILIATIONS, describeTrack, TRACK_KIND_NAME, TRACK_KINDS, trackSymbolCode } from "@/lib/geo/trackKinds";
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
-import type { TrackState } from "@/lib/reports/fold";
+import type { TrackState, FeedItem } from "@/lib/reports/fold";
 import { PLOT_RADII } from "@/lib/reports/plot";
 import type { PlacesReply, StartPoint, UnitPosition } from "@/lib/reports/types";
 import styles from "./CommandPost.module.css";
@@ -333,11 +333,17 @@ export function TrackCard(props: {
   onClose: () => void;
   /** What the card says about recon, and its buttons [234]. */
   children?: ReactNode;
+  /** The reports and command-post acts about this track, oldest first: its provenance [271]. */
+  history?: FeedItem[];
+  /** The clock used for the provenance's times. */
+  format?: (ts: number) => string;
 }) {
   const t = props.track;
   const [confirmGone, setConfirmGone] = useState(false);
   const p = t.position;
   const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
+  const when = props.format ?? ((ts: number) => new Date(ts).toLocaleTimeString());
+  const history = (props.history ?? []).slice(-6).reverse();
   return (
     <div className={styles.tool} role="dialog" aria-label={`Track ${t.n}`}>
       <div className={styles.toolHead}>
@@ -362,6 +368,31 @@ export function TrackCard(props: {
         {t.changed ? ` · changed by ${t.changed.by}` : ""}
         {t.note ? ` · source: ${t.note}` : ""}
       </p>
+      <details className={styles.provenance}>
+        <summary>Provenance and history ({history.length})</summary>
+        <p className={styles.provLine}>
+          Opened by <b>{t.openedBy}</b> at {when(t.openedTs)} · last seen by <b>{t.seenBy}</b> at {when(t.seenTs)}
+          {p ? ` · ±${p.radius_m} m${p.estimated ? ", estimated" : ""}` : ""} · {t.trail.length} earlier position{t.trail.length === 1 ? "" : "s"}.
+        </p>
+        {history.length ? (
+          <ol className={styles.provList}>
+            {history.map((f) => (
+              <li key={f.id}>
+                <span className={styles.provTime}>{when(f.ts)}</span>
+                <span className={styles.provWho}>{f.callsign}</span>
+                <span className={styles.provWhat}>{f.transcript || f.outcome}</span>
+                {f.position ? (
+                  <span className={styles.provPlace}>
+                    <GridTag at={f.position} />
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className={styles.provLine}>No report about this track in the log yet.</p>
+        )}
+      </details>
       {props.children}
       {props.error ? (
         <p className={styles.error} role="alert">

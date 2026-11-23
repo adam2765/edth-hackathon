@@ -76,7 +76,7 @@ A Mistral key is optional. Hosted mode (the default) calls Mistral and needs `MI
 ## Rules
 
 - The language model never produces coordinates. It extracts intent; `lib/geo/resolver.ts` places it against the gazetteer. Do not add a path where a model output becomes a position.
-- The app never reads the phone's GPS.
+- The app never uses GPS as a position source. A person may tap **My position** on the web phone to centre their own map; that point is not sent, never moves a unit, and is not a report.
 - When a report is ambiguous, ask back. Do not add silent guesses.
 - Tracks are for reconnaissance only (decision 234, which replaces 145). Nothing is hostile unless the speaker said so, a report about a track never moves the speaker, and the app works out nothing between things on the map: no range check, no "nearest", no ranking, no "target" wording. Only a person sends a friendly drone or drone team to look at a track, and only a person ends that. A unit is a drone team only when a person at the command post says so, never from its call sign (decision 235).
 - Providers stay European and behind the interfaces in `lib/providers/`. Do not add a US-hosted service to the request path (decision 42).

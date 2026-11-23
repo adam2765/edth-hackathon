@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { parsePlot } from "@/lib/reports/plot";
 import { recordPlot } from "@/lib/reports/record";
 import { COMMAND_POST, sessionCode, type PlotAction, type PlotReply } from "@/lib/reports/types";
@@ -11,6 +12,8 @@ const ACTIONS: PlotAction[] = ["edit", "move", "gone", "restore"];
  * `lon` (or `place`), `radius_m?` and `note?`; `gone` and `restore` take nothing else.
  */
 export async function PATCH(req: Request, ctx: RouteContext<"/api/sessions/[code]/tracks/[n]">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const params = await ctx.params;
   const session = sessionCode(params.code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });

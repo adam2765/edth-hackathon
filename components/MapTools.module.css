@@ -18,6 +18,8 @@
   pointer-events: auto;
 }
 
+/* The grid under the pointer where the tools are folded away [245, 262]: one line beside the
+   "Map tools" button, clear of the page's Decisions card, credits and replay bar. */
 .grid,
 .out {
   background: #1d272f;
@@ -35,16 +37,8 @@
   color: #f2b33d;
 }
 
-/* The grid under the pointer where the tools are folded away [245]: one line at the map's bottom
-   left, level with the map's credits and above the page's sheet or bar, as on a chart. */
-.edge {
-  position: absolute;
-  left: 12px;
-  bottom: calc((var(--sheet-h, 0px) + 2px) / var(--z, 1));
-  z-index: 1;
-  zoom: var(--z, 1);
-}
-
+/* The grid under the pointer where the tools are folded away sits in the tools' own row, next to
+   the button [245, 262]. */
 .row {
   display: flex;
   gap: 6px;

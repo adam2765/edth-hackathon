@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { GeoJSONSource, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { AREAS, DEFAULT_AREA, isAreaId, type AreaId } from "@/lib/geo/areas";
 import { loadBaseMap } from "@/lib/map/baseMap";
 import MapTools from "./MapTools";
 import type { Candidate, HeadingTo, Intent, Placement, Resolution } from "@/lib/geo/types";
+import type { SessionLogReply, AnswerEntry } from "@/lib/reports/types";
 import { loadingLabel, ukrainianVoice } from "@/lib/tts/ukrainianVoice";
 
 type Lang = "en" | "fr" | "uk";
@@ -44,6 +45,209 @@ const LANG_EVENT = "v2m-lang";
 const LANGS: Lang[] = ["en", "fr", "uk"];
 const LANG_NAME: Record<Lang, string> = { en: "English", fr: "Français", uk: "Українська" };
 const LANG_SHORT: Record<Lang, string> = { en: "EN", fr: "FR", uk: "УКР" };
+/**
+ * The phone page's own words [269]. The language switch changes the interface as well as the
+ * questions and the voice; the map tools keep their English labels for now.
+ */
+interface UiText {
+  ready: string;
+  hold: string;
+  opening: string;
+  tapSend: string;
+  release: string;
+  working: string;
+  starting: string;
+  listenTap: string;
+  listenRelease: string;
+  tooShort: string;
+  limit: string;
+  micNoSupport: string;
+  micDenied: string;
+  micFailed: string;
+  micUnavailable: string;
+  transcribing: string;
+  resolving: string;
+  network: string;
+  cleared: string;
+  area: string;
+  language: string;
+  languageHint: string;
+  join: string;
+  joinTitle: string;
+  joinHelp: string;
+  missionCode: string;
+  callSign: string;
+  joining: string;
+  cancel: string;
+  leave: string;
+  mission: string;
+  joined: string;
+  left: string;
+  none: string;
+  fromYou: string;
+  fromCentre: string;
+  typeReport: string;
+  send: string;
+  reportLog: string;
+  clear: string;
+  lastFix: string;
+  myPos: string;
+  locating: string;
+  locUnavailable: string;
+  myPosHint: string;
+  ask: string;
+  tryHint: string;
+}
+
+const UI: Record<Lang, UiText> = {
+  en: {
+    ready: "Hold the button and say where you are.",
+    hold: "Hold to talk",
+    opening: "Opening mic…",
+    tapSend: "Tap to send",
+    release: "Release to send",
+    working: "Working…",
+    starting: "Starting microphone…",
+    listenTap: "Listening… tap to send.",
+    listenRelease: "Listening… release to send.",
+    tooShort: "Too short. Hold the button while you speak, or tap once to start and again to stop.",
+    limit: "15 s limit reached, sending.",
+    micNoSupport: "This browser cannot record audio here. Use the text box, or open the page over HTTPS in Safari or Chrome.",
+    micDenied: "Microphone access was refused. Allow the microphone for this site in the browser settings, then reload. You can type reports meanwhile.",
+    micFailed: "Could not open the microphone ({name}). You can type reports meanwhile.",
+    micUnavailable: "Microphone unavailable.",
+    transcribing: "Transcribing…",
+    resolving: "Resolving…",
+    network: "Network error. Check the connection and try again.",
+    cleared: "Cleared. Hold the button and say where you are.",
+    area: "Area",
+    language: "Language",
+    languageHint: "Questions come back in it.",
+    join: "Join",
+    joinTitle: "Join a mission",
+    joinHelp: "Enter the mission code and your call sign. Your reports then reach the command post, and its answer comes back here.",
+    missionCode: "Mission code",
+    callSign: "Call sign",
+    joining: "Joining…",
+    cancel: "Cancel",
+    leave: "Leave",
+    mission: "Mission",
+    joined: "Mission {code}. Your reports go to the base.",
+    left: "Left the mission.",
+    none: "None of these",
+    fromYou: "from you",
+    fromCentre: "from centre",
+    typeReport: "Or type a report…",
+    send: "Send",
+    reportLog: "Report log",
+    clear: "Clear map and log",
+    lastFix: "last fix",
+    myPos: "My position",
+    locating: "Locating…",
+    locUnavailable: "Location unavailable. Allow location for this site, or use HTTPS.",
+    myPosHint: "This is your position. It is not sent.",
+    ask: "Which one did you mean?",
+    tryHint: "Try:",
+  },
+  fr: {
+    ready: "Maintenez le bouton et dites où vous êtes.",
+    hold: "Maintenir pour parler",
+    opening: "Ouverture du micro…",
+    tapSend: "Touchez pour envoyer",
+    release: "Relâchez pour envoyer",
+    working: "En cours…",
+    starting: "Démarrage du microphone…",
+    listenTap: "J'écoute… touchez pour envoyer.",
+    listenRelease: "J'écoute… relâchez pour envoyer.",
+    tooShort: "Trop court. Maintenez le bouton en parlant, ou touchez une fois pour commencer et de nouveau pour arrêter.",
+    limit: "Limite de 15 s atteinte, envoi.",
+    micNoSupport: "Ce navigateur ne peut pas enregistrer ici. Utilisez le champ texte, ou ouvrez la page en HTTPS dans Safari ou Chrome.",
+    micDenied: "L'accès au micro a été refusé. Autorisez le micro pour ce site dans les réglages du navigateur, puis rechargez. Vous pouvez écrire le rapport entre-temps.",
+    micFailed: "Impossible d'ouvrir le microphone ({name}). Vous pouvez écrire le rapport entre-temps.",
+    micUnavailable: "Microphone indisponible.",
+    transcribing: "Transcription…",
+    resolving: "Localisation…",
+    network: "Erreur réseau. Vérifiez la connexion et réessayez.",
+    cleared: "Effacé. Maintenez le bouton et dites où vous êtes.",
+    area: "Zone",
+    language: "Langue",
+    languageHint: "Les questions reviennent dans cette langue.",
+    join: "Rejoindre",
+    joinTitle: "Rejoindre une mission",
+    joinHelp: "Entrez le code de la mission et votre indicatif. Vos rapports arrivent au poste de commandement, et sa réponse revient ici.",
+    missionCode: "Code de la mission",
+    callSign: "Indicatif",
+    joining: "Connexion…",
+    cancel: "Annuler",
+    leave: "Quitter",
+    mission: "Mission",
+    joined: "Mission {code}. Vos rapports vont à la base.",
+    left: "Mission quittée.",
+    none: "Aucun de ceux-ci",
+    fromYou: "de vous",
+    fromCentre: "du centre",
+    typeReport: "Ou tapez un rapport…",
+    send: "Envoyer",
+    reportLog: "Journal des rapports",
+    clear: "Effacer la carte et le journal",
+    lastFix: "dernière position",
+    myPos: "Ma position",
+    locating: "Localisation…",
+    locUnavailable: "Position indisponible. Autorisez la localisation pour ce site, ou utilisez HTTPS.",
+    myPosHint: "Ceci est votre position. Elle n'est pas envoyée.",
+    ask: "Lequel vouliez-vous dire ?",
+    tryHint: "Essayez :",
+  },
+  uk: {
+    ready: "Утримуйте кнопку й скажіть, де ви.",
+    hold: "Утримуйте, щоб говорити",
+    opening: "Відкриваю мікрофон…",
+    tapSend: "Торкніться, щоб надіслати",
+    release: "Відпустіть, щоб надіслати",
+    working: "Обробка…",
+    starting: "Запускаю мікрофон…",
+    listenTap: "Слухаю… торкніться, щоб надіслати.",
+    listenRelease: "Слухаю… відпустіть, щоб надіслати.",
+    tooShort: "Занадто коротко. Утримуйте кнопку, коли говорите, або торкніться один раз, щоб почати, і ще раз, щоб зупинити.",
+    limit: "Досягнуто ліміту 15 с, надсилаю.",
+    micNoSupport: "Цей браузер не може записувати тут. Скористайтеся полем тексту або відкрийте сторінку через HTTPS у Safari чи Chrome.",
+    micDenied: "Доступ до мікрофона відхилено. Дозвольте мікрофон для цього сайту в налаштуваннях браузера й перезавантажте. Тим часом можна надрукувати звіт.",
+    micFailed: "Не вдалося відкрити мікрофон ({name}). Тим часом можна надрукувати звіт.",
+    micUnavailable: "Мікрофон недоступний.",
+    transcribing: "Транскрипція…",
+    resolving: "Визначаю…",
+    network: "Помилка мережі. Перевірте з'єднання й спробуйте ще раз.",
+    cleared: "Очищено. Утримуйте кнопку й скажіть, де ви.",
+    area: "Район",
+    language: "Мова",
+    languageHint: "Питання повертаються цією мовою.",
+    join: "Долучитися",
+    joinTitle: "Долучитися до місії",
+    joinHelp: "Введіть код місії та ваш позивний. Ваші звіти надходитимуть до командного пункту, а його відповідь повернеться сюди.",
+    missionCode: "Код місії",
+    callSign: "Позивний",
+    joining: "Долучаюся…",
+    cancel: "Скасувати",
+    leave: "Вийти",
+    mission: "Місія",
+    joined: "Місія {code}. Ваші звіти йдуть на базу.",
+    left: "Місію залишено.",
+    none: "Жоден із них",
+    fromYou: "від вас",
+    fromCentre: "від центру",
+    typeReport: "Або надрукуйте звіт…",
+    send: "Надіслати",
+    reportLog: "Журнал звітів",
+    clear: "Очистити карту й журнал",
+    lastFix: "остання позиція",
+    myPos: "Моє положення",
+    locating: "Визначаю положення…",
+    locUnavailable: "Положення недоступне. Дозвольте геолокацію для цього сайту або використовуйте HTTPS.",
+    myPosHint: "Це ваше положення. Воно не надсилається.",
+    ask: "Який із них ви мали на увазі?",
+    tryHint: "Спробуйте:",
+  },
+};
 const isLang = (v: unknown): v is Lang => v === "en" || v === "fr" || v === "uk";
 const langStore = {
   get(): Lang {
@@ -51,7 +255,8 @@ const langStore = {
       const saved = window.localStorage.getItem(LANG_EVENT);
       if (isLang(saved)) return saved;
     } catch {}
-    return "en";
+    const nav = typeof navigator !== "undefined" ? navigator.language.slice(0, 2) : "en";
+    return isLang(nav) ? nav : "en";
   },
   set(l: Lang) {
     try {
@@ -65,6 +270,65 @@ const langStore = {
   },
 };
 const MAX_CLIP_MS = 15_000;
+
+/** A phone that joined a mission: its reports go to that log, and the base's answers come back here. */
+type MissionLink = { code: string; callsign: string; device: string };
+const MISSION_KEY = "v2m-mission";
+const DEVICE_KEY = "v2m-device";
+
+function readMission(): MissionLink | null {
+  try {
+    const said = JSON.parse(window.localStorage.getItem(MISSION_KEY) ?? "null") as Partial<MissionLink> | null;
+    if (said && typeof said.code === "string" && typeof said.callsign === "string" && typeof said.device === "string") {
+      return { code: said.code, callsign: said.callsign, device: said.device };
+    }
+  } catch {}
+  return null;
+}
+
+function readDevice(): string {
+  try {
+    const kept = window.localStorage.getItem(DEVICE_KEY);
+    if (kept && /^[A-Za-z0-9_-]{8,64}$/.test(kept)) return kept;
+    const made = (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+    window.localStorage.setItem(DEVICE_KEY, made);
+    return made;
+  } catch {
+    return `device-${Date.now()}`;
+  }
+}
+
+/** A mission code or call sign in the link the operator shared. */
+function fromQuery(name: string): string {
+  try {
+    return new URLSearchParams(window.location.search).get(name) ?? "";
+  } catch {
+    return "";
+  }
+}
+const initialCode = (): string => readMission()?.code ?? fromQuery("session");
+const initialCall = (): string => readMission()?.callsign ?? fromQuery("callsign");
+
+/** The joined mission, kept on the phone. The server snapshot is null, so hydration has one story. */
+let missionCache: MissionLink | null | undefined;
+const missionStore = {
+  get(): MissionLink | null {
+    if (missionCache === undefined) missionCache = readMission();
+    return missionCache;
+  },
+  set(m: MissionLink | null) {
+    missionCache = m;
+    try {
+      if (m) window.localStorage.setItem(MISSION_KEY, JSON.stringify(m));
+      else window.localStorage.removeItem(MISSION_KEY);
+    } catch {}
+    window.dispatchEvent(new Event("v2m-mission"));
+  },
+  subscribe(cb: () => void) {
+    window.addEventListener("v2m-mission", cb);
+    return () => window.removeEventListener("v2m-mission", cb);
+  },
+};
 const HOLD_THRESHOLD_MS = 400;
 const MIN_CLIP_MS = 350;
 
@@ -240,19 +504,32 @@ export default function VoiceMapApp() {
   const [mapReady, setMapReady] = useState(false);
   const area = useSyncExternalStore(areaStore.subscribe, areaStore.get, () => DEFAULT_AREA);
   const speakerLang = useSyncExternalStore(langStore.subscribe, langStore.get, (): Lang => "en");
+  const T = UI[speakerLang];
   const voiceLoading = useSyncExternalStore(voiceLoadStore.subscribe, voiceLoadStore.get, () => VOICE_IDLE);
 
   // Ukrainian questions use the on-device voice, so fetch it as soon as Ukrainian is chosen.
   useEffect(() => {
     if (speakerLang === "uk") preloadUkrainianVoice();
   }, [speakerLang]);
+  // The document's language follows the switch, so a screen reader pronounces the page right [269].
+  useEffect(() => {
+    document.documentElement.lang = speakerLang;
+  }, [speakerLang]);
 
   const [position, setPosition] = useState<Position | null>(null);
   const [trail, setTrail] = useState<Position[]>([]);
   const [arrow, setArrow] = useState<Arrow | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  /** The mission this phone joined, if any: reports then go to its log [267]. */
+  const mission = useSyncExternalStore(missionStore.subscribe, missionStore.get, () => null);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [missionCode, setMissionCode] = useState(initialCode);
+  const [missionCall, setMissionCall] = useState(initialCall);
+  const [missionError, setMissionError] = useState("");
+  const [joining, setJoining] = useState(false);
+  const pendingRef = useRef<Pending | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
-  const [status, setStatus] = useState("Hold the button and say where you are.");
+  const [status, setStatus] = useState("");
   const [lastTranscript, setLastTranscript] = useState("");
   const [lastTimings, setLastTimings] = useState("");
   const [recState, setRecState] = useState<RecState>("idle");
@@ -277,6 +554,51 @@ export default function VoiceMapApp() {
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+
+  // The base's answer to this phone's open question: it can answer before the phone taps [267].
+  useEffect(() => {
+    if (!mission) return;
+    let cancelled = false;
+    let after = 0;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/sessions/${encodeURIComponent(mission.code)}?after=${after}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const data = (await r.json()) as SessionLogReply;
+        after = data.total;
+        if (cancelled) return;
+        const p = pendingRef.current;
+        if (!p) return;
+        const answer = [...data.entries].reverse().find((e): e is AnswerEntry => e.kind === "answer" && e.report_id === p.reportId);
+        if (!answer) return;
+        const name = answer.choice ? p.candidates.find((c) => c.id === answer.choice)?.name ?? "that choice" : null;
+        const said = name
+          ? p.lang === "fr"
+            ? `La base a répondu : ${name}.`
+            : p.lang === "uk"
+              ? `База відповіла: ${name}.`
+              : `The base answered: ${name}.`
+          : p.lang === "fr"
+            ? "La base a fermé la question."
+            : p.lang === "uk"
+              ? "База закрила питання."
+              : "The base closed the question.";
+        setStatus(said);
+        setPending(null);
+        setReports((rs) => rs.map((x) => (x.id === p.reportId ? { ...x, outcome: `Answered by the base: ${name ?? "none of these"}` } : x)));
+        speak(said, p.lang);
+      } catch {}
+    };
+    void tick();
+    const id = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [mission]);
 
   const setRec = (s: RecState) => {
     recStateRef.current = s;
@@ -305,6 +627,7 @@ export default function VoiceMapApp() {
         map.addSource("arrow", { type: "geojson", data: EMPTY_FC });
         map.addSource("target", { type: "geojson", data: EMPTY_FC });
         map.addSource("pos", { type: "geojson", data: EMPTY_FC });
+        map.addSource("me", { type: "geojson", data: EMPTY_FC });
         map.addLayer({ id: "trail-line", type: "line", source: "trail", filter: ["==", "$type", "LineString"], paint: { "line-color": "#5b6b7c", "line-width": 3, "line-dasharray": [2, 2] } });
         map.addLayer({ id: "trail-pts", type: "circle", source: "trail", filter: ["==", "$type", "Point"], paint: { "circle-radius": 4, "circle-color": "#5b6b7c", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
         map.addLayer({ id: "acc-fill", type: "fill", source: "accuracy", paint: { "fill-color": "#ff6b2c", "fill-opacity": 0.18 } });
@@ -313,6 +636,9 @@ export default function VoiceMapApp() {
         map.addLayer({ id: "arrow-head", type: "fill", source: "arrow", filter: ["==", "part", "head"], paint: { "fill-color": "#2c9cff" } });
         map.addLayer({ id: "target", type: "circle", source: "target", paint: { "circle-radius": 10, "circle-color": "rgba(44,156,255,0.15)", "circle-stroke-color": "#2c9cff", "circle-stroke-width": 2 } });
         map.addLayer({ id: "pos", type: "circle", source: "pos", paint: { "circle-radius": 8, "circle-color": "#ff6b2c", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+        // The phone's own position, only when the person asks: never sent, never a report [270].
+        map.addLayer({ id: "me-ring", type: "circle", source: "me", paint: { "circle-radius": 15, "circle-color": "rgba(44,156,255,0.15)", "circle-stroke-color": "#2c9cff", "circle-stroke-width": 2 } });
+        map.addLayer({ id: "me-dot", type: "circle", source: "me", paint: { "circle-radius": 6, "circle-color": "#2c9cff", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
         // Time of the last update next to the marker, as in Lysk's brief.
         map.addLayer({
           id: "pos-label",
@@ -539,10 +865,18 @@ export default function VoiceMapApp() {
       const track = pending.track != null ? `Track ${pending.track}` : "Track";
       const out = c.track_placement ? `${track} placed at ${c.name} (±${c.track_placement.radius_m ?? 80} m)` : applyPlacement(c.placement, c.name);
       updateReport(pending.reportId, { outcome: `Chose ${i + 1}: ${c.name}. ${out}`, evidence: `user_choice [${c.id}]` });
+      // Tell the mission which choice the phone made, so the base's card settles too [267].
+      if (mission) {
+        void fetch("/api/answer", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ session: mission.code, report: pending.reportId, choice: c.id }),
+        }).catch(() => {});
+      }
       setStatus(out);
       setPending(null);
     },
-    [pending, applyPlacement],
+    [pending, applyPlacement, mission],
   );
   useEffect(() => {
     chooseRef.current = choose;
@@ -552,6 +886,14 @@ export default function VoiceMapApp() {
     if (!pending) return;
     stopSpeaking();
     updateReport(pending.reportId, { outcome: "Rejected all choices" });
+    // The mission's card should close too, with "none of these" [267].
+    if (mission) {
+      void fetch("/api/answer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session: mission.code, report: pending.reportId, choice: null }),
+      }).catch(() => {});
+    }
     setPending(null);
     setStatus(
       pending.lang === "fr"
@@ -566,7 +908,7 @@ export default function VoiceMapApp() {
   const send = useCallback(
     async (payload: { audio?: Blob; text?: string }) => {
       setRec("sending");
-      setStatus(payload.audio ? "Transcribing…" : "Resolving…");
+      setStatus(payload.audio ? T.transcribing : T.resolving);
       const fd = new FormData();
       if (payload.audio) {
         const type = payload.audio.type || "audio/webm";
@@ -580,6 +922,11 @@ export default function VoiceMapApp() {
       fd.append("clientTs", String(Date.now()));
       fd.append("area", areaStore.get());
       fd.append("language", langStore.get());
+      // In a mission the report is the phone's, not a radio report whose sender is read from the words [267].
+      if (mission) {
+        fd.append("session", mission.code);
+        fd.append("callsign", mission.callsign);
+      }
       const t0 = performance.now();
       try {
         const r = await fetch("/api/report", { method: "POST", body: fd });
@@ -590,14 +937,52 @@ export default function VoiceMapApp() {
           if (data.transcript) setLastTranscript(data.transcript);
         } else handleResponse(data, payload.audio ? "voice" : "text", rt);
       } catch {
-        setStatus("Network error. Check the connection and try again.");
+        setStatus(T.network);
       } finally {
         setRec("idle");
       }
     },
-    [handleResponse],
+    [handleResponse, mission, T],
   );
 
+  const joinMission = async (e: FormEvent) => {
+    e.preventDefault();
+    const code = missionCode.trim().toLowerCase();
+    const callsign = missionCall.trim();
+    if (!code || !callsign) return;
+    setJoining(true);
+    setMissionError("");
+    try {
+      const device = readDevice();
+      const r = await fetch(`/api/sessions/${encodeURIComponent(code)}/join`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ callsign, device }),
+      });
+      const data = (await r.json().catch(() => null)) as { callsign?: string; error?: string } | null;
+      if (!r.ok) {
+        setMissionError(data?.error ?? T.network);
+        return;
+      }
+      const link: MissionLink = { code, callsign: data?.callsign ?? callsign.toUpperCase(), device };
+      missionStore.set(link);
+      setMissionCode(code);
+      setMissionCall(link.callsign);
+      setJoinOpen(false);
+      setStatus(T.joined.replace("{code}", code));
+    } catch {
+      setMissionError(T.network);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const leaveMission = () => {
+    missionStore.set(null);
+    setMissionError("");
+    setJoinOpen(false);
+    setStatus(T.left);
+  };
   // ---------- capture ----------
   const requestWakeLock = async () => {
     try {
@@ -628,11 +1013,11 @@ export default function VoiceMapApp() {
     setMicError(null);
     stopSpeaking();
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setMicError("This browser cannot record audio here. Use the text box, or open the page over HTTPS in Safari or Chrome.");
+      setMicError(T.micNoSupport);
       return;
     }
     setRec("starting");
-    setStatus("Starting microphone…");
+    setStatus(T.starting);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
@@ -640,10 +1025,10 @@ export default function VoiceMapApp() {
       const name = (e as Error).name;
       setMicError(
         name === "NotAllowedError" || name === "SecurityError"
-          ? "Microphone access was refused. Allow the microphone for this site in the browser settings, then reload. You can type reports meanwhile."
-          : `Could not open the microphone (${name}). You can type reports meanwhile.`,
+          ? T.micDenied
+          : T.micFailed.replace("{name}", name),
       );
-      setStatus("Microphone unavailable.");
+      setStatus(T.micUnavailable);
       setRec("idle");
       return;
     }
@@ -670,7 +1055,7 @@ export default function VoiceMapApp() {
       const blob = new Blob(chunks, { type: rec.mimeType || mime || "audio/webm" });
       if (dur < MIN_CLIP_MS || blob.size < 1000) {
         setRec("idle");
-        setStatus("Too short. Hold the button while you speak, or tap once to start and again to stop.");
+        setStatus(T.tooShort);
         return;
       }
       send({ audio: blob });
@@ -680,13 +1065,13 @@ export default function VoiceMapApp() {
     rec.start(250);
     setRec("recording");
     setElapsed(0);
-    setStatus(toggleRef.current ? "Listening… tap to send." : "Listening… release to send.");
+    setStatus(toggleRef.current ? T.listenTap : T.listenRelease);
     tickRef.current = setInterval(() => setElapsed(Date.now() - startedAtRef.current), 200);
     maxTimerRef.current = setTimeout(() => {
-      setStatus("15 s limit reached, sending.");
+      setStatus(T.limit);
       stopRecording();
     }, MAX_CLIP_MS);
-  }, [send, stopRecording]);
+  }, [send, stopRecording, T]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -716,7 +1101,7 @@ export default function VoiceMapApp() {
       // Quick tap, or released while the mic was still opening: keep listening until the next tap.
       toggleRef.current = true;
       setToggleMode(true);
-      setStatus("Listening… tap to send.");
+      setStatus(T.listenTap);
     }
   };
 
@@ -739,7 +1124,8 @@ export default function VoiceMapApp() {
     setReports([]);
     setLastTranscript("");
     setLastTimings("");
-    setStatus("Cleared. Hold the button and say where you are.");
+    setStatus(T.cleared);
+    (mapRef.current?.getSource("me") as GeoJSONSource | undefined)?.setData(EMPTY_FC);
     const a = AREAS[areaId];
     mapRef.current?.jumpTo({ center: [a.centre.lon, a.centre.lat], zoom: a.zoom });
   };
@@ -748,38 +1134,61 @@ export default function VoiceMapApp() {
     if (id === areaStore.get() || recStateRef.current !== "idle") return;
     areaStore.set(id);
     resetAll(id);
-    setStatus(`Area: ${AREAS[id].label}. Hold the button and say where you are.`);
+    setStatus(`${T.area}: ${AREAS[id].label}. ${T.ready}`);
   };
 
   const switchLang = (l: Lang) => {
     if (l === langStore.get() || recStateRef.current !== "idle") return;
     stopSpeaking();
     langStore.set(l);
-    setStatus(`Language: ${LANG_NAME[l]}. Questions come back in it.`);
+    setStatus(`${T.language}: ${LANG_NAME[l]}. ${T.languageHint}`);
+  };
+
+  /** The phone's own place, only when asked: it centres the map and is not sent [270]. */
+  const locateMe = () => {
+    const map = mapRef.current;
+    if (!navigator.geolocation) {
+      setStatus(T.locUnavailable);
+      return;
+    }
+    setStatus(T.locating);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        const at = { lat: p.coords.latitude, lon: p.coords.longitude };
+        (map?.getSource("me") as GeoJSONSource | undefined)?.setData({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [at.lon, at.lat] } }],
+        });
+        map?.flyTo({ center: [at.lon, at.lat], zoom: Math.max(16, map?.getZoom() ?? 16) });
+        setStatus(T.myPosHint);
+      },
+      () => setStatus(T.locUnavailable),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
+    );
   };
 
   const btnLabel =
     recState === "starting"
-      ? "Opening mic…"
+      ? T.opening
       : recState === "recording"
         ? toggleMode
-          ? "Tap to send"
-          : "Release to send"
+          ? T.tapSend
+          : T.release
         : recState === "sending"
-          ? "Working…"
-          : "Hold to talk";
+          ? T.working
+          : T.hold;
 
   return (
     <main className="app">
       <div ref={mapEl} className="map" />
-      <nav className="areas" aria-label="Area">
+      <nav className="areas" aria-label={T.area}>
         {(Object.keys(AREAS) as AreaId[]).map((id) => (
           <button key={id} className={id === area ? "active" : ""} aria-pressed={id === area} onClick={() => switchArea(id)} disabled={recState !== "idle"}>
             {AREAS[id].label}
           </button>
         ))}
       </nav>
-      <nav className="langs" aria-label="Language">
+      <nav className="langs" aria-label={T.language}>
         {LANGS.map((l) => (
           <button
             key={l}
@@ -795,8 +1204,73 @@ export default function VoiceMapApp() {
           </button>
         ))}
       </nav>
+      {mission ? (
+        <div className="mission-chip" aria-label={T.mission}>
+          <span>
+            {T.mission} <b>{mission.code}</b> · {mission.callsign}
+          </span>
+          <button type="button" onClick={leaveMission}>
+            {T.leave}
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="mission-open" onClick={() => setJoinOpen(true)}>
+          {T.joinTitle}
+        </button>
+      )}
+      {joinOpen && !mission ? (
+        <div className="mission-modal" role="dialog" aria-modal="true" aria-label={T.joinTitle}>
+          <form onSubmit={joinMission}>
+            <h2>{T.joinTitle}</h2>
+            <p>{T.joinHelp}</p>
+            <input
+              value={missionCode}
+              onChange={(e) => {
+                setMissionCode(e.target.value);
+                setMissionError("");
+              }}
+              placeholder={T.missionCode}
+              aria-label={T.missionCode}
+              maxLength={40}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              autoFocus
+            />
+            <input
+              value={missionCall}
+              onChange={(e) => {
+                setMissionCall(e.target.value);
+                setMissionError("");
+              }}
+              placeholder={T.callSign}
+              aria-label={T.callSign}
+              maxLength={24}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            {missionError ? <p className="mission-error" role="alert">{missionError}</p> : null}
+            <div className="mission-actions">
+              <button type="submit" disabled={joining || !missionCode.trim() || !missionCall.trim()}>
+                {joining ? T.joining : T.join}
+              </button>
+              <button
+                type="button"
+                className="mission-cancel"
+                onClick={() => {
+                  setJoinOpen(false);
+                  setMissionError("");
+                }}
+              >
+                {T.cancel}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
       {/* The grid under the pointer, its lines, a ruler and "go to grid" [231, 232]. */}
-      <MapTools mapRef={mapRef} ready={mapReady} centre={AREAS[area].centre} below="trail-line" copyOnClick top="calc(120px + env(safe-area-inset-top))" />
+      <MapTools mapRef={mapRef} ready={mapReady} centre={AREAS[area].centre} below="trail-line" copyOnClick top={mission ? "calc(165px + env(safe-area-inset-top))" : "calc(120px + env(safe-area-inset-top))"} />
       {speakerLang === "uk" && (voiceLoading.state === "loading" || voiceLoading.state === "failed") && (
         <div className="voice-load" role="status" aria-live="polite">
           {voiceLoading.state === "loading" ? voiceLoading.text : "Голос недоступний: питання читає системний голос."}
@@ -804,8 +1278,8 @@ export default function VoiceMapApp() {
       )}
       <section ref={sheetEl} className="sheet">
         {pending && (
-          <div className="ask" role="dialog" aria-label="Which one did you mean?">
-            <div className="ask-q">{pending.question}</div>
+          <div className="ask" role="dialog" aria-label={T.ask}>
+            <div className="ask-q" lang={pending.lang}>{pending.question}</div>
             <div className="ask-choices">
               {pending.candidates.map((c, i) => (
                 <button key={c.id} className="choice" onClick={() => choose(i)}>
@@ -814,13 +1288,13 @@ export default function VoiceMapApp() {
                     {c.name}
                     <small>
                       {c.category.replace("_", " ")} · {c.town ? `${c.town} · ` : ""}{c.distance_m < 1000 ? `${c.distance_m} m` : `${(c.distance_m / 1000).toFixed(1)} km`}{" "}
-                      {position ? "from you" : "from centre"}
+                      {position ? T.fromYou : T.fromCentre}
                     </small>
                   </span>
                 </button>
               ))}
               <button className="choice none" onClick={rejectAll}>
-                None of these
+                {T.none}
               </button>
             </div>
           </div>
@@ -844,31 +1318,34 @@ export default function VoiceMapApp() {
           </button>
           <div className="talk-side">
             <div className="transcript" aria-live="polite">
-              {lastTranscript ? `“${lastTranscript}”` : <span className="muted">{AREAS[area].hint}</span>}
+              {lastTranscript ? `“${lastTranscript}”` : <span className="muted">{AREAS[area].hint.replace(/^Try:\s*/, `${T.tryHint} `)}</span>}
             </div>
             <div className="status" aria-live="polite">
-              {status}
+              {status || T.ready}
             </div>
             {lastTimings && <div className="timings">{lastTimings}</div>}
+            <button type="button" className="my-pos" onClick={locateMe}>
+              📍 {T.myPos}
+            </button>
           </div>
         </div>
 
         {micError && <div className="mic-error">{micError}</div>}
 
         <form className="text-row" onSubmit={submitText}>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Or type a report…" enterKeyHint="send" aria-label="Type a report" />
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={T.typeReport} enterKeyHint="send" aria-label={T.typeReport} />
           <button type="submit" disabled={!text.trim() || recState !== "idle"}>
-            Send
+            {T.send}
           </button>
         </form>
 
         <details className="log">
           <summary>
-            Report log ({reports.length}){position ? ` · last fix ${fmtTime(position.ts)}` : ""}
+            {T.reportLog} ({reports.length}){position ? ` · ${T.lastFix} ${fmtTime(position.ts)}` : ""}
           </summary>
           {reports.length > 0 && (
             <button className="reset" onClick={() => resetAll()}>
-              Clear map and log
+              {T.clear}
             </button>
           )}
           <ol>

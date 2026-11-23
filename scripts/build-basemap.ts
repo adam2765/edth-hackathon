@@ -1,7 +1,8 @@
 /**
  * Saves what the map needs to draw with no internet, into public/basemap/ (not in git):
  * OpenFreeMap's "liberty" style, the vector tiles over one area from zoom 0 to 14, the low-zoom
- * shaded relief, the fonts the labels in those tiles need, and the icons.
+ * shaded relief, the fonts the labels in those tiles need, the icons, and the area's photographs
+ * from IGN (France) and Sentinel-2 (everywhere) [261].
  *
  * Run: npm run basemap -- vincennes     (or kyiv, izium; one area per run, each adds to the folder)
  *      npm run basemap -- vincennes --fresh   fetch again what is already saved
@@ -12,7 +13,9 @@
  *
  * OpenFreeMap's terms for offline downloads (openfreemap.org/tos, read on 22 Nov 2026): one
  * download is at most 3,000 tiles or 50 MB, with at most 4 requests at a time and a User-Agent that
- * names the app. The script counts both and stops before it would go over.
+ * names the app. The script counts both and stops before it would go over. The photos are IGN's
+ * Licence Ouverte 2.0 and the Sentinel-2 cloudless 2020 mosaic's CC BY-NC-SA 4.0 (non-commercial);
+ * both allow a copy kept on the laptop with their attribution, which the layers carry [261].
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { get as httpsGet } from "node:https";
@@ -21,6 +24,7 @@ import { gunzipSync } from "node:zlib";
 import type { StyleSpecification } from "maplibre-gl";
 import { AREAS, isAreaId, type AreaId } from "../lib/geo/areas";
 import { HOSTED_STYLE_URL } from "../lib/map/baseMap";
+import { SATELLITE_EXT, SATELLITE_FILES, SATELLITE_LAYERS, SATELLITE_MINZOOM, layerCovers } from "../lib/map/satellite";
 import {
   BASEMAP_PATH,
   LABEL_FONTS,
@@ -37,8 +41,9 @@ import {
 
 const USER_AGENT = "voice-to-map/0.1 (offline base map download)";
 const MAX_TILES = 3000;
-// 2 MB under the 50 MB limit: up to four answers are still on their way when the count is checked.
-const MAX_BYTES = 48 * 1024 * 1024;
+// 160 MB for the whole run: OpenFreeMap's own 50 MB limit is for its part, and the photographs are
+// another provider's, so IGN's deepest zoom for an area still fits [263].
+const MAX_BYTES = 160 * 1024 * 1024;
 const PARALLEL = 4;
 const OUT = path.join("public", BASEMAP_PATH);
 const LABELS_OUT = path.join("public", "glyphs");
@@ -60,6 +65,8 @@ let requests = 0;
 
 interface Got {
   status: number;
+  /** The server's Content-Type, so an XML error page is not saved as a photo. */
+  type: string;
   body: Buffer;
 }
 
@@ -74,7 +81,11 @@ function getOnce(url: string): Promise<Got> {
         const wire = Buffer.concat(chunks);
         bytes += wire.length;
         try {
-          resolve({ status: res.statusCode ?? 0, body: res.headers["content-encoding"] === "gzip" ? gunzipSync(wire) : wire });
+          resolve({
+            status: res.statusCode ?? 0,
+            type: String(res.headers["content-type"] ?? ""),
+            body: res.headers["content-encoding"] === "gzip" ? gunzipSync(wire) : wire,
+          });
         } catch (e) {
           reject(e);
         }
@@ -87,7 +98,7 @@ function getOnce(url: string): Promise<Got> {
 
 async function get(url: string): Promise<Got> {
   for (let attempt = 1; ; attempt++) {
-    if (bytes > MAX_BYTES) throw new Error(`Stopped at ${mb(bytes)}: one download may be 50 MB at most (OpenFreeMap's terms). What was saved stays. A larger area needs OpenFreeMap's yes first, or a smaller margin.`);
+    if (bytes > MAX_BYTES) throw new Error(`Stopped at ${mb(bytes)}: the script keeps one run under 160 MB (OpenFreeMap's own limit is 50 MB for its part; the photos add to it). What was saved stays. A larger area needs a smaller margin or another run.`);
     requests++;
     try {
       const got = await getOnce(url);
@@ -152,6 +163,36 @@ async function saveTiles(tiles: Tile[], template: string, dir: string, ext: stri
   return count;
 }
 
+/**
+ * Saves the photos that are not on disk yet. A 400, a 404 or a body that is not an image means the
+ * provider has no photo there (the sea, or outside France): that is not a failure.
+ */
+async function savePhotos(tiles: Tile[], template: string, dir: string, ext: string): Promise<{ saved: number; kept: number; absent: number }> {
+  const count = { saved: 0, kept: 0, absent: 0 };
+  const todo = tiles.filter((t) => {
+    const have = !fresh && existsSync(path.join(dir, `${t.z}/${t.x}/${t.y}.${ext}`));
+    if (have) count.kept++;
+    return !have;
+  });
+  await pool(todo, async (t) => {
+    const url = fill(template, t);
+    const got = await get(url);
+    if (got.status === 400 || got.status === 404 || got.status === 204) {
+      count.absent++;
+      return;
+    }
+    if (got.status !== 200) throw new Error(`${url}: HTTP ${got.status}`);
+    // IGN sometimes answers 200 with an XML error; never keep that as a JPEG.
+    if (!got.type.startsWith("image/")) {
+      count.absent++;
+      return;
+    }
+    save(path.join(dir, `${t.z}/${t.x}/${t.y}.${ext}`), got.body);
+    count.saved++;
+  });
+  return count;
+}
+
 /** Saves the font files that are not on disk yet. A range the server does not have is skipped: MapLibre draws those letters itself. */
 async function saveGlyphs(template: string, fonts: string[], ranges: number[], dir: string, again: boolean): Promise<number> {
   const todo = fonts.flatMap((font) => ranges.map((range) => ({ font, range }))).filter(({ font, range }) => again || !existsSync(path.join(dir, font, `${range}-${range + 255}.pbf`)));
@@ -178,7 +219,7 @@ function filesUnder(dir: string): string[] {
 interface Manifest {
   source: string;
   attribution: string;
-  areas: Record<string, { fetched: string; tiles: string; vector: number; raster: number }>;
+  areas: Record<string, { fetched: string; tiles: string; vector: number; raster: number; photos?: number }>;
 }
 
 async function main() {
@@ -216,6 +257,19 @@ async function main() {
     console.log(`  ${r.id}: ${got.saved} saved, ${got.kept} already here, ${got.absent} not on the server`);
   }
 
+  // The photos the Satellite button reads offline [261]. IGN's are skipped where it has no photo.
+  let photoCount = 0;
+  for (const layer of SATELLITE_LAYERS) {
+    if (!layerCovers(layer, area.bbox)) {
+      console.log(`  ${layer.id}: not saved, ${area.label} is outside its photos`);
+      continue;
+    }
+    const photos = tilePlan(area.bbox, SATELLITE_MINZOOM, layer.savedMaxzoom);
+    photoCount += photos.length;
+    const got = await savePhotos(photos, layer.tiles[0], path.join("public", SATELLITE_FILES, layer.id), SATELLITE_EXT);
+    console.log(`  ${layer.id}: ${got.saved} saved, ${got.kept} already here, ${got.absent} not on the server`);
+  }
+
   // Fonts: what the labels in every saved tile are written in (all areas), and the app's own labels.
   const tileFiles = filesUnder(path.join(OUT, "tiles"));
   const letters = new Set<number>(LABEL_RANGES);
@@ -237,8 +291,9 @@ async function main() {
   const manifestFile = path.join(OUT, "manifest.json");
   const manifest: Manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, "utf8")) : { source: "", attribution: "", areas: {} };
   manifest.source = HOSTED_STYLE_URL;
-  manifest.attribution = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap. Fonts: Noto Sans (SIL Open Font License 1.1). Icons: Maki (CC0). Relief: Natural Earth (public domain).";
-  manifest.areas[area.id] = { fetched: new Date().toISOString(), tiles: local.vectorTemplate, vector: vector.length, raster: rasterCount };
+  manifest.attribution =
+    "OpenFreeMap © OpenMapTiles Data from OpenStreetMap. Fonts: Noto Sans (SIL Open Font License 1.1). Icons: Maki (CC0). Relief: Natural Earth (public domain). Photos: © IGN – Géoplateforme (Licence Ouverte 2.0), and Sentinel-2 cloudless by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2020, CC BY-NC-SA 4.0).";
+  manifest.areas[area.id] = { fetched: new Date().toISOString(), tiles: local.vectorTemplate, vector: vector.length, raster: rasterCount, photos: photoCount };
   save(manifestFile, JSON.stringify(manifest, null, 2) + "\n");
   // The style goes last: the map only uses a saved map whose style is there.
   save(path.join(OUT, "style.json"), JSON.stringify(local.style) + "\n");

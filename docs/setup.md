@@ -37,11 +37,20 @@ npm run basemap -- vincennes
 ```
 
 The last line saves the map for offline mode: the Vincennes tiles, fonts and icons from
-OpenFreeMap, 28 MB of download, into `public/basemap/`, which is not in git. Run it once on
-each computer, with internet, before Start. Run it again for `kyiv` (13 MB) and `izium`
-(6 MB), one area a run; the three are 75 MB on disk. Check: each run ends with "Done" and
-the areas saved so far. Without it the map uses OpenFreeMap when there is internet, and a
-plain background with the units when there is none.
+OpenFreeMap, and the photographs the command post's Satellite button shows, into
+`public/basemap/`, which is not in git. It is 101 MB of download for Vincennes, 118 MB on
+disk, of which 72 MB are photographs. Run it once on each computer, with internet, before
+Start. Run it again for `kyiv` (13 MB of map, plus Sentinel's photos) and `izium` (6 MB),
+one area a run; the three are 150 MB on disk. Check: each run ends with "Done" and the
+areas saved so far. Without it the map uses OpenFreeMap when there is internet, a plain
+background with the units when there is none, and the Satellite button draws only what was
+saved for that area.
+
+The command post is open by default. Before sharing the coordinator, set `CP_PIN` in
+`.env.local` (copy `.env.example`): `/cp` then asks for the PIN, and every change to a
+mission needs it. Reading stays open, and the phone's join, report and answer are not
+locked. The login lasts 12 hours in that browser. With `CP_PIN` unset, anyone who can reach
+the coordinator can change a mission; the live site should always set it.
 
 The phone records compressed audio and sends it to the coordinator; no speech model is
 prepared or downloaded on the phone. Its setup command prepares the native launcher’s project-specific startup instructions. Existing native libraries stay compatible, so this change needs a JavaScript reload,

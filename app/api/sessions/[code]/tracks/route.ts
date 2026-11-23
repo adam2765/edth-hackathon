@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { operatorDenied } from "@/lib/reports/auth";
 import { parsePlot } from "@/lib/reports/plot";
 import { recordPlot } from "@/lib/reports/record";
 import { COMMAND_POST, sessionCode, type PlotReply } from "@/lib/reports/types";
@@ -9,6 +10,8 @@ import { COMMAND_POST, sessionCode, type PlotReply } from "@/lib/reports/types";
  * instead of `lat` and `lon`. The track gets the mission's next number. Returns 201 with the entry.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/sessions/[code]/tracks">) {
+  const denied = operatorDenied(req);
+  if (denied) return denied;
   const session = sessionCode((await ctx.params).code);
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   let body: unknown;
