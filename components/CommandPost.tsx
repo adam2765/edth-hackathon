@@ -26,7 +26,8 @@ import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_RE
 import MapTools from "./MapTools";
 import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
-import { TrackRecon, UnitRecon, type TaskBody } from "./ReconTools";
+import { TrackRecon, type TaskBody } from "./ReconTools";
+import { UnitPanel } from "./UnitTools";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -36,6 +37,15 @@ const POLL_MS = 1000;
 const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
 const SPEEDS = [1, 10, 30];
+/** The timeline's filters: what kind of event to show [271]. */
+const TIMELINE_FILTERS = [
+  ["all", "All"],
+  ["reports", "Reports"],
+  ["tracks", "Tracks"],
+  ["units", "Units"],
+  ["tasks", "Tasks"],
+] as const;
+type TimelineFilter = (typeof TIMELINE_FILTERS)[number][0];
 /** How close to a mission's start or end, in pixels on the bar, the replay is pulled onto it. */
 const DETENT_PX = 8;
 /** The replay bar's thumb, in CSS pixels: its middle runs from half this in from each end. */
@@ -365,12 +375,13 @@ function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): 
   // On the roster, and no report from it yet [201]. One a person placed by hand has a place to show [243].
   if (u.lastHeard === 0 && !p) return { tag: "On roster", text: "Not heard yet.", tone: "none" };
   const where = p ? `${p.label} · ±${p.radius_m} m${u.placedBy ? ` · placed by ${u.placedBy}` : ""}` : "";
+  const looking = u.task ? ` · looking at T${u.task.n}` : "";
   if (silent) {
     const last = p ? `Last known at ${p.estimated ? "≈ " : ""}${where}` : "Never placed.";
-    return { tag: "Silent", text: silentAtEnd ? `Silent for ${silentAtEnd} when the mission ended. ${last}` : last, tone: "silent" };
+    return { tag: "Silent", text: silentAtEnd ? `Silent for ${silentAtEnd} when the mission ended. ${last}${looking}` : `${last}${looking}`, tone: "silent" };
   }
   if (!p) return { tag: "Not placed", text: u.joined != null ? "Joined. Waiting for a check-in." : "Waiting for a check-in.", tone: "none" };
-  return p.estimated ? { tag: "≈ Estimate", text: where, tone: "estimate" } : { tag: "Placed", text: where, tone: "placed" };
+  return p.estimated ? { tag: "≈ Estimate", text: `${where}${looking}`, tone: "estimate" } : { tag: "Placed", text: `${where}${looking}`, tone: "placed" };
 }
 
 export default function CommandPost() {
@@ -410,6 +421,8 @@ export default function CommandPost() {
   const [satellite, setSatellite] = useState(false);
   /** On a narrow screen the lists below the map can fold away, so the map takes the height [262]. */
   const [listsOpen, setListsOpen] = useState(true);
+  /** The lists were folded by an entity panel, not by the operator: restore them when it closes. */
+  const autoFoldedLists = useRef(false);
   /** The lists' height while open, in pixels: dragged by the grip above them [263]. null is the default. */
   const [listsHeight, setListsHeight] = useState<number | null>(null);
   /** The pointer's place during a drag of the lists' grip. */
@@ -417,6 +430,8 @@ export default function CommandPost() {
   /** The Decisions card can fold to its heading, and the replay bar to one button, to clear the map [263]. */
   const [deckCollapsed, setDeckCollapsed] = useState(false);
   const [barCompact, setBarCompact] = useState(true);
+  /** The replay bar shows the whole day, or only this mission [271]. */
+  const [barZoom, setBarZoom] = useState(false);
   /** The command post's lock [266]: viewing is open, changing needs the PIN when CP_PIN is set. */
   const [auth, setAuth] = useState<"checking" | "open" | "locked">("checking");
   const [pin, setPin] = useState("");
@@ -428,6 +443,11 @@ export default function CommandPost() {
   const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
   /** The mission's events, newest first, to jump back to a moment [271]. */
   const [timelineOpen, setTimelineOpen] = useState(false);
+  /** What the timeline shows, and what to look for in it [271]. */
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
+  const [timelineQuery, setTimelineQuery] = useState("");
+  /** The keyboard and click help [271]. */
+  const [helpOpen, setHelpOpen] = useState(false);
   /** The map has taken long to load: with no network it never does, and the page should say so. */
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
@@ -1908,7 +1928,9 @@ export default function CommandPost() {
       if (!map || !u.position) return;
       setFollow(false);
       if (u.area !== area) setManualArea(u.area);
-      map.flyTo({ center: [u.position.lon, u.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700 });
+      const box = map.getContainer();
+      const padLeft = box.clientWidth > 600 ? Math.min(432, box.clientWidth - 120) : 0;
+      map.flyTo({ center: [u.position.lon, u.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700, padding: { left: padLeft, top: 0, right: 0, bottom: 0 } });
     },
     [area],
   );
@@ -1916,6 +1938,7 @@ export default function CommandPost() {
   const flyToTrack = useCallback(
     (t: TrackState) => {
       setTimelineOpen(false);
+      setOpenUnit(null);
       setPicked(t.n);
       const map = mapRef.current;
       if (!map || !t.position || t.gone != null) return;
@@ -1933,6 +1956,23 @@ export default function CommandPost() {
   /** In a replay or an ended mission the tools close by themselves. */
   const activeTool = canEdit ? tool : null;
   const pickedTrack = picked != null ? (view.tracks.find((t) => t.n === picked) ?? null) : null;
+  const openedUnit = openUnit != null ? (view.units.find((u) => u.callsign === openUnit) ?? null) : null;
+  const openedUnitStatus = openedUnit ? unitStatus(openedUnit, isSilent(openedUnit), mode === "live" && ended != null ? fmtAgo(effNow - knownAt(openedUnit)) : null) : null;
+  const openedUnitQuestion = openedUnit
+    ? decisionAt.get(openedUnit.pending?.reportId ?? openedUnit.prompt?.reportId ?? "")
+    : undefined;
+  // On a phone, an entity panel or the timeline folds the lists so it has the height; the tabs bar can reopen them [271].
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia("(max-width: 900px)").matches) return;
+    const open = !!(pickedTrack || openedUnit || timelineOpen);
+    if (open && !autoFoldedLists.current && listsOpen) {
+      autoFoldedLists.current = true;
+      setListsOpen(false);
+    } else if (!open && autoFoldedLists.current) {
+      autoFoldedLists.current = false;
+      setListsOpen(true);
+    }
+  }, [pickedTrack, openedUnit, timelineOpen, listsOpen]);
   /** The reports and acts about the picked track: its provenance [271]. */
   const pickedHistory = useMemo(() => (pickedTrack ? view.feed.filter((f) => f.track === pickedTrack.n) : []), [view.feed, pickedTrack]);
   /** The number a new track will most likely get; the coordinator gives the real one. */
@@ -2039,6 +2079,7 @@ export default function CommandPost() {
       if (activeTool) return;
       const n = map.queryRenderedFeatures(e.point, { layers: ["track-sym"] })[0]?.properties?.n;
       if (typeof n === "number") setTimelineOpen(false);
+      setOpenUnit(null);
       setPicked(typeof n === "number" ? n : null);
     };
   });
@@ -2334,8 +2375,15 @@ export default function CommandPost() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
       if (e.key === "Escape") {
-        if (timelineOpen) {
+        if (helpOpen) {
+          setHelpOpen(false);
+        } else if (timelineOpen) {
           setTimelineOpen(false);
         } else if (findOpen) setFindOpen(false);
         else if (picking) unpick();
@@ -2384,7 +2432,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2409,10 +2457,13 @@ export default function CommandPost() {
   /** An ended mission shown as it ended, not replayed. */
   const atEnd = mode === "live" && ended != null;
   // Live, the bar stands at the shown mission's end: now while it is open.
-  const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, rangeStart), rangeEnd);
-  const barSpan = rangeEnd - rangeStart;
+  const barLo = barZoom && shownStretch ? shownStretch.start : rangeStart;
+  const barHi = barZoom && shownStretch ? shownStretch.end : rangeEnd;
+  const barStretches = barZoom && shownStretch ? [shownStretch] : stretches;
+  const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, barLo), barHi);
+  const barSpan = barHi - barLo;
   /** Where a time sits along the bar, in per cent. */
-  const barPct = (t: number) => (barSpan > 0 ? ((t - rangeStart) / barSpan) * 100 : 0);
+  const barPct = (t: number) => (barSpan > 0 ? ((t - barLo) / barSpan) * 100 : 0);
   const sliderMission = stretchAt(stretches, sliderValue, session);
 
   // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [258].
@@ -2477,7 +2528,15 @@ export default function CommandPost() {
       flyToTrack(r.track);
       return;
     }
-    const p = r.unit?.position ?? r.place;
+    setPicked(null);
+    setTimelineOpen(false);
+    if (r.unit) {
+      setOpenUnit(r.unit.callsign);
+      if (r.unit.position) flyToUnit(r.unit);
+      return;
+    }
+    setOpenUnit(null);
+    const p = r.place;
     const map = mapRef.current;
     if (!p || !map) return;
     setFollow(false);
@@ -2486,6 +2545,7 @@ export default function CommandPost() {
   /** Shows the mission as it was just after an event, and closes the drawers [271]. */
   const jumpTo = (ts: number, track?: number | null) => {
     setTimelineOpen(false);
+    setOpenUnit(null);
     setBarCompact(false);
     setFollow(false);
     setPlaying(false);
@@ -2502,6 +2562,20 @@ export default function CommandPost() {
     if (f.kind === "report") return "";
     return f.kind[0].toUpperCase() + f.kind.slice(1);
   };
+  /** The events the timeline shows, after its filter and search [271]. */
+  const timelineEvents = useMemo(() => {
+    const q = timelineQuery.trim().toLowerCase();
+    return [...view.feed]
+      .sort((a, b) => b.ts - a.ts)
+      .filter((f) => {
+        if (timelineFilter === "reports" && f.kind !== "report") return false;
+        if (timelineFilter === "tracks" && f.track == null) return false;
+        if (timelineFilter === "units" && f.kind !== "join" && !(f.kind === "report" && f.track == null)) return false;
+        if (timelineFilter === "tasks" && f.kind !== "task" && f.kind !== "request" && f.kind !== "reply") return false;
+        if (!q) return true;
+        return `${f.callsign} ${f.transcript ?? ""} ${f.outcome} ${f.track != null ? `T${f.track}` : ""}`.toLowerCase().includes(q);
+      });
+  }, [view.feed, timelineFilter, timelineQuery]);
 
   return (
     <div
@@ -2591,6 +2665,7 @@ export default function CommandPost() {
           {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
           <button type="button" className={styles.ghostBtn} onClick={() => {
             setPicked(null);
+            setOpenUnit(null);
             setTimelineOpen(true);
           }} title="The mission's events, newest first; choose one to replay it">
             Timeline
@@ -2601,11 +2676,14 @@ export default function CommandPost() {
           <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
             Missions ▾
           </button>
+          <button type="button" className={styles.ghostBtn} onClick={() => setHelpOpen(true)} title="Keys and clicks (?)" aria-label="Help and keyboard shortcuts">
+            ?
+          </button>
         </div>
         {panelOpen ? <MissionPanel current={session} defaultArea={mission?.area ?? area} onPick={pickSession} onClose={closePanel} /> : null}
       </header>
 
-      <main className={styles.mapCol} data-drawer={timelineOpen ? "" : undefined} data-panel={pickedTrack && !activeTool ? "" : undefined}>
+      <main className={styles.mapCol} data-drawer={timelineOpen ? "" : undefined} data-panel={(pickedTrack || openedUnit) && !activeTool ? "" : undefined}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
         {/* The grid's lines, a ruler and "go to grid", behind one button, and the grid under the
             pointer at the map's edge [232, 245]. A click here already places or picks, so it copies
@@ -2858,7 +2936,7 @@ export default function CommandPost() {
               a detent at every start and end. The replay never rests in the gray. */}
           <div className={styles.timeline}>
             <div className={styles.rail} aria-hidden="true">
-              {stretches.map((s) => (
+              {barStretches.map((s) => (
                 <span
                   key={s.code}
                   className={styles.stretch}
@@ -2866,15 +2944,15 @@ export default function CommandPost() {
                   style={{ left: `${barPct(s.start)}%`, width: `${barPct(s.end) - barPct(s.start)}%` }}
                 />
               ))}
-              {detents(stretches).map((d) => (
+              {detents(barStretches).map((d) => (
                 <span key={d} className={styles.detent} style={{ left: `${barPct(d)}%` }} />
               ))}
             </div>
             <input
               className={styles.slider}
               type="range"
-              min={rangeStart}
-              max={rangeEnd}
+              min={barLo}
+              max={barHi}
               step="any"
               value={sliderValue}
               disabled={!stretches.length}
@@ -2883,10 +2961,10 @@ export default function CommandPost() {
                 // A start or end within a few pixels pulls the replay onto it.
                 const width = e.currentTarget.getBoundingClientRect().width - THUMB_PX;
                 const pull = width > 0 ? (barSpan * DETENT_PX) / width : 0;
-                scrub(Math.round(settle(stretches, Number(e.currentTarget.value), pull)));
+                scrub(Math.round(settle(barStretches, Number(e.currentTarget.value), pull)));
               }}
               onKeyDown={(e) => {
-                const to = keyTarget(stretches, sliderValue, e.key);
+                const to = keyTarget(barStretches, sliderValue, e.key);
                 if (to == null) return;
                 e.preventDefault();
                 setPlaying(false);
@@ -2915,6 +2993,17 @@ export default function CommandPost() {
               </>
             )}
           </div>
+          {shownStretch ? (
+            <button
+              type="button"
+              className={styles.liveBtn}
+              aria-pressed={barZoom}
+              onClick={() => setBarZoom((z) => !z)}
+              title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
+            >
+              {barZoom ? "Day" : "Mission"}
+            </button>
+          ) : null}
           <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
             {SPEEDS.map((s) => (
               <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
@@ -3018,6 +3107,29 @@ export default function CommandPost() {
           </TrackCard>
         ) : null}
 
+        {openedUnit && openedUnitStatus && !activeTool ? (
+          <UnitPanel
+            unit={openedUnit}
+            status={openedUnitStatus}
+            history={view.feed.filter((f) => f.callsign === openedUnit.callsign)}
+            format={fmtTime}
+            canEdit={canEdit}
+            busy={busy}
+            onClose={() => setOpenUnit(null)}
+            onPlace={() => startUnitMove(openedUnit)}
+            onKind={sendUnitKind}
+            onTask={sendTask}
+            onQuestion={
+              openedUnitQuestion != null
+                ? () => {
+                    setOpenUnit(null);
+                    focusOn(decisions[openedUnitQuestion], openedUnitQuestion);
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+
         {timelineOpen ? (
           <div className={styles.timelinePanel} role="dialog" aria-label="Timeline">
             <div className={styles.timelinePanelHead}>
@@ -3027,26 +3139,57 @@ export default function CommandPost() {
               </button>
             </div>
             <p className={styles.timelinePanelHint}>
-              {view.feed.length} event{view.feed.length === 1 ? "" : "s"} · newest first. Choose one to replay the mission just after it.
+              {timelineEvents.length === view.feed.length
+                ? `${view.feed.length} event${view.feed.length === 1 ? "" : "s"}`
+                : `${timelineEvents.length} of ${view.feed.length} events`}{" "}
+              · newest first. Choose one to replay the mission just after it.
             </p>
+            <div className={styles.timelineFilters} role="group" aria-label="Filter the timeline">
+              {TIMELINE_FILTERS.map(([id, label]) => (
+                <button key={id} type="button" aria-pressed={timelineFilter === id} onClick={() => setTimelineFilter(id)}>
+                  {label}
+                </button>
+              ))}
+              {timelineFilter !== "all" || timelineQuery ? (
+                <button
+                  type="button"
+                  className={styles.timelineClear}
+                  onClick={() => {
+                    setTimelineFilter("all");
+                    setTimelineQuery("");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            <input
+              className={styles.timelineSearch}
+              value={timelineQuery}
+              onChange={(e) => setTimelineQuery(e.target.value)}
+              placeholder="Callsign, words, track…"
+              aria-label="Search the timeline"
+            />
             <ol className={styles.timelinePanelList}>
-              {[...view.feed]
-                .sort((a, b) => b.ts - a.ts)
-                .map((f) => {
-                  const tag = timelineTag(f);
-                  return (
-                    <li key={f.id}>
-                      <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
-                        <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
-                        <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
-                        <span className={styles.timelinePanelWho}>{f.callsign}</span>
-                        <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
-                        {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              {view.feed.length === 0 ? <li className={styles.timelinePanelEmpty}>No events yet.</li> : null}
+              {timelineEvents.map((f) => {
+                const tag = timelineTag(f);
+                return (
+                  <li key={f.id}>
+                    <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
+                      <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
+                      <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
+                      <span className={styles.timelinePanelWho}>{f.callsign}</span>
+                      <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
+                      {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
+                    </button>
+                  </li>
+                );
+              })}
+              {view.feed.length === 0 ? (
+                <li className={styles.timelinePanelEmpty}>No events yet.</li>
+              ) : timelineEvents.length === 0 ? (
+                <li className={styles.timelinePanelEmpty}>No event matches.</li>
+              ) : null}
             </ol>
           </div>
         ) : null}
@@ -3157,7 +3300,6 @@ export default function CommandPost() {
                 // A unit whose question waits: its strip opens the question [240].
                 const asks = decisionAt.get(u.pending?.reportId ?? u.prompt?.reportId ?? "");
                 const moving = activeTool?.kind === "unit" && activeTool.callsign === u.callsign;
-                const unitFeed = view.feed.filter((f) => f.callsign === u.callsign);
                 // A strip opens to its whole line and what can be done to the unit [258].
                 const open = openUnit === u.callsign || moving;
                 return (
@@ -3173,8 +3315,14 @@ export default function CommandPost() {
                       onKeyDown={(e) => moveByKey(e, "units", u.callsign, unitKeys)}
                       onClick={() => {
                         if (asks != null) return focusOn(decisions[asks], asks);
-                        setOpenUnit(open ? null : u.callsign);
-                        if (!open && u.position) flyToUnit(u);
+                        if (open) {
+                          setOpenUnit(null);
+                          return;
+                        }
+                        setPicked(null);
+                        setTimelineOpen(false);
+                        setOpenUnit(u.callsign);
+                        if (u.position) flyToUnit(u);
                       }}
                       title={asks != null ? "Open its question in Decisions" : open ? undefined : st.text}
                     >
@@ -3201,63 +3349,6 @@ export default function CommandPost() {
                         </span>
                       </span>
                     </button>
-                    {open || u.task ? (
-                      <UnitRecon unit={u} canEdit={canEdit} busy={busy} fmt={fmtTime} onKind={sendUnitKind} onTask={sendTask}>
-                        {/* For a unit the app did not place, or placed wrongly: a person puts it there [243]. */}
-                        <button
-                          type="button"
-                          className={styles.unitMove}
-                          aria-pressed={moving}
-                          aria-label={`${u.position && !u.atStart ? "Move" : "Place"} ${u.callsign} by hand`}
-                          title="Put this unit on the map by hand"
-                          onClick={() => startUnitMove(u)}
-                          disabled={busy}
-                        >
-                          {u.position && !u.atStart ? "Move" : "Place"}
-                        </button>
-                        <div className={styles.unitHistory}>
-                          <details className={styles.provenance}>
-                            <summary>History ({unitFeed.length})</summary>
-                            <span className={styles.provMetaLabel}>
-                              {unitFeed.length > 4 ? `Last 4 of ${unitFeed.length} events` : "Events"}
-                            </span>
-                            <ol className={styles.provListUnit}>
-                              {unitFeed
-                                .slice(0, 4)
-                                .map((f) => (
-                                  <li key={f.id}>
-                                    <span className={styles.provTime}>{fmtTime(f.ts)}</span>
-                                    <span className={styles.provWhat}>{f.transcript || f.outcome}</span>
-                                    {f.position ? (
-                                      <span className={styles.provPlace}>
-                                        {shortGrid(f.position)}
-                                      </span>
-                                    ) : null}
-                                  </li>
-                                ))}
-                            </ol>
-                            {u.trail.length ? (
-                              <div className={styles.provTrail}>
-                                <span className={styles.provMetaLabel}>
-                                  {u.trail.length > 4 ? `Last 4 of ${u.trail.length} positions` : "Earlier positions"}
-                                </span>
-                                <ol>
-                                  {u.trail
-                                    .slice(-4)
-                                    .reverse()
-                                    .map((x) => (
-                                      <li key={`${x.ts}-${x.lat}-${x.lon}`}>
-                                        <span className={styles.provTime}>{fmtTime(x.ts)}</span>
-                                        <span className={styles.gridTag}>{shortGrid({ lat: x.lat, lon: x.lon })}</span>
-                                      </li>
-                                    ))}
-                                </ol>
-                              </div>
-                            ) : null}
-                          </details>
-                        </div>
-                      </UnitRecon>
-                    ) : null}
                   </li>
                 );
               })}
@@ -3552,6 +3643,51 @@ export default function CommandPost() {
       <div className={styles.srOnly} aria-live="polite">
         {mode === "live" && latest ? `${latest.callsign}: ${latest.outcome}` : ""}
       </div>
+
+      {helpOpen ? (
+        <div
+          className={styles.find}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Help and keyboard shortcuts"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setHelpOpen(false);
+          }}
+        >
+          <div className={styles.helpCard}>
+            <div className={styles.helpHead}>
+              <h2>Keys and clicks</h2>
+              <button autoFocus type="button" className={styles.linkBtn} onClick={() => setHelpOpen(false)}>
+                Close
+              </button>
+            </div>
+            <dl className={styles.helpList}>
+              <dt>P</dt>
+              <dd>Place a track by hand.</dd>
+              <dt>H S U C F</dt>
+              <dd>Hostile, suspect, unknown, civilian or friendly, while placing or changing a track.</dd>
+              <dt>1–9</dt>
+              <dd>Pick a track kind in the palette, or a choice in an open decision.</dd>
+              <dt>↑ ↓ / J K</dt>
+              <dd>Move through the Decisions list.</dd>
+              <dt>N / Enter</dt>
+              <dd>None of the choices, then confirm the pick.</dd>
+              <dt>Ctrl / ⌘ K</dt>
+              <dd>Find a call sign, a track or a place.</dd>
+              <dt>Page Up / Page Down</dt>
+              <dd>Jump between mission starts and ends on the replay bar.</dd>
+              <dt>Esc</dt>
+              <dd>Step back, or close the open panel or drawer.</dd>
+              <dt>?</dt>
+              <dd>This help.</dd>
+            </dl>
+            <p className={styles.helpNote}>
+              Click a track for its <b>Info / History / Recon</b> panel, or a unit in the Units list for the same.
+              The map keeps the track number; the panel names what it is.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {findOpen ? (
         <div

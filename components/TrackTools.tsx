@@ -359,7 +359,7 @@ export function TrackCard(props: {
             Gone
           </span>
         ) : null}
-        <button type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={props.onClose}>
+        <button autoFocus type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={props.onClose}>
           Close
         </button>
       </div>
