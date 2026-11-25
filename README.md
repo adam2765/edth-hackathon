@@ -231,9 +231,27 @@ The map is in the middle, between two thin columns [258]. The units are on the l
 
 Drag a strip up or down its list to put it where you want it, or press Alt+↑ or Alt+↓ on it [259]. The line under "Tracks" says how the tracks are listed ("Last seen · by state"); click it to sort them (number, last seen, whose, kind, or your own order), group them under headings (whose, kind, state), or hide some (by whose, old sightings, gone). Hiding is for the list only: the map still shows every track, and the line turns yellow and says how many are hidden. A new unit or track goes to the top of a list you have ordered. Reset puts it back. The order stays in this browser, for each mission.
 
-<img src="docs/images/cp-layout/after-1280.jpg" alt="The command post at 1280 by 800: four unit strips on the left, ALPHA 1 awaiting an answer; five track strips and the newest report on the right; the Decisions card on the left of the map with ALPHA 1's question and three numbered churches, and the three choices on the map to the right of the card." width="640">
+### Screenshots
 
-*The screenshot shows an earlier list layout; the two-line track strips and the side panels are described above.*
+<img src="docs/images/cp-layout/wide-overview.png" alt="The command post live at 1280 by 800: three units on the left, three tracks on the right, and their markers, accuracy circles and trails on the Vincennes map." width="800">
+
+*Live at 1280 by 800: the units on the left, the tracks on the right, and their markers, circles and trails on the map. The header keeps Place track, Timeline, Find, Missions and the … menu; the replay bar sits at the bottom.*
+
+<img src="docs/images/cp-layout/wide-track-panel.png" alt="Track 1's side panel at 1280 by 800: Info selected, the place, grid and who placed it, a folded Why here?, and Change, Move and Gone at the bottom; Satellite and Follow units sit beside the panel." width="800">
+
+*Track 1's side panel: **Info** with its place and grid, who opened it and last saw it, **Why here?**, and **Change / Move / Gone** at the bottom. **History** and **Recon** are the other tabs. Satellite and Follow units stay beside the panel.*
+
+<img src="docs/images/cp-layout/wide-unit-panel.png" alt="ALPHA 1's unit panel at 1280 by 800: Info selected, Mairie de Vincennes with its distance and grid, and Move by hand at the bottom." width="800">
+
+*ALPHA 1's unit panel: **Info**, **History** and **Recon**, with **Move by hand** at the bottom. Its strip is open on the left and the map frames the unit beside the panel.*
+
+<img src="docs/images/cp-layout/wide-timeline.png" alt="The Timeline drawer at 1280 by 800: filters All, Reports, Tracks, Units and Tasks, a search, and six events newest first." width="800">
+
+*The Timeline drawer: All / Reports / Tracks / Units / Tasks, a search, and each event to replay the mission just after it.*
+
+<img src="docs/images/cp-layout/narrow-replay.png" alt="The command post at 520 by 800 in replay: the header is two rows, the replay bar is two rows with Close replay, Live, play and a … menu, and the units, tracks and reports are tabs under the map." width="360">
+
+*At 520 px, in replay: the replay bar takes two rows, and Mission / Day, Link and the speeds sit behind **…**. The units, tracks and reports are tabs under the map.*
 
 A run is a **mission**. Open one from the Missions menu: an area, a name, and, if you like, a start point picked by name (the château, a metro station). Give it a roster too: the call signs on the radio net, split by commas [201]. After Connect, the transmitter follows the newest running mission automatically and switches between reports, with no mission picker. It does not join or name itself: a report goes to the roster unit whose call sign it starts with ("Alpha 1, at the town hall"), and one the coordinator is not sure of waits in the Decisions list for the operator [202, 203, 208, 240]. A call sign said last ("At the town hall, Alpha 1, over") waits there too, with that unit to confirm in one tap: it may be a sign-off, or who is spoken to [237]. A unit's first report is read from the start point, shown with ≈. In a mission the coordinator keeps each unit's last position itself, so the phone's does not matter. Stopping the mission stops reports; the mission stays under "Ended" for replay, and can be deleted from there [107 to 114].
 
