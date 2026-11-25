@@ -287,6 +287,65 @@
   min-width: 0;
 }
 
+/* The header's More menu: Brief, Help and Stop mission [274]. */
+.headerMore {
+  position: relative;
+}
+
+.headerMorePanel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 6;
+  min-width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.headerMoreItem {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headerMoreItem:hover,
+.headerMoreItem:focus-visible {
+  background: var(--panel-2);
+}
+
+.headerMoreDanger {
+  color: var(--bad);
+}
+
+.headerMoreConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.headerMoreButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .segmented,
 .segmentedSmall {
   display: flex;
@@ -401,6 +460,13 @@
   align-items: center;
   gap: 8px;
   pointer-events: none;
+}
+
+/* On a narrow map the Satellite/Follow buttons own the top edge; the notes sit below them [274]. */
+@media (max-width: 900px) {
+  .mapNotes {
+    top: 60px;
+  }
 }
 
 .replayBadge,
@@ -564,6 +630,100 @@
 .replayBar[data-compact] .liveBtn {
   min-height: 30px;
   padding: 0 12px;
+}
+
+.replayExtra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* On a narrow bar the mission zoom, the link and the speeds move under the … button [274]. */
+.replayMore {
+  display: none;
+  position: relative;
+}
+
+.replayMore summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.replayMore summary::-webkit-details-marker {
+  display: none;
+}
+
+.replayMorePanel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.replayMorePanel .liveBtn {
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .replayBar:not([data-compact]) {
+    display: grid;
+    grid-template-columns: auto auto auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "toggle close live play more more"
+      "timeline timeline timeline timeline timeline time";
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .barToggle {
+    grid-area: toggle;
+  }
+
+  .replayClose {
+    grid-area: close;
+  }
+
+  .replayLive {
+    grid-area: live;
+  }
+
+  .playBtn {
+    grid-area: play;
+  }
+
+  .timeline {
+    grid-area: timeline;
+  }
+
+  .time {
+    grid-area: time;
+  }
+
+  .replayMore {
+    display: block;
+    grid-area: more;
+  }
+
+  .replayExtra {
+    display: none;
+  }
 }
 
 .barToggle {
@@ -1089,8 +1249,16 @@
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
+/* With an entity panel open, the map's own controls stay on the map, to its right [274]. */
 .mapCol[data-panel] .dock {
-  visibility: hidden;
+  left: calc(min(420px, 100% - 24px) + 24px);
+}
+
+@media (max-width: 720px) {
+  .mapCol[data-panel] .dock {
+    left: 12px;
+    visibility: hidden;
+  }
 }
 
 .trackTabs {

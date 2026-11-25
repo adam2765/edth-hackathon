@@ -519,6 +519,9 @@ export default function CommandPost() {
   const [timelineWindow, setTimelineWindow] = useState<0 | 5 | 15 | 60>(0);
   /** The keyboard and click help [271]. */
   const [helpOpen, setHelpOpen] = useState(false);
+  /** The header's More menu: Brief, Help and Stop mission [274]. */
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   /** The screen wake lock, for a tablet at the post [273]. */
   const [awake, setAwake] = useState(false);
   const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -1140,6 +1143,16 @@ export default function CommandPost() {
       if (deepTrack != null) setPicked(deepTrack);
     });
   }, [moment, deepTrack, session, stretches.length, scrub]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const el = moreRef.current;
+      if (el && !el.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [moreOpen]);
 
   /** Copies a link that opens this replay at this moment, and the picked track [273]. */
   const copyMoment = async () => {
@@ -2553,6 +2566,7 @@ export default function CommandPost() {
         } else if (timelineOpen) {
           setTimelineOpen(false);
         } else if (findOpen) setFindOpen(false);
+        else if (moreOpen) setMoreOpen(false);
         else if (picking) unpick();
         else if (activeTool && activeTool.kind !== "edit" && activeTool.at) setTool({ ...activeTool, at: null });
         else if (activeTool) setTool(null);
@@ -2599,7 +2613,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen, moreOpen]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2798,23 +2812,6 @@ export default function CommandPost() {
         ) : (
           <div className={styles.chip}>No mission</div>
         )}
-        {mission && ended == null ? (
-          confirmEnd ? (
-            <span className={styles.confirm} role="group" aria-label="End this mission?">
-              <span className={styles.confirmText}>Stop this mission? Reports stop. It stays here for replay.</span>
-              <button type="button" className={styles.dangerBtn} onClick={endMission}>
-                Stop mission
-              </button>
-              <button type="button" className={styles.linkBtn} onClick={() => setConfirmEnd(false)}>
-                Cancel
-              </button>
-            </span>
-          ) : (
-            <button type="button" className={styles.ghostBtn} onClick={() => setConfirmEnd(true)}>
-              Stop mission
-            </button>
-          )
-        ) : null}
         {canEdit ? (
           <button
             type="button"
@@ -2847,12 +2844,83 @@ export default function CommandPost() {
           <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
             Missions ▾
           </button>
-          <button type="button" className={styles.ghostBtn} onClick={() => void copySituation()} title="Copy the situation as text">
-            Brief
-          </button>
-          <button type="button" className={styles.ghostBtn} onClick={() => setHelpOpen(true)} title="Keys and clicks (?)" aria-label="Help and keyboard shortcuts">
-            ?
-          </button>
+          <div className={styles.headerMore} ref={moreRef}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+              aria-label="More actions"
+              title="Brief, help and stop"
+              onClick={() => setMoreOpen((o) => !o)}
+            >
+              <span aria-hidden="true">…</span>
+            </button>
+            {moreOpen ? (
+              <div className={styles.headerMorePanel} role="menu" aria-label="More actions">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.headerMoreItem}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void copySituation();
+                  }}
+                >
+                  Copy situation
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.headerMoreItem}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setHelpOpen(true);
+                  }}
+                >
+                  Keys and clicks
+                </button>
+                {mission && ended == null ? (
+                  confirmEnd ? (
+                    <div className={styles.headerMoreConfirm}>
+                      <span>Stop this mission? Reports stop. It stays here for replay.</span>
+                      <div className={styles.headerMoreButtons}>
+                        <button
+                          type="button"
+                          className={styles.dangerBtn}
+                          onClick={() => {
+                            setMoreOpen(false);
+                            void endMission();
+                          }}
+                        >
+                          Stop mission
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.linkBtn}
+                          onClick={() => {
+                            setConfirmEnd(false);
+                            setMoreOpen(false);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`${styles.headerMoreItem} ${styles.headerMoreDanger}`}
+                      onClick={() => setConfirmEnd(true)}
+                    >
+                      Stop mission
+                    </button>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
         {panelOpen ? <MissionPanel current={session} defaultArea={mission?.area ?? area} onPick={pickSession} onClose={closePanel} /> : null}
       </header>
@@ -3077,7 +3145,7 @@ export default function CommandPost() {
           <button type="button" className={styles.barToggle} onClick={() => setBarCompact(true)} title="Hide the replay bar, to see the map" aria-label="Hide the replay bar">
             <span aria-hidden="true">▾</span>
           </button>
-          <button type="button" className={styles.liveBtn} aria-expanded={replayOpen} disabled={!entries.length} title={!entries.length ? "Nothing to replay yet: no report, track or unit placed in this mission" : replayOpen ? "Back to the live view and close the replay" : "Read this mission from its log, from a moment you choose"} onClick={() => {
+          <button type="button" className={`${styles.liveBtn} ${styles.replayClose}`} aria-expanded={replayOpen} disabled={!entries.length} title={!entries.length ? "Nothing to replay yet: no report, track or unit placed in this mission" : replayOpen ? "Back to the live view and close the replay" : "Read this mission from its log, from a moment you choose"} onClick={() => {
             if (replayOpen) {
               goLive();
               setBarCompact(true);
@@ -3087,7 +3155,7 @@ export default function CommandPost() {
           {replayOpen ? <>
           <button
             type="button"
-            className={styles.liveBtn}
+            className={`${styles.liveBtn} ${styles.replayLive}`}
             aria-pressed={mode === "live" && !!session}
             disabled={!session}
             data-stale={ended != null ? "ended" : lost ? "lost" : undefined}
@@ -3167,29 +3235,61 @@ export default function CommandPost() {
               </>
             )}
           </div>
-          {shownStretch ? (
-            <button
-              type="button"
-              className={styles.liveBtn}
-              aria-pressed={barZoom}
-              onClick={() => setBarZoom((z) => !z)}
-              title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
-            >
-              {barZoom ? "Day" : "Mission"}
-            </button>
-          ) : null}
-          {mode === "replay" ? (
-            <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
-              Link
-            </button>
-          ) : null}
-          <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
-            {SPEEDS.map((s) => (
-              <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
-                {s}×
+          <div className={styles.replayExtra}>
+            {shownStretch ? (
+              <button
+                type="button"
+                className={styles.liveBtn}
+                aria-pressed={barZoom}
+                onClick={() => setBarZoom((z) => !z)}
+                title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
+              >
+                {barZoom ? "Day" : "Mission"}
               </button>
-            ))}
+            ) : null}
+            {mode === "replay" ? (
+              <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
+                Link
+              </button>
+            ) : null}
+            <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
+              {SPEEDS.map((s) => (
+                <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
+                  {s}×
+                </button>
+              ))}
+            </div>
           </div>
+          <details className={styles.replayMore}>
+            <summary aria-label="More replay controls" title="Mission zoom, link and speed">
+              …
+            </summary>
+            <div className={styles.replayMorePanel}>
+              {shownStretch ? (
+                <button
+                  type="button"
+                  className={styles.liveBtn}
+                  aria-pressed={barZoom}
+                  onClick={() => setBarZoom((z) => !z)}
+                  title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
+                >
+                  {barZoom ? "Day" : "Mission"}
+                </button>
+              ) : null}
+              {mode === "replay" ? (
+                <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
+                  Link
+                </button>
+              ) : null}
+              <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
+                {SPEEDS.map((s) => (
+                  <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
+                    {s}×
+                  </button>
+                ))}
+              </div>
+            </div>
+          </details>
           </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
             </>
           )}
