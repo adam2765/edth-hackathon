@@ -236,6 +236,12 @@ export interface ReplyEntry {
 /** The name the command post writes under in the log. One for now: there are no logins. */
 export const COMMAND_POST = "CP";
 
+/**
+ * A recorded mission served by `GET /api/sessions/demo`, so the public site's command post is
+ * never empty. It is read-only: the page hides every action that writes. Never a real code.
+ */
+export const DEMO_SESSION = "demo";
+
 /** What the command post can do to a track by hand. */
 export type PlotAction = "place" | "edit" | "move" | "gone" | "restore";
 

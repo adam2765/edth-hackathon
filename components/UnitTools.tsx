@@ -23,6 +23,8 @@ export function UnitPanel(props: {
   busy: boolean;
   onClose: () => void;
   onPlace: () => void;
+  /** Puts it back where its own last report had it, after a placement by hand [243]. */
+  onUndo?: () => void;
   onKind: (callsign: string, kind: TrackKind | null) => void;
   onTask: (body: TaskBody, done: string) => void;
   /** Opens the unit's question in the Decisions list, when one waits. */
@@ -152,6 +154,17 @@ export function UnitPanel(props: {
       {props.canEdit ? (
         <div className={styles.toolFoot}>
           <div className={styles.draftButtons}>
+            {props.onUndo ? (
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={props.onUndo}
+                disabled={props.busy}
+                title="Put it back where its own last report had it"
+              >
+                Back to last report
+              </button>
+            ) : null}
             <button type="button" className={styles.ghostBtn} onClick={props.onPlace} disabled={props.busy}>
               {u.position && !u.atStart ? "Move" : "Place"} by hand
             </button>

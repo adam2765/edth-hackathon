@@ -152,8 +152,168 @@
 
 .helpActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 14px;
+}
+
+/* A first visit's three lines, and the way into the recorded mission [275]. */
+.welcomeList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.welcomeList b {
+  color: var(--text);
+}
+
+/* ---------- what the app heard [275] ---------- */
+.inspector {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-items: center;
+  padding: 4vh 16px;
+  background: rgba(9, 14, 19, 0.62);
+}
+
+.inspectorCard {
+  width: min(680px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+.inspectorHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 14px 16px;
+  overflow-y: auto;
+}
+
+.inspectorSection h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.inspectorWords {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--accent-2);
+  border-radius: 0 8px 8px 0;
+  background: var(--panel-2);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.inspectorMeta {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inspectorGrid {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.inspectorGrid dt {
+  color: var(--muted);
+}
+
+.inspectorGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspectorList {
+  margin: 6px 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.inspectorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inspectorCorrect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.inspectorCorrect label {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.inspectorCorrect textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .inspector {
+    padding: 0;
+  }
+
+  .inspectorCard {
+    width: 100%;
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  /* The demo name already says "demo"; the chip would push the header to a third row. */
+  .chip[data-state="demo"] {
+    display: none;
+  }
 }
 
 /* ---------- the command post's lock [266] ---------- */
@@ -276,6 +436,11 @@
 
 .chip[data-state="warn"] {
   color: var(--warn);
+}
+
+.chip[data-state="demo"] {
+  border: 1px solid rgba(44, 156, 255, 0.5);
+  color: #8cc8ff;
 }
 
 .headActions {
@@ -681,7 +846,7 @@
   justify-content: center;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 1199px) {
   .replayBar:not([data-compact]) {
     display: grid;
     grid-template-columns: auto auto auto auto minmax(0, 1fr) auto;
@@ -723,6 +888,13 @@
 
   .replayExtra {
     display: none;
+  }
+}
+
+/* The two-row bar is taller than the wide one; the deck and the panels stay above it. */
+@media (min-width: 901px) and (max-width: 1199px) {
+  .root {
+    --sheet-h: 112px;
   }
 }
 
@@ -1236,7 +1408,8 @@
   position: absolute;
   top: 12px;
   left: 12px;
-  bottom: 12px;
+  /* Above the replay bar, so the two never cover each other [275]. */
+  bottom: calc(var(--sheet-h) + 12px);
   z-index: 5;
   width: min(420px, calc(100% - 24px));
   display: flex;
@@ -1461,7 +1634,8 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  bottom: 12px;
+  /* Above the replay bar, so the two never cover each other [275]. */
+  bottom: calc(var(--sheet-h) + 12px);
   z-index: 5;
   width: min(420px, 46vw);
   display: flex;
@@ -1586,6 +1760,57 @@
 .timelinePanelList button:hover,
 .timelinePanelList button:focus-visible {
   background: var(--panel-2);
+}
+
+/* An event and the small "i" that opens what the app heard, without stealing the replay click [275]. */
+.timelineRow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+
+.timelineRow > button:first-child {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.timelineRow > .timelineInspect {
+  flex: 0 0 32px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.timelineRow > .timelineInspect:hover,
+.timelineRow > .timelineInspect:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.timelineRow:last-child {
+  border-bottom: none;
+}
+
+/* The hour, like a logbook's margin [275]. */
+.timelineHour {
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(22, 33, 44, 0.6);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .timelinePanelDot {

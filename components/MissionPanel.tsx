@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { AREAS, type AreaId } from "@/lib/geo/areas";
-import type { MissionListReply, MissionSummary, PlacesReply, StartPoint } from "@/lib/reports/types";
+import { DEMO_SESSION, type MissionListReply, type MissionSummary, type PlacesReply, type StartPoint } from "@/lib/reports/types";
 import styles from "./CommandPost.module.css";
 
 const LIST_POLL_MS = 5000;
@@ -147,6 +147,12 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
     <>
       <div className={styles.backdrop} onClick={onClose} aria-hidden="true" />
       <div ref={panelRef} className={styles.panel} role="dialog" aria-label="Missions" tabIndex={-1}>
+        {current === DEMO_SESSION ? (
+          <p className={styles.hint}>
+            The recorded demo mission is on screen. It is read only: start a mission on a coordinator to place units,
+            answer questions and keep a log.
+          </p>
+        ) : null}
         {list && !list.stored ? (
           <p className={styles.empty}>This coordinator keeps no record, so it has no missions. Run the coordinator on the Mac and open this page there.</p>
         ) : (

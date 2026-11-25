@@ -20,7 +20,7 @@ import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchA
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
 import { handover } from "@/lib/reports/handover";
 import { anchorFor, arrangeTracks, moveNextTo, parseOrders, parseTrackView, previewMove, TRACK_GROUPS, TRACK_HIDES, TRACK_SORTS, withSaved, type LaneOrders, type TrackHide, type TrackView } from "@/lib/reports/lanes";
-import { COMMAND_POST, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
+import { COMMAND_POST, DEMO_SESSION, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
@@ -29,6 +29,7 @@ import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, type TaskBody } from "./ReconTools";
 import { UnitPanel } from "./UnitTools";
+import { ReportInspector } from "./ReportInspector";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -196,6 +197,8 @@ function showSession(code: string | null, replace = false) {
   const q = new URLSearchParams(window.location.search);
   if (code) q.set("session", code);
   else q.delete("session");
+  // The short demo link belongs to the demo only.
+  if (code !== DEMO_SESSION) q.delete("demo");
   // A moment and a track belong to the mission that was on screen.
   q.delete("t");
   q.delete("track");
@@ -429,7 +432,8 @@ export default function CommandPost() {
     const t = Number(q.get("t"));
     const tr = Number(q.get("track"));
     return {
-      session: sessionCode(q.get("session")),
+      // ?demo=1 is the short link for the recorded mission; with a session too, the demo wins.
+      session: q.get("demo") === "1" ? DEMO_SESSION : sessionCode(q.get("session")),
       fixedArea: isAreaId(a) ? a : null,
       moment: Number.isFinite(t) && t > 0 ? Math.round(t) : null,
       deepTrack: Number.isInteger(tr) && tr > 0 ? tr : null,
@@ -474,7 +478,7 @@ export default function CommandPost() {
   const [stored, setStored] = useState<boolean | null>(null);
   const [lastOk, setLastOk] = useState(0);
   const [now, setNow] = useState(0);
-  const otherMissions = missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
+  const otherMissions = session === DEMO_SESSION ? [] : missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
   const [mode, setMode] = useState<"live" | "replay">("live");
   const [replayT, setReplayT] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -483,6 +487,12 @@ export default function CommandPost() {
   const [follow, setFollow] = useState(true);
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** The report or event opened in the inspector: its words, intent, rule and timings. */
+  const [inspected, setInspected] = useState<FeedItem | null>(null);
+  /** A first visit's short card. It never returns once dismissed in this browser. */
+  const [welcome, setWelcome] = useState(false);
+  /** The fix that put a unit back at its last report, so the one-click is not offered twice. */
+  const [undoAt, setUndoAt] = useState<Record<string, number>>({});
   /** The feed or timeline row under the pointer, shown as a halo on the map [273]. */
   const [hoverEvent, setHoverEvent] = useState<FeedItem | null>(null);
   const hoverMarker = useRef<Marker | null>(null);
@@ -814,6 +824,8 @@ export default function CommandPost() {
     showSession(code);
   }, [setPlaying]);
 
+
+
   // ---------- the log ----------
   useEffect(() => {
     logsRef.current = logs;
@@ -880,9 +892,12 @@ export default function CommandPost() {
   const view = useMemo(() => (mode === "live" ? full : foldLog(entries, replayT, colours)), [mode, full, entries, replayT, colours]);
   const mission = full.mission;
   const ended = mission?.ended ?? null;
+  /** The recorded mission the public site shows: everything that writes is hidden. */
+  const demo = session === DEMO_SESSION;
   // The moment the picture stands for. An ended mission is shown as it was when it ended, so its
-  // units do not all read as silent for the hours since.
-  const effNow = mode === "live" ? (ended ?? now) : replayT;
+  // units do not all read as silent for the hours since. The demo is frozen at its last line, so
+  // a page left open all afternoon still shows a fresh patrol.
+  const effNow = mode === "live" ? (ended ?? (demo ? (full.last ?? now) : now)) : replayT;
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
   // Place names from the area's gazetteer, beside the call signs and tracks [268].
   useEffect(() => {
@@ -1027,7 +1042,7 @@ export default function CommandPost() {
   const flowUnits = useMemo(() => view.units.some((u) => u.position?.heading_to && !isSilent(u)), [view, isSilent]);
 
   /** Changes are made only to the present of an open mission that this coordinator keeps. */
-  const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true;
+  const canEdit = !!session && !!mission && ended == null && mode === "live" && stored === true && !demo;
 
   // ---------- the Decisions list [240] ----------
   const decisions = useMemo(() => decisionsOf(view), [view]);
@@ -1143,6 +1158,26 @@ export default function CommandPost() {
       if (deepTrack != null) setPicked(deepTrack);
     });
   }, [moment, deepTrack, session, stretches.length, scrub]);
+
+  // A short card for a first visit with no mission on screen: on the public site, the way in.
+  useEffect(() => {
+    if (session) return;
+    try {
+      if (window.localStorage.getItem("vtm-welcome-1")) return;
+    } catch {
+      return;
+    }
+    const t = setTimeout(() => setWelcome(true), 1200);
+    return () => clearTimeout(t);
+  }, [session]);
+  const closeWelcome = useCallback(() => {
+    setWelcome(false);
+    try {
+      window.localStorage.setItem("vtm-welcome-1", "1");
+    } catch {
+      // A private window that refuses storage still closes the card.
+    }
+  }, []);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -1435,6 +1470,13 @@ export default function CommandPost() {
         map.on("mouseleave", "track-sym", () => {
           if (map.getCanvas().style.cursor === "pointer") map.getCanvas().style.cursor = "";
         });
+        // A unit's marker is a click away from its panel too.
+        map.on("mouseenter", "pos", () => {
+          if (!map.getCanvas().style.cursor) map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "pos", () => {
+          if (map.getCanvas().style.cursor === "pointer") map.getCanvas().style.cursor = "";
+        });
         // The photo view [260]: added under the units and tracks, hidden until the operator asks.
         // With the saved map, it reads the photos saved beside it too, so it works with no internet [261].
         addSatelliteLayers(map, base.source === "hosted" ? "online" : "saved");
@@ -1533,8 +1575,9 @@ export default function CommandPost() {
         const first = !labelled.has(k);
         labelled.add(k);
         const name = first ? (spot?.name ?? u.callsign) : "";
-        const when = first ? (spot?.when ?? "") : "";
-        pos.push({ type: "Feature", properties: { color, op, name, when, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
+        // A place a person at the command post put there says so on the map too [243].
+        const when = first ? [spot?.when, u.placedBy ? "CP" : null].filter(Boolean).join(" · ") : "";
+        pos.push({ type: "Feature", properties: { color, op, name, when, callsign: u.callsign, labelOp: spot?.allSilent ? 0.7 : 1 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
         // A silent unit is drawn where it was last known, with a ring saying the place is old [265].
         if (silent) last.push({ type: "Feature", properties: { color, radius: 16 }, geometry: { type: "Point", coordinates: [q.lon, q.lat] } });
         acc.push({ type: "Feature", properties: { color, op, estimated: !!p.estimated }, geometry: { type: "Polygon", coordinates: [circleRing(q, p.radius_m)] } });
@@ -2155,6 +2198,54 @@ export default function CommandPost() {
   }, [pickedTrack, openedUnit, timelineOpen, listsOpen]);
   /** The reports and acts about the picked track: its provenance [271]. */
   const pickedHistory = useMemo(() => (pickedTrack ? view.feed.filter((f) => f.track === pickedTrack.n) : []), [view.feed, pickedTrack]);
+  /** The raw log line behind the inspector: the intent, rule and timings the folded feed keeps out. */
+  const inspectedEntry = useMemo(
+    () => (inspected ? (entries.find((e) => e.id === inspected.id) ?? null) : null),
+    [inspected, entries],
+  );
+
+  // One dialog at a time takes the keyboard: Tab stays inside it, and closing it gives the focus
+  // back to whatever opened it. The map's panels are the same drawer as the timeline [271, 275].
+  const anyDialog =
+    welcome || inspected != null || helpOpen || findOpen || timelineOpen || pickedTrack != null || openedUnit != null || panelOpen || activeTool != null || auth !== "open";
+  const dialogReturn = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!anyDialog) return;
+    if (!dialogReturn.current) dialogReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter((d) => d.getClientRects().length > 0);
+      const dialog = dialogs[dialogs.length - 1];
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => el.getClientRects().length > 0);
+      if (!focusable.length) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onTab);
+    return () => window.removeEventListener("keydown", onTab);
+  }, [anyDialog]);
+  useEffect(() => {
+    if (anyDialog || !dialogReturn.current) return;
+    const back = dialogReturn.current;
+    dialogReturn.current = null;
+    back.focus();
+  }, [anyDialog]);
   /** The number a new track will most likely get; the coordinator gives the real one. */
   const nextN = full.tracks.reduce((m, t) => Math.max(m, t.n), 0) + 1;
   const tracksUrl = session ? `/api/sessions/${encodeURIComponent(session)}/tracks` : "";
@@ -2199,6 +2290,8 @@ export default function CommandPost() {
     },
     [setPicked],
   );
+
+
 
   /** Puts the track being placed or moved at a point, and asks the coordinator how it will name it. */
   const putDraft = useCallback(
@@ -2257,6 +2350,18 @@ export default function CommandPost() {
         return;
       }
       if (activeTool) return;
+      // A unit's marker opens its panel, as its strip does [271, 275]. A track symbol under the
+      // pointer keeps its own click.
+      const callsign = map.queryRenderedFeatures(e.point, { layers: ["pos"] })[0]?.properties?.callsign;
+      if (typeof callsign === "string") {
+        const u = view.units.find((x) => x.callsign === callsign);
+        setTimelineOpen(false);
+        setInspected(null);
+        setPicked(null);
+        setOpenUnit(callsign);
+        if (u?.position) flyToUnit(u);
+        return;
+      }
       const n = map.queryRenderedFeatures(e.point, { layers: ["track-sym"] })[0]?.properties?.n;
       if (typeof n === "number") setTimelineOpen(false);
       setOpenUnit(null);
@@ -2354,6 +2459,26 @@ export default function CommandPost() {
     }
   }, []);
 
+  /** Puts a unit back where its own last report had it, when the command post's placement was wrong [243]. */
+  const undoUnitPlace = useCallback(
+    async (u: UnitState) => {
+      const last = u.trail[u.trail.length - 1];
+      if (!last) return;
+      const r = await sendPlot<FixReply>(unitPositionUrl, "POST", {
+        callsign: u.callsign,
+        lat: last.lat,
+        lon: last.lon,
+        radius_m: 30,
+        note: "back to the unit's last report",
+      });
+      if (r) {
+        setUndoAt((all) => ({ ...all, [u.callsign]: r.entry.ts }));
+        setNotice(`${u.callsign} back where its last report had it: ${r.entry.position.label}`);
+      }
+    },
+    [sendPlot, unitPositionUrl, setNotice, setUndoAt],
+  );
+
   const confirmDraft = useCallback(async () => {
     if (!activeTool || activeTool.kind === "edit" || !activeTool.at || busy) return;
     const at = activeTool.at;
@@ -2386,7 +2511,7 @@ export default function CommandPost() {
         setPicked(activeTool.n);
       }
     }
-  }, [activeTool, busy, note, sendPlot, tracksUrl, unitPositionUrl, setPicked]);
+  }, [activeTool, busy, note, sendPlot, tracksUrl, unitPositionUrl, setPicked, setNotice]);
 
   const saveEdit = useCallback(async () => {
     if (activeTool?.kind !== "edit" || busy) return;
@@ -2397,14 +2522,14 @@ export default function CommandPost() {
       setNote("");
       setTool(null);
     }
-  }, [activeTool, busy, note, sendPlot, tracksUrl]);
+  }, [activeTool, busy, note, sendPlot, tracksUrl, setNotice]);
 
   const markGone = useCallback(
     async (n: number, gone: boolean) => {
       const r = await sendPlot(`${tracksUrl}/${n}`, "PATCH", { action: gone ? "gone" : "restore" });
       if (r) setNotice(gone ? `Track ${n} marked gone` : `Track ${n} back on the map`);
     },
-    [sendPlot, tracksUrl],
+    [sendPlot, tracksUrl, setNotice],
   );
 
   /**
@@ -2432,7 +2557,7 @@ export default function CommandPost() {
         setSelection(null);
       }
     },
-    [session],
+    [session, setNotice],
   );
 
   /** The operator sends a drone to look at a track, ends its recon, or turns a request down [234]. */
@@ -2453,7 +2578,7 @@ export default function CommandPost() {
         setBusy(false);
       }
     },
-    [session],
+    [session, setNotice],
   );
 
   /** The operator says what a unit is, so a drone team on the net can be sent to look [235]. */
@@ -2474,7 +2599,7 @@ export default function CommandPost() {
         setBusy(false);
       }
     },
-    [session],
+    [session, setNotice],
   );
 
   /** The operator gives a held radio report to a unit, adds its call sign, or dismisses it [203]. True once it is saved. */
@@ -2511,7 +2636,7 @@ export default function CommandPost() {
         setSelection(null);
       }
     },
-    [session],
+    [session, setNotice],
   );
 
   /** The operator confirms the option picked in the open decision; the next one opens by itself [240]. */
@@ -2561,7 +2686,9 @@ export default function CommandPost() {
         return;
       }
       if (e.key === "Escape") {
-        if (helpOpen) {
+        if (welcome) closeWelcome();
+        else if (inspected) setInspected(null);
+        else if (helpOpen) {
           setHelpOpen(false);
         } else if (timelineOpen) {
           setTimelineOpen(false);
@@ -2613,7 +2740,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen, moreOpen]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen, moreOpen, welcome, closeWelcome, inspected]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2804,6 +2931,11 @@ export default function CommandPost() {
                 No record
               </span>
             ) : null}
+            {demo ? (
+              <span className={styles.chip} data-state="demo" title="A recorded mission, read only. Open your own mission to answer questions and place units.">
+                Demo · read-only
+              </span>
+            ) : null}
           </div>
         ) : session ? (
           <div className={styles.chip} title="A session from before missions">
@@ -2831,6 +2963,11 @@ export default function CommandPost() {
         {/* The connection, the drawers and the missions menu wrap together, not one by one [271]. */}
         <div className={styles.headActions}>
           {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
+          {!mission && session !== DEMO_SESSION ? (
+            <button type="button" className={styles.ghostBtn} onClick={() => pickSession(DEMO_SESSION)} title="Open the recorded mission: four units, three tracks and a question asked back">
+              Demo
+            </button>
+          ) : null}
           <button type="button" className={styles.ghostBtn} onClick={() => {
             setPicked(null);
             setOpenUnit(null);
@@ -2880,7 +3017,7 @@ export default function CommandPost() {
                 >
                   Keys and clicks
                 </button>
-                {mission && ended == null ? (
+                {mission && ended == null && !demo ? (
                   confirmEnd ? (
                     <div className={styles.headerMoreConfirm}>
                       <span>Stop this mission? Reports stop. It stays here for replay.</span>
@@ -3396,6 +3533,7 @@ export default function CommandPost() {
             busy={busy}
             onClose={() => setOpenUnit(null)}
             onPlace={() => startUnitMove(openedUnit)}
+            onUndo={openedUnit.placedBy && openedUnit.trail.length && openedUnit.positionTs !== undoAt[openedUnit.callsign] ? () => void undoUnitPlace(openedUnit) : undefined}
             onKind={sendUnitKind}
             onTask={sendTask}
             onQuestion={
@@ -3467,12 +3605,19 @@ export default function CommandPost() {
                 const tag = timelineTag(f);
                 const firstOld =
                   newSince != null && f.ts <= newSince && (i === 0 || timelineEvents[i - 1].ts > newSince);
+                const hour = new Date(f.ts).getHours();
+                const hourChanged = i === 0 || new Date(timelineEvents[i - 1].ts).getHours() !== hour;
                 return (
                   <Fragment key={f.id}>
+                    {hourChanged ? (
+                      <li className={styles.timelineHour} aria-hidden="true">
+                        {String(hour).padStart(2, "0")}:00
+                      </li>
+                    ) : null}
                     {firstOld ? (
                       <li className={styles.timelineNewDivider}>New since {fmtTime(newSince)}</li>
                     ) : null}
-                    <li>
+                    <li className={styles.timelineRow}>
                       <button
                         type="button"
                         onClick={() => jumpTimeline(f)}
@@ -3487,6 +3632,15 @@ export default function CommandPost() {
                         <span className={styles.timelinePanelWho}>{f.callsign}</span>
                         <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
                         {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.timelineInspect}
+                        onClick={() => setInspected(f)}
+                        aria-label={`Inspect the event at ${fmtTime(f.ts)} from ${f.callsign}`}
+                        title="What the app heard, and how it placed it"
+                      >
+                        i
                       </button>
                     </li>
                   </Fragment>
@@ -3938,8 +4092,15 @@ export default function CommandPost() {
                     onMouseLeave={() => setHoverEvent(null)}
                     onFocus={() => setHoverEvent(f)}
                     onBlur={() => setHoverEvent(null)}
-                    onClick={() => (waiting != null ? focusOn(decisions[waiting], waiting) : flyToItem(f))}
-                    title={open ? "Open it in Decisions" : undefined}
+                    onClick={() => {
+                      if (waiting != null) focusOn(decisions[waiting], waiting);
+                      else {
+                        // The words, the intent and the rule behind the place, and the map on it.
+                        setInspected(f);
+                        flyToItem(f);
+                      }
+                    }}
+                    title={open ? "Open it in Decisions" : "What the app heard, and how it placed it"}
                   >
                     <span className={styles.itemHead}>
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
@@ -4071,6 +4232,83 @@ export default function CommandPost() {
             ) : (
               <p className={styles.findHint}>Type a call sign (ALPHA 1), a track (T2), a kind (drone, vehicle) or a place name.</p>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {inspected ? (
+        <ReportInspector
+          item={inspected}
+          entry={inspectedEntry}
+          canEdit={canEdit}
+          session={session}
+          area={area}
+          format={fmtTime}
+          onClose={() => setInspected(null)}
+          onShow={() => {
+            const f = inspected;
+            setInspected(null);
+            if (f) flyToItem(f);
+          }}
+          onCopy={(text) => {
+            void copyText(text).then((ok) => setNotice(ok ? "Copied." : "Could not copy."));
+          }}
+          onSent={() => pollNow.current()}
+          onNotice={setNotice}
+        />
+      ) : null}
+
+      {welcome ? (
+        <div
+          className={styles.find}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Welcome to the command post"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeWelcome();
+          }}
+        >
+          <div className={styles.helpCard}>
+            <div className={styles.helpHead}>
+              <h2>Welcome to the command post</h2>
+              <button autoFocus type="button" className={styles.linkBtn} onClick={closeWelcome}>
+                Close
+              </button>
+            </div>
+            <p className={styles.helpNote}>
+              The map is the mission. What a unit says becomes a marker, a circle and a line in the
+              reports; when the words could mean more than one place, the app asks back instead of guessing.
+            </p>
+            <ul className={styles.welcomeList}>
+              <li><b>Units on the left, tracks on the right.</b> Click one for its side panel: Info, History and Recon.</li>
+              <li><b>Click a report</b> to see the words, what the model understood, the rule that placed it and the timings.</li>
+              <li><b>Timeline</b> replays the mission; <b>Find</b> or Ctrl/⌘ K jumps to a call sign, a track or a place.</li>
+            </ul>
+            <div className={styles.helpActions}>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                onClick={() => {
+                  closeWelcome();
+                  pickSession(DEMO_SESSION);
+                }}
+              >
+                Open the demo mission
+              </button>
+              <button
+                type="button"
+                className={styles.ghostBtn}
+                onClick={() => {
+                  closeWelcome();
+                  setPanelOpen(true);
+                }}
+              >
+                Start my own
+              </button>
+            </div>
+            <p className={styles.helpNote}>
+              This card shows once in this browser. The full keys are under <b>…</b> then <b>Keys and clicks</b>.
+            </p>
           </div>
         </div>
       ) : null}

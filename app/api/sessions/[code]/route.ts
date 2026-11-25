@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { operatorDenied } from "@/lib/reports/auth";
+import { demoLog } from "@/lib/reports/demo";
 import { deleteMission } from "@/lib/reports/record";
 import { getStore } from "@/lib/reports/store";
-import { sessionCode, type SessionLogReply } from "@/lib/reports/types";
+import { DEMO_SESSION, sessionCode, type SessionLogReply } from "@/lib/reports/types";
 
 /**
  * A session's log for the command post: `GET /api/sessions/<code>?after=<n>` returns the entries after
@@ -14,6 +15,12 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/sessions/[co
   if (!session) return NextResponse.json({ error: "Session codes are letters, digits, - and _, up to 40." }, { status: 400 });
   const afterIn = Number(req.nextUrl.searchParams.get("after"));
   const after = Number.isInteger(afterIn) && afterIn > 0 ? afterIn : 0;
+  // The public site keeps no logs: its demo mission is served from the recorded lines, read only.
+  if (session === DEMO_SESSION) {
+    const { total, entries } = demoLog(after);
+    const reply: SessionLogReply = { session, stored: true, total, entries };
+    return NextResponse.json(reply, { headers: { "Cache-Control": "no-store" } });
+  }
   const store = getStore();
   try {
     const { total, entries } = await store.list(session, after);
