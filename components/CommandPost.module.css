@@ -150,6 +150,12 @@
   line-height: 1.4;
 }
 
+.helpActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
 /* ---------- the command post's lock [266] ---------- */
 .lock {
   position: fixed;
@@ -929,6 +935,39 @@
   border: 2.5px solid #fff;
 }
 
+/* A feed or timeline row under the pointer: its place on the map, without moving the replay [273]. */
+.hoverHalo {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--accent-2);
+  border-radius: 50%;
+  background: rgba(255, 201, 64, 0.12);
+  box-shadow: 0 0 0 6px rgba(255, 201, 64, 0.12);
+  pointer-events: none;
+  animation: hoverHalo 1.4s ease-out infinite;
+}
+
+@keyframes hoverHalo {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverHalo {
+    animation: none;
+  }
+}
+
 .unitMain {
   flex: 1;
   min-width: 0;
@@ -1332,6 +1371,18 @@
   font-size: 13px;
 }
 
+.timelineWindow {
+  margin-left: auto;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .timelinePanelList {
   list-style: none;
   margin: 0;
@@ -1407,6 +1458,50 @@
 .timelinePanelEmpty {
   padding: 12px;
   color: var(--muted);
+}
+
+/* Where this visit's events begin, after the last time the operator had the mission open [273]. */
+.timelineNewDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.timelineNewDivider::before,
+.timelineNewDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* The mission's phone link, in the Missions menu [273]. */
+.qrWrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.qrWrap svg {
+  flex: none;
+  border-radius: 8px;
+}
+
+.qrText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qrText p {
+  margin: 0;
 }
 
 @media (max-width: 900px) {

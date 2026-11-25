@@ -6,6 +6,7 @@
  * gazetteer, so nobody types coordinates and no model makes them.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { AREAS, type AreaId } from "@/lib/geo/areas";
 import type { MissionListReply, MissionSummary, PlacesReply, StartPoint } from "@/lib/reports/types";
 import styles from "./CommandPost.module.css";
@@ -137,6 +138,10 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
 
   const open = list?.missions.filter((m) => m.ended == null) ?? [];
   const past = list?.missions.filter((m) => m.ended != null) ?? [];
+  const currentMission = list?.missions.find((m) => m.code === current);
+  const [origin] = useState(() => (typeof window !== "undefined" ? window.location.origin : ""));
+  const joinUrl = current && origin ? `${origin}/?session=${encodeURIComponent(current)}` : "";
+  const loopback = origin ? /^(localhost|127\.|\[::1\])$/i.test(new URL(origin).hostname) : false;
 
   return (
     <>
@@ -274,6 +279,27 @@ export default function MissionPanel({ current, defaultArea, onPick, onClose }: 
                 <p className={styles.empty}>{list ? "No mission is open." : "Loading…"}</p>
               )}
             </section>
+
+            {currentMission && currentMission.ended == null && joinUrl ? (
+              <section className={styles.panelSection} aria-labelledby="join-h">
+                <h2 id="join-h" className={styles.h2}>
+                  Join from a phone
+                </h2>
+                <div className={styles.qrWrap}>
+                  <QRCodeSVG value={joinUrl} size={150} bgColor="#ffffff" fgColor="#16212c" level="M" marginSize={2} />
+                  <div className={styles.qrText}>
+                    <p className={styles.muted}>
+                      Scan to open the phone page with mission <b>{current}</b>.
+                    </p>
+                    {loopback ? (
+                      <p className={styles.empty}>
+                        This page is on localhost. Open the command post at the network address of the coordinator so a phone can reach the code.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
             {past.length ? (
               <section className={styles.panelSection} aria-labelledby="past-h">

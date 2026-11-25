@@ -346,6 +346,7 @@ export function TrackCard(props: {
   const p = t.position;
   const who = t.plotted ? `placed by ${t.seenBy}` : `seen by ${t.seenBy}`;
   const history = props.history ?? [];
+  const why = history.find((f) => f.position && (f.kind === "report" || f.kind === "plot")) ?? null;
   return (
     <div className={styles.trackPanel} role="dialog" aria-label={`Track ${t.n}`}>
       <div className={styles.timelinePanelHead}>
@@ -395,6 +396,18 @@ export function TrackCard(props: {
             <p className={styles.provLine}>
               Opened by <b>{t.openedBy}</b> at {props.format(t.openedTs)} · last seen by <b>{t.seenBy}</b> at {props.format(t.seenTs)}
             </p>
+            {why ? (
+              <details className={styles.provenance}>
+                <summary>Why here?</summary>
+                <p className={styles.provLine}>
+                  <b>{why.callsign}</b> · {props.format(why.ts)}
+                </p>
+                <p className={styles.provLine}>{why.transcript || why.outcome}</p>
+                <p className={styles.provLine}>
+                  <GridTag at={why.position} />
+                </p>
+              </details>
+            ) : null}
           </div>
         ) : tab === "history" ? (
           <TrackHistory track={t} history={history} format={props.format} onJump={props.onJump} />

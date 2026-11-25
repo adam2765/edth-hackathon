@@ -32,6 +32,7 @@ export function UnitPanel(props: {
   const [tab, setTab] = useState<"info" | "history" | "recon">("info");
   const question = u.pending?.question ?? u.prompt?.question ?? null;
   const history = props.history.slice();
+  const why = history.find((f) => f.position) ?? null;
   const when = props.format;
   return (
     <div className={styles.trackPanel} role="dialog" aria-label={`Unit ${u.callsign}`}>
@@ -92,6 +93,18 @@ export function UnitPanel(props: {
               {u.joined != null ? ` · joined ${when(u.joined)}` : ""}
               {u.placedBy ? ` · placed by ${u.placedBy}` : ""}
             </p>
+            {why ? (
+              <details className={styles.provenance}>
+                <summary>Why here?</summary>
+                <p className={styles.provLine}>
+                  <b>{why.callsign}</b> · {when(why.ts)}
+                </p>
+                <p className={styles.provLine}>{why.transcript || why.outcome}</p>
+                <p className={styles.provLine}>
+                  <GridTag at={why.position} />
+                </p>
+              </details>
+            ) : null}
           </div>
         ) : tab === "history" ? (
           <div className={styles.trackSection}>

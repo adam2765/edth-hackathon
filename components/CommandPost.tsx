@@ -7,7 +7,7 @@
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { shortGrid, type GridRead } from "@/lib/geo/grid";
@@ -18,6 +18,7 @@ import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, 
 import { PLOT_RADII, PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
 import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
+import { handover } from "@/lib/reports/handover";
 import { anchorFor, arrangeTracks, moveNextTo, parseOrders, parseTrackView, previewMove, TRACK_GROUPS, TRACK_HIDES, TRACK_SORTS, withSaved, type LaneOrders, type TrackHide, type TrackView } from "@/lib/reports/lanes";
 import { COMMAND_POST, sessionCode, type FixReply, type HeldReply, type LogEntry, type MissionListReply, type MissionSummary, type PlacesReply, type PlotReply, type SessionLogReply, type StartPoint, type TaskReply, type UnitReply } from "@/lib/reports/types";
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
@@ -195,9 +196,44 @@ function showSession(code: string | null, replace = false) {
   const q = new URLSearchParams(window.location.search);
   if (code) q.set("session", code);
   else q.delete("session");
+  // A moment and a track belong to the mission that was on screen.
+  q.delete("t");
+  q.delete("track");
   const qs = q.toString();
   history[replace ? "replaceState" : "pushState"](null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
   window.dispatchEvent(new Event(LOCATION_EVENT));
+}
+
+/** Copies text, with a hidden textarea for a browser that refuses the clipboard API [273]. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    const write = navigator.clipboard?.writeText(text);
+    if (write) {
+      // A permission prompt can leave the promise pending; fall back after a moment.
+      const copied = await Promise.race([
+        write.then(() => true, () => false),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
+      ]);
+      if (copied) return true;
+    }
+  } catch {
+    // A LAN page on plain HTTP, or a browser without the permission.
+  }
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.top = "0";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    const copied = document.execCommand("copy");
+    el.remove();
+    return copied;
+  } catch {
+    return false;
+  }
 }
 
 type UnitTone = "placed" | "estimate" | "ask" | "none" | "silent";
@@ -387,11 +423,41 @@ function unitStatus(u: UnitState, silent: boolean, silentAtEnd: string | null): 
 export default function CommandPost() {
   // ?session= picks the mission; with none, the newest open one is shown. ?area= pins the map to one area.
   const search = useSyncExternalStore(subscribeLocation, () => window.location.search, () => "");
-  const { session, fixedArea } = useMemo(() => {
+  const { session, fixedArea, moment, deepTrack } = useMemo(() => {
     const q = new URLSearchParams(search);
     const a = q.get("area");
-    return { session: sessionCode(q.get("session")), fixedArea: isAreaId(a) ? a : null };
+    const t = Number(q.get("t"));
+    const tr = Number(q.get("track"));
+    return {
+      session: sessionCode(q.get("session")),
+      fixedArea: isAreaId(a) ? a : null,
+      moment: Number.isFinite(t) && t > 0 ? Math.round(t) : null,
+      deepTrack: Number.isInteger(tr) && tr > 0 ? tr : null,
+    };
   }, [search]);
+  /** A shared moment is opened once per URL, not on every poll. */
+  const appliedDeepLink = useRef("");
+  /** When this operator last had this mission open: what the Timeline calls new [273]. */
+  const [seenBefore, setSeenBefore] = useState<number | null>(null);
+
+  // What was new since this operator last opened the mission; kept in this browser only [273].
+  useEffect(() => {
+    if (!session) {
+      queueMicrotask(() => setSeenBefore(null));
+      return;
+    }
+    const key = `cp-seen:${session}`;
+    let previous: number | null = null;
+    try {
+      const raw = localStorage.getItem(key);
+      const n = raw ? Number(raw) : NaN;
+      if (Number.isFinite(n) && n > 0) previous = n;
+      localStorage.setItem(key, String(Date.now()));
+    } catch {
+      // A private window can refuse storage; then there is no "new since".
+    }
+    queueMicrotask(() => setSeenBefore(previous));
+  }, [session]);
 
   // The logs read so far, by session. Moving the replay into another mission of the day shows its
   // log at once; the one on screen is polled for what is new.
@@ -417,6 +483,9 @@ export default function CommandPost() {
   const [follow, setFollow] = useState(true);
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** The feed or timeline row under the pointer, shown as a halo on the map [273]. */
+  const [hoverEvent, setHoverEvent] = useState<FeedItem | null>(null);
+  const hoverMarker = useRef<Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [satellite, setSatellite] = useState(false);
   /** On a narrow screen the lists below the map can fold away, so the map takes the height [262]. */
@@ -446,8 +515,13 @@ export default function CommandPost() {
   /** What the timeline shows, and what to look for in it [271]. */
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
   const [timelineQuery, setTimelineQuery] = useState("");
+  /** The timeline's time window, in minutes; 0 is all of it [273]. */
+  const [timelineWindow, setTimelineWindow] = useState<0 | 5 | 15 | 60>(0);
   /** The keyboard and click help [271]. */
   const [helpOpen, setHelpOpen] = useState(false);
+  /** The screen wake lock, for a tablet at the post [273]. */
+  const [awake, setAwake] = useState(false);
+  const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
   /** The map has taken long to load: with no network it never does, and the page should say so. */
   const [mapSlow, setMapSlow] = useState(false);
   /** Bumped when the map changes size, so following refits (a projector often changes the window). */
@@ -1048,6 +1122,99 @@ export default function CommandPost() {
     },
     [enterMission],
   );
+
+  // A shared link opens the mission at its moment, with the track that was open [273].
+  useEffect(() => {
+    if (moment == null || !session || !stretches.length) return;
+    const key = `${session}:${moment}:${deepTrack ?? ""}`;
+    if (appliedDeepLink.current === key) return;
+    appliedDeepLink.current = key;
+    queueMicrotask(() => {
+      setTimelineOpen(false);
+      setOpenUnit(null);
+      setBarCompact(false);
+      setFollow(false);
+      setPlaying(false);
+      setReplayOpen(true);
+      scrub(moment);
+      if (deepTrack != null) setPicked(deepTrack);
+    });
+  }, [moment, deepTrack, session, stretches.length, scrub]);
+
+  /** Copies a link that opens this replay at this moment, and the picked track [273]. */
+  const copyMoment = async () => {
+    const url = new URL(window.location.href);
+    if (session) url.searchParams.set("session", session);
+    url.searchParams.set("t", String(Math.round(replayT)));
+    if (picked != null) url.searchParams.set("track", String(picked));
+    else url.searchParams.delete("track");
+    if (await copyText(url.toString())) setNotice("Link to this moment copied.");
+    else setNotice("Could not copy the link.");
+  };
+  /** Copies a plain-text handover of the mission, built from the view [273]. */
+  const copySituation = async () => {
+    const text = handover(view, {
+      session,
+      now: effNow > 0 ? effNow : Date.now(),
+      mode: ended != null ? "ended" : mode,
+      format: fmtTime,
+    });
+    if (await copyText(text)) setNotice("Situation copied.");
+    else setNotice("Could not copy the situation.");
+  };
+  /** Keeps a tablet's screen on while the operator is at the radio [273]. */
+  const toggleAwake = async () => {
+    if (awake) {
+      try {
+        await wakeRef.current?.release();
+      } catch {
+        // The browser may have released it already.
+      }
+      wakeRef.current = null;
+      setAwake(false);
+      return;
+    }
+    try {
+      type Sentinel = { release: () => Promise<void>; addEventListener: (type: "release", cb: () => void) => void };
+      const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<Sentinel> } };
+      if (!nav.wakeLock) throw new Error("no wake lock");
+      const sentinel = await nav.wakeLock.request("screen");
+      wakeRef.current = sentinel;
+      sentinel.addEventListener("release", () => setAwake(false));
+      setAwake(true);
+      setNotice("The screen stays awake.");
+    } catch {
+      setNotice("This browser would not keep the screen awake.");
+    }
+  };
+  useEffect(() => () => {
+    void wakeRef.current?.release();
+  }, []);
+
+  // A row under the pointer lights its place on the map, without moving the replay [273].
+  useEffect(() => {
+    if (timelineOpen) return;
+    queueMicrotask(() => setHoverEvent(null));
+  }, [timelineOpen]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const ml = mlRef.current;
+    hoverMarker.current?.remove();
+    hoverMarker.current = null;
+    if (!map || !ml || !mapReady || !hoverEvent?.position) return;
+    const el = document.createElement("div");
+    el.className = styles.hoverHalo;
+    el.setAttribute("aria-hidden", "true");
+    const marker = new ml.Marker({ element: el, anchor: "center" })
+      .setLngLat([hoverEvent.position.lon, hoverEvent.position.lat])
+      .addTo(map);
+    hoverMarker.current = marker;
+    return () => {
+      marker.remove();
+      if (hoverMarker.current === marker) hoverMarker.current = null;
+    };
+  }, [hoverEvent, mapReady]);
 
   const togglePlay = useCallback(() => {
     if (playing) {
@@ -2565,9 +2732,11 @@ export default function CommandPost() {
   /** The events the timeline shows, after its filter and search [271]. */
   const timelineEvents = useMemo(() => {
     const q = timelineQuery.trim().toLowerCase();
+    const cutoff = timelineWindow > 0 ? (mode === "replay" ? replayT : effNow) - timelineWindow * 60_000 : null;
     return [...view.feed]
       .sort((a, b) => b.ts - a.ts)
       .filter((f) => {
+        if (cutoff != null && f.ts < cutoff) return false;
         if (timelineFilter === "reports" && f.kind !== "report") return false;
         if (timelineFilter === "tracks" && f.track == null) return false;
         if (timelineFilter === "units" && f.kind !== "join" && !(f.kind === "report" && f.track == null)) return false;
@@ -2575,7 +2744,9 @@ export default function CommandPost() {
         if (!q) return true;
         return `${f.callsign} ${f.transcript ?? ""} ${f.outcome} ${f.track != null ? `T${f.track}` : ""}`.toLowerCase().includes(q);
       });
-  }, [view.feed, timelineFilter, timelineQuery]);
+  }, [view.feed, timelineFilter, timelineQuery, timelineWindow, mode, replayT, effNow]);
+  const newSince = seenBefore != null && view.feed.some((f) => f.ts > seenBefore) ? seenBefore : null;
+  const newCount = newSince != null ? timelineEvents.filter((f) => f.ts > newSince).length : 0;
 
   return (
     <div
@@ -2675,6 +2846,9 @@ export default function CommandPost() {
           </button>
           <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
             Missions ▾
+          </button>
+          <button type="button" className={styles.ghostBtn} onClick={() => void copySituation()} title="Copy the situation as text">
+            Brief
           </button>
           <button type="button" className={styles.ghostBtn} onClick={() => setHelpOpen(true)} title="Keys and clicks (?)" aria-label="Help and keyboard shortcuts">
             ?
@@ -3004,6 +3178,11 @@ export default function CommandPost() {
               {barZoom ? "Day" : "Mission"}
             </button>
           ) : null}
+          {mode === "replay" ? (
+            <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
+              Link
+            </button>
+          ) : null}
           <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
             {SPEEDS.map((s) => (
               <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
@@ -3142,7 +3321,7 @@ export default function CommandPost() {
               {timelineEvents.length === view.feed.length
                 ? `${view.feed.length} event${view.feed.length === 1 ? "" : "s"}`
                 : `${timelineEvents.length} of ${view.feed.length} events`}{" "}
-              · newest first. Choose one to replay the mission just after it.
+              · newest first{newCount > 0 ? ` · ${newCount} new` : ""}. Choose one to replay the mission just after it.
             </p>
             <div className={styles.timelineFilters} role="group" aria-label="Filter the timeline">
               {TIMELINE_FILTERS.map(([id, label]) => (
@@ -3150,18 +3329,31 @@ export default function CommandPost() {
                   {label}
                 </button>
               ))}
-              {timelineFilter !== "all" || timelineQuery ? (
+              {timelineFilter !== "all" || timelineQuery || timelineWindow > 0 ? (
                 <button
                   type="button"
                   className={styles.timelineClear}
                   onClick={() => {
                     setTimelineFilter("all");
                     setTimelineQuery("");
+                    setTimelineWindow(0);
                   }}
                 >
                   Clear
                 </button>
               ) : null}
+              <select
+                className={styles.timelineWindow}
+                value={timelineWindow}
+                onChange={(e) => setTimelineWindow(Number(e.target.value) as 0 | 5 | 15 | 60)}
+                aria-label="Show events from"
+                title="Show the last minutes, or the whole mission"
+              >
+                <option value={0}>All time</option>
+                <option value={5}>Last 5 min</option>
+                <option value={15}>Last 15 min</option>
+                <option value={60}>Last 60 min</option>
+              </select>
             </div>
             <input
               className={styles.timelineSearch}
@@ -3171,18 +3363,33 @@ export default function CommandPost() {
               aria-label="Search the timeline"
             />
             <ol className={styles.timelinePanelList}>
-              {timelineEvents.map((f) => {
+              {timelineEvents.map((f, i) => {
                 const tag = timelineTag(f);
+                const firstOld =
+                  newSince != null && f.ts <= newSince && (i === 0 || timelineEvents[i - 1].ts > newSince);
                 return (
-                  <li key={f.id}>
-                    <button type="button" onClick={() => jumpTimeline(f)} title={`${fmtTime(f.ts)} · ${f.callsign}`}>
-                      <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
-                      <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
-                      <span className={styles.timelinePanelWho}>{f.callsign}</span>
-                      <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
-                      {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
-                    </button>
-                  </li>
+                  <Fragment key={f.id}>
+                    {firstOld ? (
+                      <li className={styles.timelineNewDivider}>New since {fmtTime(newSince)}</li>
+                    ) : null}
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => jumpTimeline(f)}
+                        onMouseEnter={() => setHoverEvent(f)}
+                        onMouseLeave={() => setHoverEvent(null)}
+                        onFocus={() => setHoverEvent(f)}
+                        onBlur={() => setHoverEvent(null)}
+                        title={`${fmtTime(f.ts)} · ${f.callsign}`}
+                      >
+                        <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
+                        <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
+                        <span className={styles.timelinePanelWho}>{f.callsign}</span>
+                        <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
+                        {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
+                      </button>
+                    </li>
+                  </Fragment>
                 );
               })}
               {view.feed.length === 0 ? (
@@ -3552,6 +3759,10 @@ export default function CommandPost() {
                       className={styles.joinItem}
                       data-plot=""
                       data-selected={selected === f.id || undefined}
+                      onMouseEnter={() => setHoverEvent(f)}
+                      onMouseLeave={() => setHoverEvent(null)}
+                      onFocus={() => setHoverEvent(f)}
+                      onBlur={() => setHoverEvent(null)}
                       onClick={() => {
                         flyToItem(f);
                         if (t && !f.position) flyToTrack(t);
@@ -3571,7 +3782,17 @@ export default function CommandPost() {
               if (f.kind === "join") {
                 return (
                   <li key={f.id}>
-                    <button type="button" className={styles.joinItem} data-selected={selected === f.id || undefined} onClick={() => flyToItem(f)} disabled={!f.position}>
+                    <button
+                      type="button"
+                      className={styles.joinItem}
+                      data-selected={selected === f.id || undefined}
+                      onMouseEnter={() => setHoverEvent(f)}
+                      onMouseLeave={() => setHoverEvent(null)}
+                      onFocus={() => setHoverEvent(f)}
+                      onBlur={() => setHoverEvent(null)}
+                      onClick={() => flyToItem(f)}
+                      disabled={!f.position}
+                    >
                       <span className={styles.itemTime}>{fmtTime(f.ts)}</span>
                       <span className={styles.itemCall}>
                         <span className={styles.itemDot} style={{ background: f.colour }} aria-hidden="true" />
@@ -3613,6 +3834,10 @@ export default function CommandPost() {
                     className={styles.item}
                     data-selected={selected === f.id || undefined}
                     data-open={open || undefined}
+                    onMouseEnter={() => setHoverEvent(f)}
+                    onMouseLeave={() => setHoverEvent(null)}
+                    onFocus={() => setHoverEvent(f)}
+                    onBlur={() => setHoverEvent(null)}
                     onClick={() => (waiting != null ? focusOn(decisions[waiting], waiting) : flyToItem(f))}
                     title={open ? "Open it in Decisions" : undefined}
                   >
@@ -3685,6 +3910,11 @@ export default function CommandPost() {
               Click a track for its <b>Info / History / Recon</b> panel, or a unit in the Units list for the same.
               The map keeps the track number; the panel names what it is.
             </p>
+            <div className={styles.helpActions}>
+              <button type="button" className={styles.ghostBtn} aria-pressed={awake} onClick={() => void toggleAwake()}>
+                {awake ? "Screen stays awake" : "Keep the screen awake"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
