@@ -7,7 +7,7 @@
  * view and a replay are the same code: a replay is the log read up to a moment. What the command
  * post does goes into the same log, through the coordinator, so a replay shows it too.
  */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExpressionSpecification, GeoJSONSource, MapMouseEvent, Map as MLMap, Marker } from "maplibre-gl";
 import { bearingDeg, destination, distanceM } from "@/lib/geo/geo";
 import { shortGrid, type GridRead } from "@/lib/geo/grid";
@@ -31,6 +31,7 @@ import { UnitPanel } from "./UnitTools";
 import { ReportInspector } from "./ReportInspector";
 import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "./CommandPostHeader";
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
+import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel, type TimelineFilter } from "./CommandPostTimeline";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -39,15 +40,6 @@ const POLL_MS = 1000;
 /** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
-/** The timeline's filters: what kind of event to show [271]. */
-const TIMELINE_FILTERS = [
-  ["all", "All"],
-  ["reports", "Reports"],
-  ["tracks", "Tracks"],
-  ["units", "Units"],
-  ["tasks", "Tasks"],
-] as const;
-type TimelineFilter = (typeof TIMELINE_FILTERS)[number][0];
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_LOG: LogEntry[] = [];
 // The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
@@ -2846,13 +2838,6 @@ export default function CommandPost() {
   };
   /** A timeline event: show the mission as it was just after it [271]. */
   const jumpTimeline = (f: FeedItem) => jumpTo(f.ts, f.track);
-  /** The small tag at the end of a timeline row: a track, an open question, or what the command post did. */
-  const timelineTag = (f: FeedItem): string => {
-    if (f.track != null) return `T${f.track}`;
-    if (f.question && !f.expired && !f.answer) return "Question";
-    if (f.kind === "report") return "";
-    return f.kind[0].toUpperCase() + f.kind.slice(1);
-  };
   /** The events the timeline shows, after its filter and search [271]. */
   const timelineEvents = useMemo(() => {
     const q = timelineQuery.trim().toLowerCase();
@@ -2871,6 +2856,29 @@ export default function CommandPost() {
   }, [view.feed, timelineFilter, timelineQuery, timelineWindow, mode, replayT, effNow]);
   const newSince = seenBefore != null && view.feed.some((f) => f.ts > seenBefore) ? seenBefore : null;
   const newCount = newSince != null ? timelineEvents.filter((f) => f.ts > newSince).length : 0;
+
+  const timelineModel: CommandPostTimelineModel = {
+    events: timelineEvents,
+    feedLength: view.feed.length,
+    newSince,
+    newCount,
+    filter: timelineFilter,
+    query: timelineQuery,
+    window: timelineWindow,
+    fmtTime,
+    onClose: () => setTimelineOpen(false),
+    onFilter: setTimelineFilter,
+    onQuery: setTimelineQuery,
+    onWindow: setTimelineWindow,
+    onClear: () => {
+      setTimelineFilter("all");
+      setTimelineQuery("");
+      setTimelineWindow(0);
+    },
+    onJump: jumpTimeline,
+    onInspect: setInspected,
+    onHover: setHoverEvent,
+  };
 
   const replayBarModel: CommandPostReplayBarModel = {
     barShut,
@@ -3302,111 +3310,9 @@ export default function CommandPost() {
         ) : null}
 
         {timelineOpen ? (
-          <div className={styles.timelinePanel} role="dialog" aria-label="Timeline">
-            <div className={styles.timelinePanelHead}>
-              <h2>Timeline</h2>
-              <button autoFocus type="button" className={`${styles.linkBtn} ${styles.drawerClose}`} onClick={() => setTimelineOpen(false)}>
-                Close
-              </button>
-            </div>
-            <p className={styles.timelinePanelHint}>
-              {timelineEvents.length === view.feed.length
-                ? `${view.feed.length} event${view.feed.length === 1 ? "" : "s"}`
-                : `${timelineEvents.length} of ${view.feed.length} events`}{" "}
-              · newest first{newCount > 0 ? ` · ${newCount} new` : ""}. Choose one to replay the mission just after it.
-            </p>
-            <div className={styles.timelineFilters} role="group" aria-label="Filter the timeline">
-              {TIMELINE_FILTERS.map(([id, label]) => (
-                <button key={id} type="button" aria-pressed={timelineFilter === id} onClick={() => setTimelineFilter(id)}>
-                  {label}
-                </button>
-              ))}
-              {timelineFilter !== "all" || timelineQuery || timelineWindow > 0 ? (
-                <button
-                  type="button"
-                  className={styles.timelineClear}
-                  onClick={() => {
-                    setTimelineFilter("all");
-                    setTimelineQuery("");
-                    setTimelineWindow(0);
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-              <select
-                className={styles.timelineWindow}
-                value={timelineWindow}
-                onChange={(e) => setTimelineWindow(Number(e.target.value) as 0 | 5 | 15 | 60)}
-                aria-label="Show events from"
-                title="Show the last minutes, or the whole mission"
-              >
-                <option value={0}>All time</option>
-                <option value={5}>Last 5 min</option>
-                <option value={15}>Last 15 min</option>
-                <option value={60}>Last 60 min</option>
-              </select>
-            </div>
-            <input
-              className={styles.timelineSearch}
-              value={timelineQuery}
-              onChange={(e) => setTimelineQuery(e.target.value)}
-              placeholder="Callsign, words, track…"
-              aria-label="Search the timeline"
-            />
-            <ol className={styles.timelinePanelList}>
-              {timelineEvents.map((f, i) => {
-                const tag = timelineTag(f);
-                const firstOld =
-                  newSince != null && f.ts <= newSince && (i === 0 || timelineEvents[i - 1].ts > newSince);
-                const hour = new Date(f.ts).getHours();
-                const hourChanged = i === 0 || new Date(timelineEvents[i - 1].ts).getHours() !== hour;
-                return (
-                  <Fragment key={f.id}>
-                    {hourChanged ? (
-                      <li className={styles.timelineHour} aria-hidden="true">
-                        {String(hour).padStart(2, "0")}:00
-                      </li>
-                    ) : null}
-                    {firstOld ? (
-                      <li className={styles.timelineNewDivider}>New since {fmtTime(newSince)}</li>
-                    ) : null}
-                    <li className={styles.timelineRow}>
-                      <button
-                        type="button"
-                        onClick={() => jumpTimeline(f)}
-                        onMouseEnter={() => setHoverEvent(f)}
-                        onMouseLeave={() => setHoverEvent(null)}
-                        onFocus={() => setHoverEvent(f)}
-                        onBlur={() => setHoverEvent(null)}
-                        title={`${fmtTime(f.ts)} · ${f.callsign}`}
-                      >
-                        <span className={styles.timelinePanelDot} style={{ background: f.colour }} aria-hidden="true" />
-                        <span className={styles.timelinePanelTime}>{fmtTime(f.ts)}</span>
-                        <span className={styles.timelinePanelWho}>{f.callsign}</span>
-                        <span className={styles.timelinePanelText}>{f.transcript || f.outcome}</span>
-                        {tag ? <span className={styles.timelinePanelTag}>{tag}</span> : null}
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.timelineInspect}
-                        onClick={() => setInspected(f)}
-                        aria-label={`Inspect the event at ${fmtTime(f.ts)} from ${f.callsign}`}
-                        title="What the app heard, and how it placed it"
-                      >
-                        i
-                      </button>
-                    </li>
-                  </Fragment>
-                );
-              })}
-              {view.feed.length === 0 ? (
-                <li className={styles.timelinePanelEmpty}>No events yet.</li>
-              ) : timelineEvents.length === 0 ? (
-                <li className={styles.timelinePanelEmpty}>No event matches.</li>
-              ) : null}
-            </ol>
-          </div>
+          <CommandPostTimelineProvider value={timelineModel}>
+            <CommandPostTimeline />
+          </CommandPostTimelineProvider>
         ) : null}
       </main>
 
