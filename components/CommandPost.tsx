@@ -255,7 +255,9 @@ const lanesStore = {
     try {
       if (value == null) window.localStorage.removeItem(key);
       else window.localStorage.setItem(key, value);
-    } catch {}
+    } catch {
+      // A private window can refuse storage; the order still works in this session.
+    }
     window.dispatchEvent(new Event(LANES_EVENT));
   },
   subscribe(cb: () => void) {
@@ -440,6 +442,10 @@ export default function CommandPost() {
   const [noMission, setNoMission] = useState(false);
   const [stored, setStored] = useState<boolean | null>(null);
   const [lastOk, setLastOk] = useState(0);
+  /** A read that failed, in words the operator can act on; null once one succeeds. */
+  const [netError, setNetError] = useState<string | null>(null);
+  /** Bumped by Retry, to run the one-shot reads again. */
+  const [retry, setRetry] = useState(0);
   const [now, setNow] = useState(0);
   const otherMissions = session === DEMO_SESSION ? [] : missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
   const [follow, setFollow] = useState(true);
@@ -494,6 +500,8 @@ export default function CommandPost() {
   const [find, setFind] = useState("");
   const [findAt, setFindAt] = useState(0);
   const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
+  /** The place search's own failure: a toast would vanish while the operator is still typing. */
+  const [placeError, setPlaceError] = useState<string | null>(null);
   /** The mission's events, newest first, to jump back to a moment [271]. */
   /** The keyboard and click help [271]. */
   const [helpOpen, setHelpOpen] = useState(false);
@@ -575,6 +583,13 @@ export default function CommandPost() {
   /** What the replay's timer and the bar's handlers read between renders. */
   /** Reads the log at once, after the command post changed it, rather than at the next poll. */
   const pollNow = useRef<() => void>(() => {});
+  /** Retry the reads after a coordinator failure, without a page reload [276]. */
+  const retryAll = useCallback(() => {
+    setNetError(null);
+    setPlaceError(null);
+    setRetry((n) => n + 1);
+    pollNow.current();
+  }, [setNetError, setPlaceError, setRetry]);
   /** "Go to grid" moves the map away from the units: it stays there until "Follow units" [245]. */
   const stopFollowing = useCallback(() => setFollow(false), []);
 
@@ -630,12 +645,18 @@ export default function CommandPost() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/cp/login", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((said: { required?: boolean; signedIn?: boolean } | null) => {
+      .then((r) => {
+        if (!r.ok) throw new Error(`The PIN check answered ${r.status}.`);
+        return r.json() as Promise<{ required?: boolean; signedIn?: boolean }>;
+      })
+      .then((said) => {
         if (!cancelled) setAuth(said?.required && !said.signedIn ? "locked" : "open");
       })
       .catch(() => {
-        if (!cancelled) setAuth("open");
+        if (!cancelled) {
+          setAuth("open");
+          setNetError("The coordinator did not answer the PIN check.");
+        }
       });
     return () => {
       cancelled = true;
@@ -711,9 +732,11 @@ export default function CommandPost() {
     const look = async () => {
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
-        if (!res.ok || stop) return;
+        if (stop) return;
+        if (!res.ok) throw new Error(`The mission list answered ${res.status}.`);
         const data = (await res.json()) as MissionListReply;
         if (stop) return;
+        setNetError(null);
         setStored(data.stored);
         setLastOk(Date.now());
         setMissions(data.missions);
@@ -725,7 +748,7 @@ export default function CommandPost() {
         }
         first = false;
       } catch {
-        // The connection light shows it.
+        if (!stop) setNetError("The coordinator did not answer the mission list.");
       }
     };
     look();
@@ -734,7 +757,7 @@ export default function CommandPost() {
       stop = true;
       clearInterval(id);
     };
-  }, [session]);
+  }, [session, retry]);
 
   // With a mission on screen, the list is still read: the replay bar shows the day's other missions.
   // It does not start over when the replay moves into another mission.
@@ -745,11 +768,12 @@ export default function CommandPost() {
     const look = async () => {
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
-        if (!res.ok || stop) return;
+        if (stop) return;
+        if (!res.ok) throw new Error(`The mission list answered ${res.status}.`);
         const data = (await res.json()) as MissionListReply;
         if (!stop) setMissions(data.missions);
       } catch {
-        // The bar keeps the list it has.
+        if (!stop) setNetError("The coordinator did not answer the mission list.");
       }
     };
     look();
@@ -758,7 +782,7 @@ export default function CommandPost() {
       stop = true;
       clearInterval(id);
     };
-  }, [hasSession]);
+  }, [hasSession, retry]);
 
   // ---------- the log ----------
   useEffect(() => {
@@ -780,6 +804,7 @@ export default function CommandPost() {
         if (!res.ok) throw new Error(`log answered ${res.status}`);
         const data = (await res.json()) as SessionLogReply;
         if (stop) return;
+        setNetError(null);
         setStored(data.stored);
         setLastOk(Date.now());
         if (data.total < countRef.current) {
@@ -794,7 +819,7 @@ export default function CommandPost() {
         }
         loaded = true;
       } catch {
-        // The connection light shows it; the next poll tries again.
+        if (!stop) setNetError("The coordinator did not answer the mission's log.");
       } finally {
         busy = false;
       }
@@ -919,16 +944,19 @@ export default function CommandPost() {
     const id = setTimeout(async () => {
       try {
         const r = await fetch(`/api/places?area=${area}&q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
-        if (!r.ok) return;
+        if (!r.ok) throw new Error(`The place search answered ${r.status}.`);
         const said = (await r.json()) as { places?: StartPoint[] };
+        setPlaceError(null);
         setPlaceResults(said.places ?? []);
-      } catch {}
+      } catch {
+        if (!ctrl.signal.aborted) setPlaceError("The coordinator did not answer the place search.");
+      }
     }, 180);
     return () => {
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [find, findOpen, area]);
+  }, [find, findOpen, area, retry]);
   // From when it was last heard, or placed by hand if that is later [243].
   const isSilent = useCallback((u: UnitState) => effNow > 0 && effNow - knownAt(u) > FADE_AFTER_MS, [effNow]);
   /** A track nobody has reported for a while: its place is an old sighting, and the page says so. */
@@ -1094,15 +1122,20 @@ export default function CommandPost() {
       if (code === session || logsRef.current[code] || fetching.current.has(code)) continue;
       fetching.current.add(code);
       fetch(`/api/sessions/${encodeURIComponent(code)}`, { cache: "no-store" })
-        .then((res) => (res.ok ? (res.json() as Promise<SessionLogReply>) : null))
+        .then((res) => {
+          if (!res.ok) throw new Error(`The mission log answered ${res.status}.`);
+          return res.json() as Promise<SessionLogReply>;
+        })
         .then((data) => {
           // The poll of the mission on screen may have read it first; that copy is kept.
-          if (data) setLogs((all) => (all[code] ? all : { ...all, [code]: data.entries }));
+          setLogs((all) => (all[code] ? all : { ...all, [code]: data.entries }));
         })
-        .catch(() => {})
+        .catch(() => {
+          setNotice("The coordinator did not answer the day's other missions.");
+        })
         .finally(() => fetching.current.delete(code));
     }
-  }, [dayCodes, session]);
+  }, [dayCodes, session, retry]);
 
   // A short card for a first visit with no mission on screen: on the public site, the way in.
   useEffect(() => {
@@ -1296,7 +1329,7 @@ export default function CommandPost() {
     drawUnits.current = draw;
     draw(performance.now());
     if (sliding) runSlides();
-  }, [view, isSilent, mapReady, motion, sceneKey, effNow, maxStepMs, mode, runSlides]);
+  }, [view, isSilent, mapReady, motion, sceneKey, effNow, maxStepMs, mode, runSlides, mapRef]);
 
   // Draw every track: its symbol and label, its circle, where it was seen before, and the line of
   // sight from the unit that reported it.
@@ -1534,7 +1567,7 @@ export default function CommandPost() {
       // Not when the page is closing: the map is gone by then.
       if (mapRef.current === map) (map.getSource("arrow-flow") as GeoJSONSource | undefined)?.setData(EMPTY_FC);
     };
-  }, [mapReady, motion, flowTracks, flowUnits]);
+  }, [mapReady, motion, flowTracks, flowUnits, mapRef]);
 
   // On a projector or a wall screen, the map's labels and markers grow with the panels.
   useEffect(() => {
@@ -1544,7 +1577,7 @@ export default function CommandPost() {
     map.setLayoutProperty("pos-label", "text-size", Math.round(15 * k));
     map.setLayoutProperty("start-label", "text-size", Math.round(13 * k));
     map.setPaintProperty("pos", "circle-radius", Math.round(9 * k));
-  }, [mapReady, mapSize]);
+  }, [mapReady, mapSize, mapRef]);
 
   // The start point, shown while the mission is the one on screen.
   const start = mission?.start ?? null;
@@ -1559,7 +1592,7 @@ export default function CommandPost() {
         ]
       : [];
     (map.getSource("start") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-  }, [start, mapReady]);
+  }, [start, mapReady, mapRef]);
 
   /**
    * A decision's points on the map: the unit and its choices, the unit alone, where a held report
@@ -1687,7 +1720,7 @@ export default function CommandPost() {
   useEffect(() => {
     const map = mapRef.current;
     if (focused && map && mapReady) placeDeck(map, pointsOf(focused), focused.id);
-  }, [focused, mapReady, placeDeck, pointsOf]);
+  }, [focused, mapReady, placeDeck, pointsOf, mapRef]);
 
   /** The operator opens a decision: by a click, the arrow keys, or its line in the feed or the units. */
   const focusOn = useCallback(
@@ -1846,7 +1879,7 @@ export default function CommandPost() {
       const padLeft = box.clientWidth > 600 ? Math.min(432, box.clientWidth - 120) : 0;
       map.flyTo({ center: [u.position.lon, u.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700, padding: { left: padLeft, top: 0, right: 0, bottom: 0 } });
     },
-    [area],
+    [area, mapRef],
   );
 
   const flyToTrack = useCallback(
@@ -1863,7 +1896,7 @@ export default function CommandPost() {
       const padLeft = box.clientWidth > 600 ? Math.min(432, box.clientWidth - 120) : 0;
       map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700, padding: { left: padLeft, top: 0, right: 0, bottom: 0 } });
     },
-    [area, setPicked, setTimelineOpen],
+    [area, setPicked, setTimelineOpen, mapRef],
   );
 
   // ---------- the command post's own changes ----------
@@ -1999,7 +2032,7 @@ export default function CommandPost() {
           }
           setTool((t) => (t && t.kind !== "edit" && t.at?.lat === lat && t.at.lon === lon ? { ...t, at: { ...t.at, label: data.label ?? null } } : t));
         } catch {
-          // The card says the point is being named; saving still works.
+          setToolError("The coordinator did not answer while naming that point.");
         }
       })();
     },
@@ -2012,7 +2045,7 @@ export default function CommandPost() {
     setTool((t) => (t && t.kind !== "edit" ? { ...t, at: { lat: p.lat, lon: p.lon, place: p.id, label: p.name } } : t));
     const map = mapRef.current;
     map?.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 16), duration: 500 });
-  }, []);
+  }, [mapRef]);
 
   /**
    * Puts it in the cell of a grid typed into the place search [245]: at the cell's centre, and no
@@ -2026,7 +2059,7 @@ export default function CommandPost() {
       const map = mapRef.current;
       map?.easeTo({ center: [g.pin.lon, g.pin.lat], zoom: Math.max(map.getZoom(), 16), duration: 500 });
     },
-    [putDraft],
+    [putDraft, mapRef],
   );
 
   // A click on the map: where the track goes while placing or moving; otherwise it picks a track.
@@ -2065,7 +2098,7 @@ export default function CommandPost() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     map.getCanvas().style.cursor = activeTool && activeTool.kind !== "edit" ? "crosshair" : "";
-  }, [activeTool, mapReady]);
+  }, [activeTool, mapReady, mapRef]);
 
   /** What the track being placed or moved looks like, where it would go, and how sure. */
   const draft = activeTool && activeTool.kind !== "edit" ? activeTool.at : null;
@@ -2091,7 +2124,7 @@ export default function CommandPost() {
       if (movingFrom) features.push({ type: "Feature", properties: { color: draftColour }, geometry: { type: "LineString", coordinates: [[movingFrom.lon, movingFrom.lat], [draft.lon, draft.lat]] } });
     }
     (map.getSource("draft") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-  }, [draft, draftRadius, draftColour, movingFrom, mapReady]);
+  }, [draft, draftRadius, draftColour, movingFrom, mapReady, mapRef]);
 
   // The draft's symbol: a marker that can be dragged to where the track is. A unit's is its dot.
   const draftCode = draft && draftLooks ? trackSymbolCode(draftLooks.affiliation, draftLooks.kind) : "";
@@ -2851,9 +2884,12 @@ export default function CommandPost() {
               {mapSlow ? "The map has not loaded yet. Units and reports still show in the lists." : "Loading the map…"}
             </div>
           ) : null}
-          {lost ? (
+          {netError || lost ? (
             <div className={styles.lostBanner} role="alert">
-              No answer from the coordinator since {fmtTime(lastOk)}. The map may be out of date.
+              {netError ?? `No answer from the coordinator since ${fmtTime(lastOk)}. The map may be out of date.`}{" "}
+              <button type="button" className={styles.linkBtn} onClick={retryAll}>
+                Retry
+              </button>
             </div>
           ) : null}
           {notice ? (
@@ -3539,6 +3575,7 @@ export default function CommandPost() {
               onChange={(e) => {
                 setFind(e.target.value);
                 setFindAt(0);
+                setPlaceError(null);
                 if (e.target.value.trim().length < 2) setPlaceResults([]);
               }}
               onKeyDown={(e) => {
@@ -3556,6 +3593,14 @@ export default function CommandPost() {
               placeholder="Call sign, track, drone, place…"
               aria-label="Find a unit, a track or a place"
             />
+            {placeError ? (
+              <p className={styles.findHint} role="alert">
+                {placeError}{" "}
+                <button type="button" className={styles.linkBtn} onClick={retryAll}>
+                  Retry
+                </button>
+              </p>
+            ) : null}
             {find.trim() ? (
               findResults.length ? (
                 <ul className={styles.findList}>

@@ -6,7 +6,7 @@
  * mounts, reads the demo log, and draws its units and tracks without throwing.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { demoLog } from "@/lib/reports/demo";
 
@@ -136,5 +136,29 @@ describe("the command post", () => {
     expect(screen.getAllByText("CHARLIE 3").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Track 1/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reports").length).toBeGreaterThan(0);
+  });
+
+  it("shows a coordinator failure and retries without a reload", async () => {
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/cp/login") return json({ required: false, signedIn: true });
+      if (url === "/api/sessions") return json({ stored: true, missions: [] });
+      if (url.startsWith("/api/sessions/demo?")) {
+        if (fail) return json({ error: "down" }, 503);
+        const after = Number(new URL(`http://local${url}`).searchParams.get("after") ?? 0);
+        return json(demoLog(after, now));
+      }
+      return json({}, 404);
+    }));
+
+    render(<CommandPost />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The coordinator did not answer the mission's log.");
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByText("Vincennes · demo")).toBeInTheDocument();
+    });
   });
 });
