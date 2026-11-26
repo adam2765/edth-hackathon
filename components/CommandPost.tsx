@@ -24,7 +24,6 @@ import { COMMAND_POST, DEMO_SESSION, sessionCode, type FixReply, type HeldReply,
 import { centred, declutter, outside, textBox, type Mark, type Rect } from "./declutter";
 import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
-import MapTools from "./MapTools";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, type TaskBody } from "./ReconTools";
 import { UnitPanel } from "./UnitTools";
@@ -32,6 +31,7 @@ import { ReportInspector } from "./ReportInspector";
 import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "./CommandPostHeader";
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
 import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel, type TimelineFilter } from "./CommandPostTimeline";
+import { CommandPostMapShell } from "./CommandPostMapShell";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -2981,24 +2981,18 @@ export default function CommandPost() {
         <CommandPostHeader />
       </CommandPostHeaderProvider>
 
-      <main className={styles.mapCol} data-drawer={timelineOpen ? "" : undefined} data-panel={(pickedTrack || openedUnit) && !activeTool ? "" : undefined}>
-        <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
-        {/* The grid's lines, a ruler and "go to grid", behind one button, and the grid under the
-            pointer at the map's edge [232, 245]. A click here already places or picks, so it copies
-            nothing; while the ruler is on, a click only measures. Going to a grid stops following. */}
-        <MapTools
-          mapRef={mapRef}
-          ready={mapReady}
-          centre={AREAS[area].centre}
-          below="start-fill"
-          top="calc(90px / var(--z))"
-          right="calc(60px / var(--z))"
-          covered={coveredBelow}
-          onMeasuring={setMeasuring}
-          scale={mapSize ? screenScale() : 1}
-          folded
-          onGo={stopFollowing}
-        />
+      <CommandPostMapShell
+        mapEl={mapEl}
+        mapRef={mapRef}
+        ready={mapReady}
+        centre={AREAS[area].centre}
+        covered={coveredBelow}
+        scale={mapSize ? screenScale() : 1}
+        timelineOpen={timelineOpen}
+        panelOpen={!!((pickedTrack || openedUnit) && !activeTool)}
+        onMeasuring={setMeasuring}
+        onGo={stopFollowing}
+      >
         {/* Top left of the map: Satellite and "Follow units" in one row, then the palette or the
             picked track's card, so the map keeps its height. */}
         <div className={styles.dock}>
@@ -3314,7 +3308,7 @@ export default function CommandPost() {
             <CommandPostTimeline />
           </CommandPostTimelineProvider>
         ) : null}
-      </main>
+      </CommandPostMapShell>
 
       {/* On a phone the lists take turns under the map [258]. The box's top edge drags the whole box
           taller or shorter with a mouse or a finger, and the chevron shuts it entirely [262, 263]. */}
