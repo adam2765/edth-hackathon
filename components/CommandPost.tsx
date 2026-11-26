@@ -29,9 +29,10 @@ import { UnitPanel } from "./UnitTools";
 import { ReportInspector } from "./ReportInspector";
 import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "./CommandPostHeader";
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
-import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel, type TimelineFilter } from "./CommandPostTimeline";
+import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel } from "./CommandPostTimeline";
 import { CommandPostMapShell } from "./CommandPostMapShell";
 import { useReplay } from "./useReplay";
+import { useTimeline } from "./useTimeline";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -427,28 +428,6 @@ export default function CommandPost() {
       deepTrack: Number.isInteger(tr) && tr > 0 ? tr : null,
     };
   }, [search]);
-  /** When this operator last had this mission open: what the Timeline calls new [273]. */
-  const [seenBefore, setSeenBefore] = useState<number | null>(null);
-
-  // What was new since this operator last opened the mission; kept in this browser only [273].
-  useEffect(() => {
-    if (!session) {
-      queueMicrotask(() => setSeenBefore(null));
-      return;
-    }
-    const key = `cp-seen:${session}`;
-    let previous: number | null = null;
-    try {
-      const raw = localStorage.getItem(key);
-      const n = raw ? Number(raw) : NaN;
-      if (Number.isFinite(n) && n > 0) previous = n;
-      localStorage.setItem(key, String(Date.now()));
-    } catch {
-      // A private window can refuse storage; then there is no "new since".
-    }
-    queueMicrotask(() => setSeenBefore(previous));
-  }, [session]);
-
   // The logs read so far, by session. Moving the replay into another mission of the day shows its
   // log at once; the one on screen is polled for what is new.
   const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
@@ -499,12 +478,6 @@ export default function CommandPost() {
   const [findAt, setFindAt] = useState(0);
   const [placeResults, setPlaceResults] = useState<StartPoint[]>([]);
   /** The mission's events, newest first, to jump back to a moment [271]. */
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  /** What the timeline shows, and what to look for in it [271]. */
-  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
-  const [timelineQuery, setTimelineQuery] = useState("");
-  /** The timeline's time window, in minutes; 0 is all of it [273]. */
-  const [timelineWindow, setTimelineWindow] = useState<0 | 5 | 15 | 60>(0);
   /** The keyboard and click help [271]. */
   const [helpOpen, setHelpOpen] = useState(false);
   /** The header's More menu: Brief, Help and Stop mission [274]. */
@@ -925,6 +898,20 @@ export default function CommandPost() {
     setNoMission(code == null);
     showSession(code);
   }, [goLive]);
+
+  const {
+    timelineOpen,
+    setTimelineOpen,
+    timelineFilter,
+    setTimelineFilter,
+    timelineQuery,
+    setTimelineQuery,
+    timelineWindow,
+    setTimelineWindow,
+    timelineEvents,
+    newSince,
+    newCount,
+  } = useTimeline({ session, feed: view.feed, mode, replayT, effNow });
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
   // Place names from the area's gazetteer, beside the call signs and tracks [268].
   useEffect(() => {
@@ -2091,7 +2078,7 @@ export default function CommandPost() {
       const padLeft = box.clientWidth > 600 ? Math.min(432, box.clientWidth - 120) : 0;
       map.flyTo({ center: [t.position.lon, t.position.lat], zoom: Math.max(map.getZoom(), 16), duration: 700, padding: { left: padLeft, top: 0, right: 0, bottom: 0 } });
     },
-    [area, setPicked],
+    [area, setPicked, setTimelineOpen],
   );
 
   // ---------- the command post's own changes ----------
@@ -2659,7 +2646,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, findOpen, helpOpen, moreOpen, welcome, closeWelcome, inspected]);
+  }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, setTimelineOpen, findOpen, helpOpen, moreOpen, welcome, closeWelcome, inspected]);
 
   // ---------- mission actions ----------
   const endMission = useCallback(async () => {
@@ -2772,24 +2759,6 @@ export default function CommandPost() {
   };
   /** A timeline event: show the mission as it was just after it [271]. */
   const jumpTimeline = (f: FeedItem) => jumpTo(f.ts, f.track);
-  /** The events the timeline shows, after its filter and search [271]. */
-  const timelineEvents = useMemo(() => {
-    const q = timelineQuery.trim().toLowerCase();
-    const cutoff = timelineWindow > 0 ? (mode === "replay" ? replayT : effNow) - timelineWindow * 60_000 : null;
-    return [...view.feed]
-      .sort((a, b) => b.ts - a.ts)
-      .filter((f) => {
-        if (cutoff != null && f.ts < cutoff) return false;
-        if (timelineFilter === "reports" && f.kind !== "report") return false;
-        if (timelineFilter === "tracks" && f.track == null) return false;
-        if (timelineFilter === "units" && f.kind !== "join" && !(f.kind === "report" && f.track == null)) return false;
-        if (timelineFilter === "tasks" && f.kind !== "task" && f.kind !== "request" && f.kind !== "reply") return false;
-        if (!q) return true;
-        return `${f.callsign} ${f.transcript ?? ""} ${f.outcome} ${f.track != null ? `T${f.track}` : ""}`.toLowerCase().includes(q);
-      });
-  }, [view.feed, timelineFilter, timelineQuery, timelineWindow, mode, replayT, effNow]);
-  const newSince = seenBefore != null && view.feed.some((f) => f.ts > seenBefore) ? seenBefore : null;
-  const newCount = newSince != null ? timelineEvents.filter((f) => f.ts > newSince).length : 0;
 
   const timelineModel: CommandPostTimelineModel = {
     events: timelineEvents,
