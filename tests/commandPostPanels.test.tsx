@@ -8,11 +8,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import type { TrackState, UnitState } from "@/lib/reports/fold";
+import type { FeedItem, MissionState, TrackState, UnitState } from "@/lib/reports/fold";
 import type { Stretch } from "@/lib/reports/timeline";
 import { TrackCard } from "@/components/TrackTools";
 import { UnitPanel } from "@/components/UnitTools";
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "@/components/CommandPostReplayBar";
+import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "@/components/CommandPostHeader";
+import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel } from "@/components/CommandPostTimeline";
 
 afterEach(cleanup);
 
@@ -206,5 +208,150 @@ describe("the replay bar", () => {
     expect(model.onCopy).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Live" }));
     expect(model.onLive).toHaveBeenCalledOnce();
+  });
+});
+
+function mission(over: Partial<MissionState> = {}): MissionState {
+  return { name: "Vincennes · demo", area: "vincennes", start: null, opened: 1000, ended: null, ...over };
+}
+
+function headerModel(over: Partial<CommandPostHeaderModel> = {}): CommandPostHeaderModel {
+  return {
+    mission: mission(),
+    session: "demo",
+    ended: null,
+    mode: "live",
+    lost: false,
+    connected: true,
+    stored: true,
+    demo: true,
+    canEdit: false,
+    placing: false,
+    actionError: null,
+    panelOpen: false,
+    moreOpen: false,
+    confirmEnd: false,
+    now: 5000,
+    defaultArea: "vincennes",
+    onStartPlace: vi.fn(),
+    onOpenMissions: vi.fn(),
+    onToggleMissions: vi.fn(),
+    onOpenTimeline: vi.fn(),
+    onOpenFind: vi.fn(),
+    onToggleMore: vi.fn(),
+    onCloseMore: vi.fn(),
+    onCopySituation: vi.fn(),
+    onOpenHelp: vi.fn(),
+    onStopMission: vi.fn(),
+    onConfirmStop: vi.fn(),
+    onCancelStop: vi.fn(),
+    onCloseMissions: vi.fn(),
+    onPickMission: vi.fn(),
+    fmtWhen: (ts) => `t${ts}`,
+    ...over,
+  };
+}
+
+const header = (over: Partial<CommandPostHeaderModel> = {}) => {
+  const model = headerModel(over);
+  render(
+    <CommandPostHeaderProvider value={model}>
+      <CommandPostHeader />
+    </CommandPostHeaderProvider>,
+  );
+  return model;
+};
+
+describe("the header", () => {
+  it("shows the mission, hides Place track in the demo, and runs the More menu", () => {
+    const model = header({ moreOpen: true });
+    expect(screen.getByText("Vincennes · demo")).toBeInTheDocument();
+    expect(screen.getByText("Demo · read-only")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Place track" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy situation" }));
+    expect(model.onCloseMore).toHaveBeenCalledOnce();
+    expect(model.onCopySituation).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menuitem", { name: "Stop mission" })).not.toBeInTheDocument();
+  });
+
+  it("offers Place track and Stop mission on a live mission that can be edited", () => {
+    const model = header({ demo: false, canEdit: true, moreOpen: true });
+    expect(screen.getByRole("button", { name: "Place track" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop mission" }));
+    expect(model.onConfirmStop).toHaveBeenCalledOnce();
+  });
+});
+
+function report(id: string, ts: number, text: string): FeedItem {
+  return {
+    kind: "report",
+    id,
+    ts,
+    callsign: "ALPHA 1",
+    colour: "#ff6b2c",
+    area: "vincennes",
+    transcript: text,
+    status: "resolved",
+    outcome: "Placed at the town hall",
+    position: null,
+    candidates: [],
+    answer: null,
+    expired: false,
+    track: null,
+  };
+}
+
+function timelineModel(over: Partial<CommandPostTimelineModel> = {}): CommandPostTimelineModel {
+  const events = [report("b", 2000, "newer"), report("a", 1000, "hello")];
+  return {
+    events,
+    feedLength: events.length,
+    newSince: null,
+    newCount: 0,
+    filter: "all",
+    query: "",
+    window: 0,
+    fmtTime: (ts) => `t${ts}`,
+    onClose: vi.fn(),
+    onFilter: vi.fn(),
+    onQuery: vi.fn(),
+    onWindow: vi.fn(),
+    onClear: vi.fn(),
+    onJump: vi.fn(),
+    onInspect: vi.fn(),
+    onHover: vi.fn(),
+    ...over,
+  };
+}
+
+const timeline = (over: Partial<CommandPostTimelineModel> = {}) => {
+  const model = timelineModel(over);
+  render(
+    <CommandPostTimelineProvider value={model}>
+      <CommandPostTimeline />
+    </CommandPostTimelineProvider>,
+  );
+  return model;
+};
+
+describe("the timeline", () => {
+  it("renders the rows, filters, search and inspect", () => {
+    const model = timeline();
+    expect(screen.getByText(/2 events/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reports" }));
+    expect(model.onFilter).toHaveBeenCalledWith("reports");
+    fireEvent.click(screen.getByText("hello"));
+    expect(model.onJump).toHaveBeenCalledWith(model.events[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect the event at t1000 from ALPHA 1" }));
+    expect(model.onInspect).toHaveBeenCalledWith(model.events[1]);
+    fireEvent.change(screen.getByLabelText("Search the timeline"), { target: { value: "church" } });
+    expect(model.onQuery).toHaveBeenCalledWith("church");
+    fireEvent.change(screen.getByLabelText("Show events from"), { target: { value: "5" } });
+    expect(model.onWindow).toHaveBeenCalledWith(5);
+  });
+
+  it("says when there are no events", () => {
+    timeline({ events: [], feedLength: 0 });
+    expect(screen.getByText("No events yet.")).toBeInTheDocument();
   });
 });
