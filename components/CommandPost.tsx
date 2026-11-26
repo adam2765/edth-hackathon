@@ -701,6 +701,7 @@ export default function CommandPost() {
     if (!m) return 0;
     const tops = [replayEl.current, mapEl.current?.querySelector(".maplibregl-ctrl-attrib")].map((el) => el?.getBoundingClientRect().top ?? m.bottom);
     return Math.max(0, m.bottom - Math.min(...tops));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, []);
   /** The track symbol being placed or moved: a marker that can be dragged. */
   const draftMarker = useRef<Marker | null>(null);
@@ -1231,6 +1232,7 @@ export default function CommandPost() {
       marker.remove();
       if (hoverMarker.current === marker) hoverMarker.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, [hoverEvent, mapReady]);
 
   // The symbol library is only needed once a track is reported, so it loads beside the map.
@@ -1536,6 +1538,7 @@ export default function CommandPost() {
       setTimeout(() => ring.remove(), 2200);
     }
     onMapBefore.current = onMap;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, [view, isOld, isSilent, effNow, colours, symbols, mapReady, mapSize, zoomKey, picked, motion, sceneKey, maxStepMs, mode, runSlides]);
 
   // The flow [238]: while a fresh report gave a way of moving and the clock runs, the bands on the
@@ -1566,6 +1569,7 @@ export default function CommandPost() {
     return () => {
       clearInterval(id);
       // Not when the page is closing: the map is gone by then.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
       if (mapRef.current === map) (map.getSource("arrow-flow") as GeoJSONSource | undefined)?.setData(EMPTY_FC);
     };
   }, [mapReady, motion, flowTracks, flowUnits, mapRef]);
@@ -1661,6 +1665,7 @@ export default function CommandPost() {
       setDeckSide(side);
       return side;
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
     [deckPin, dockBusy, coveredBelow],
   );
 
@@ -1696,6 +1701,7 @@ export default function CommandPost() {
       leaveRoom(pad, "top", "bottom", box.height, 120);
       return pad;
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
     [deckPin, placeDeck],
   );
 
@@ -1713,6 +1719,7 @@ export default function CommandPost() {
       // One point is shown at street level, or closer if the operator was closer already.
       map.fitBounds(b, { padding, maxZoom: pts.length === 1 ? Math.max(map.getZoom(), 16) : 16.5, duration: 600 });
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
     [pointsOf, clearOfDeck],
   );
 
@@ -1809,6 +1816,7 @@ export default function CommandPost() {
       if (mine >= 0) marker.getElement().style.zIndex = "2";
       candMarkers.current.push(marker);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, [pendings, trackQuestions, mapReady, focusedQuestion, pickedChoice, canEdit, pick]);
 
   // Follow: keep every unit and track in this area (and any open choices) in view as reports come in.
@@ -1867,6 +1875,7 @@ export default function CommandPost() {
         map.fitBounds(b, { padding: MAP_PADDING, maxZoom: 16.5, duration: 700 });
       }
     },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
     [area],
   );
 
@@ -2164,6 +2173,7 @@ export default function CommandPost() {
       m.remove();
       draftMarker.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, [draft, draftCode, draftDot, draftRadius, draftColour, symbols, mapReady, putDraft]);
 
   /** Sends a change to the coordinator. The log is read again at once, so the map shows it. */
@@ -2465,6 +2475,7 @@ export default function CommandPost() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mapEl, mapRef and mlRef are stable refs from useMap; .current is read, not rendered.
   }, [activeTool, picking, unpick, canEdit, startPlace, decisions, focusedAt, focused, focusOn, pick, confirmPick, view.roster, timelineOpen, setTimelineOpen, findOpen, helpOpen, moreOpen, welcome, closeWelcome, inspected]);
 
   // ---------- mission actions ----------
