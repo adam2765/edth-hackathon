@@ -31,6 +31,7 @@ import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderMod
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
 import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel } from "./CommandPostTimeline";
 import { CommandPostMapShell } from "./CommandPostMapShell";
+import { satelliteCaption } from "@/lib/map/satellite";
 import { useReplay } from "./useReplay";
 import { useTimeline } from "./useTimeline";
 import { EMPTY_FC, useMap } from "./useMap";
@@ -2733,6 +2734,11 @@ export default function CommandPost() {
               </button>
             ) : null}
           </div>
+          {satellite ? (
+            <p className={styles.satelliteNote} role="status">
+              {satelliteCaption(area === "vincennes")}
+            </p>
+          ) : null}
           {activeTool?.kind === "place" ? (
             <TrackPalette
               title={`Place Track ${nextN}`}

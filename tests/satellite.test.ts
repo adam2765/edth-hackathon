@@ -7,6 +7,7 @@ import {
   SATELLITE_BELOW,
   SATELLITE_LAYERS,
   SATELLITE_PATH,
+  satelliteCaption,
   savedTileTemplate,
   setSatelliteVisible,
 } from "@/lib/map/satellite";
@@ -97,6 +98,20 @@ describe("photo view", () => {
     }
     // The order is the same: IGN still lies over Sentinel.
     expect(map.order).toEqual(["background", SATELLITE_LAYERS[0].id, SATELLITE_LAYERS[1].id, SATELLITE_BELOW, "pos"]);
+  });
+
+  it("names the source, date and ground resolution for the map caption", () => {
+    expect(SENTINEL.source).toContain("Sentinel-2");
+    expect(SENTINEL.date).toBe("2020");
+    expect(SENTINEL.resolution).toBe("10 m/px");
+    expect(IGN.source).toContain("IGN");
+    expect(IGN.date).toContain("varies");
+    expect(IGN.resolution).toContain("0.2 m/px");
+    expect(satelliteCaption(true)).toContain("IGN orthophotos");
+    expect(satelliteCaption(true)).toContain("2020");
+    expect(satelliteCaption(true)).toContain("10 m/px");
+    expect(satelliteCaption(false)).not.toContain("IGN");
+    expect(satelliteCaption(false)).toContain("10 m/px");
   });
 
   it("shows and hides the layers without touching the others", () => {

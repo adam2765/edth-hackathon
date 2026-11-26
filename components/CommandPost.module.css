@@ -596,6 +596,19 @@
   gap: 8px;
 }
 
+/* What the photo view is: source, date and ground resolution, on the map while it is on [278]. */
+.satelliteNote {
+  margin: 0;
+  max-width: min(380px, calc(100vw - 48px));
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(22, 33, 44, 0.92);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .followBtn {
   border: none;
   border-radius: 999px;

@@ -20,6 +20,12 @@ export interface SatelliteLayer {
   savedMaxzoom: number;
   /** True when the photos cover the whole world. IGN's cover metropolitan France only. */
   worldwide: boolean;
+  /** The service, for the caption on the map. */
+  source: string;
+  /** When the photographs were taken, in words. IGN's date depends on the tile. */
+  date: string;
+  /** The ground resolution, in metres per pixel, in words. */
+  resolution: string;
   attribution: string;
 }
 
@@ -39,7 +45,11 @@ export const SATELLITE_LAYERS: SatelliteLayer[] = [
     maxzoom: 14,
     savedMaxzoom: 14,
     worldwide: true,
-    // The text and links the licence asks for: CC BY-NC-SA 4.0, non-commercial, from 2018 to 2024.
+    source: "Sentinel-2 cloudless · EOX",
+    date: "2020",
+    resolution: "10 m/px",
+    // The attribution EOX publishes for this layer. The terms for keeping the public site online
+    // are not settled here; see docs/known-gaps.md.
     attribution:
       '<a href="https://s2maps.eu" target="_blank" rel="noreferrer">Sentinel-2 cloudless</a> by <a href="https://eox.at" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2020)',
   },
@@ -51,10 +61,22 @@ export const SATELLITE_LAYERS: SatelliteLayer[] = [
     maxzoom: 19,
     savedMaxzoom: 19,
     worldwide: false,
+    source: "IGN orthophotos",
+    date: "date varies by tile",
+    resolution: "up to 0.2 m/px",
     // Licence Ouverte 2.0 (Etalab): reuse and offline copies are allowed, with the source named.
     attribution: '© <a href="https://www.ign.fr" target="_blank" rel="noreferrer">IGN</a> – Géoplateforme (Licence Ouverte 2.0)',
   },
 ];
+
+/** The caption shown while the photo view is on: what the operator is looking at, and how precise. */
+export function satelliteCaption(inFrance: boolean): string {
+  const sentinel = SATELLITE_LAYERS.find((l) => l.id === "satellite-sentinel")!;
+  const ign = SATELLITE_LAYERS.find((l) => l.id === "satellite-ign")!;
+  return inFrance
+    ? `Photos: ${ign.source}, ${ign.date}, ${ign.resolution}; ${sentinel.source}, ${sentinel.date}, ${sentinel.resolution} elsewhere.`
+    : `Photos: ${sentinel.source}, ${sentinel.date}, ${sentinel.resolution}.`;
+}
 
 /** Metropolitan France, roughly: IGN's orthophotos stop at its border. */
 export const FRANCE_BBOX = { s: 41.2, w: -5.5, n: 51.3, e: 9.8 };
