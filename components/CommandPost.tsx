@@ -16,7 +16,6 @@ import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEA
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADII, PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
-import { barRange, dayStretches, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
 import { handover } from "@/lib/reports/handover";
 import { anchorFor, arrangeTracks, moveNextTo, parseOrders, parseTrackView, previewMove, TRACK_GROUPS, TRACK_HIDES, TRACK_SORTS, withSaved, type LaneOrders, type TrackHide, type TrackView } from "@/lib/reports/lanes";
@@ -32,6 +31,7 @@ import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderMod
 import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
 import { CommandPostTimeline, CommandPostTimelineProvider, type CommandPostTimelineModel, type TimelineFilter } from "./CommandPostTimeline";
 import { CommandPostMapShell } from "./CommandPostMapShell";
+import { useReplay } from "./useReplay";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -427,8 +427,6 @@ export default function CommandPost() {
       deepTrack: Number.isInteger(tr) && tr > 0 ? tr : null,
     };
   }, [search]);
-  /** A shared moment is opened once per URL, not on every poll. */
-  const appliedDeepLink = useRef("");
   /** When this operator last had this mission open: what the Timeline calls new [273]. */
   const [seenBefore, setSeenBefore] = useState<number | null>(null);
 
@@ -467,11 +465,6 @@ export default function CommandPost() {
   const [lastOk, setLastOk] = useState(0);
   const [now, setNow] = useState(0);
   const otherMissions = session === DEMO_SESSION ? [] : missions.filter((m) => m.code !== session && m.ended == null && m.reports > 0 && now - m.last < 120_000);
-  const [mode, setMode] = useState<"live" | "replay">("live");
-  const [replayT, setReplayT] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [replayOpen, setReplayOpen] = useState(false);
-  const [speed, setSpeed] = useState(10);
   const [follow, setFollow] = useState(true);
   const [manualArea, setManualArea] = useState<AreaId | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -494,11 +487,8 @@ export default function CommandPost() {
   const [listsHeight, setListsHeight] = useState<number | null>(null);
   /** The pointer's place during a drag of the lists' grip. */
   const listsDrag = useRef<{ y: number; h: number } | null>(null);
-  /** The Decisions card can fold to its heading, and the replay bar to one button, to clear the map [263]. */
+  /** The Decisions card can fold to its heading, to clear the map [263]. */
   const [deckCollapsed, setDeckCollapsed] = useState(false);
-  const [barCompact, setBarCompact] = useState(true);
-  /** The replay bar shows the whole day, or only this mission [271]. */
-  const [barZoom, setBarZoom] = useState(false);
   /** The command post's lock [266]: viewing is open, changing needs the PIN when CP_PIN is set. */
   const [auth, setAuth] = useState<"checking" | "open" | "locked">("checking");
   const [pin, setPin] = useState("");
@@ -531,7 +521,6 @@ export default function CommandPost() {
     const [, h] = (mapSize || "").split("x").map(Number);
     return h > 0 && h < 260;
   }, [mapSize]);
-  const barShut = barCompact || mapShort;
   const cardShut = deckCollapsed || mapShort;
   /** Placing, moving or changing a track; null when the command post is only watching. */
   const [tool, setTool] = useState<Tool | null>(null);
@@ -606,7 +595,6 @@ export default function CommandPost() {
   const candMarkers = useRef<Marker[]>([]);
   const countRef = useRef(0);
   /** What the replay's timer and the bar's handlers read between renders. */
-  const replayRef = useRef<{ t: number; end: number; stretches: Stretch[]; session: string | null }>({ t: 0, end: 0, stretches: [], session: null });
   /** Reads the log at once, after the command post changed it, rather than at the next poll. */
   const pollNow = useRef<() => void>(() => {});
   /** What a click on the map does; set below, read by the handler the map was given once. */
@@ -801,18 +789,6 @@ export default function CommandPost() {
     };
   }, [hasSession]);
 
-  const pickSession = useCallback((code: string | null) => {
-    setPlaying(false);
-    setMode("live");
-    setFollow(true);
-    setConfirmEnd(false);
-    setActionError(null);
-    setNoMission(code == null);
-    showSession(code);
-  }, [setPlaying]);
-
-
-
   // ---------- the log ----------
   useEffect(() => {
     logsRef.current = logs;
@@ -876,15 +852,79 @@ export default function CommandPost() {
   // ---------- the picture ----------
   const colours = useMemo(() => colourMap(entries), [entries]);
   const full = useMemo(() => foldLog(entries, Number.POSITIVE_INFINITY, colours), [entries, colours]);
-  const view = useMemo(() => (mode === "live" ? full : foldLog(entries, replayT, colours)), [mode, full, entries, replayT, colours]);
   const mission = full.mission;
   const ended = mission?.ended ?? null;
   /** The recorded mission the public site shows: everything that writes is hidden. */
   const demo = session === DEMO_SESSION;
+
+  /** The replay has moved into another mission of the day: show it. What was picked belongs to the old one. */
+  const enterMission = useCallback((code: string) => {
+    setPicked(null);
+    setTool(null);
+    setSelection(null);
+    setFocus(null);
+    setConfirmEnd(false);
+    showSession(code, true);
+  }, [setPicked, setSelection, setFocus, setTool, setConfirmEnd]);
+
+  const replay = useReplay({
+    session,
+    mission,
+    missions,
+    full,
+    now,
+    moment,
+    deepTrack,
+    onEnterMission: enterMission,
+    onCloseTimeline: () => setTimelineOpen(false),
+    onCloseUnit: () => setOpenUnit(null),
+    onSetFollow: setFollow,
+    onPickTrack: (n) => setPicked(n),
+    stepMs: STEP_MS,
+  });
+  const {
+    mode,
+    replayT,
+    playing,
+    replayOpen,
+    speed,
+    barCompact,
+    barZoom,
+    setPlaying,
+    setReplayOpen,
+    setSpeed,
+    setBarCompact,
+    setBarZoom,
+    stretches,
+    rangeStart,
+    rangeEnd,
+    shownStretch,
+    dayCodes,
+    barLo,
+    barHi,
+    barStretches,
+    sliderValue,
+    barSpan,
+    sliderMission,
+    goLive,
+    scrub,
+    togglePlay,
+  } = replay;
+
+  const view = useMemo(() => (mode === "live" ? full : foldLog(entries, replayT, colours)), [mode, full, entries, replayT, colours]);
   // The moment the picture stands for. An ended mission is shown as it was when it ended, so its
   // units do not all read as silent for the hours since. The demo is frozen at its last line, so
   // a page left open all afternoon still shows a fresh patrol.
   const effNow = mode === "live" ? (ended ?? (demo ? (full.last ?? now) : now)) : replayT;
+  const barShut = barCompact || mapShort;
+
+  const pickSession = useCallback((code: string | null) => {
+    goLive();
+    setConfirmEnd(false);
+    setActionError(null);
+    setNoMission(code == null);
+    showSession(code);
+  }, [goLive]);
   const area: AreaId = fixedArea ?? mission?.area ?? manualArea ?? view.area ?? DEFAULT_AREA;
   // Place names from the area's gazetteer, beside the call signs and tracks [268].
   useEffect(() => {
@@ -1062,26 +1102,6 @@ export default function CommandPost() {
     if (heardKey) setHeardOff(heardKey);
   }, [heardKey]);
 
-  // ---------- the replay bar ----------
-  // The missions opened in this area on the shown one's day, each a stretch from its start to its
-  // end, gray between. Until the log of a mission moved to is read, its line in the list stands in.
-  // A session from before missions has only its own entries.
-  const stretches = useMemo<Stretch[]>(() => {
-    if (!session) return [];
-    const shown: ShownMission | undefined = mission
-      ? { code: session, name: mission.name, area: mission.area, opened: mission.opened, ended: mission.ended, last: full.last ?? mission.opened }
-      : missions.find((m) => m.code === session);
-    if (shown) return dayStretches(missions, shown, now);
-    return full.first != null && full.last != null ? [{ code: session, name: session, start: full.first, end: full.last, open: false }] : [];
-  }, [session, mission, full.first, full.last, missions, now]);
-  const { lo: rangeStart, hi: rangeEnd } = useMemo(() => barRange(stretches), [stretches]);
-  const shownStretch = stretches.find((s) => s.code === session) ?? null;
-  const dayCodes = stretches.map((s) => s.code).join(" ");
-
-  useEffect(() => {
-    replayRef.current = { t: replayT, end: rangeEnd, stretches, session };
-  }, [replayT, rangeEnd, stretches, session]);
-
   // The day's other missions are read once, so the replay moves into one without a wait.
   const fetching = useRef(new Set<string>());
   useEffect(() => {
@@ -1098,53 +1118,6 @@ export default function CommandPost() {
         .finally(() => fetching.current.delete(code));
     }
   }, [dayCodes, session]);
-
-  // ---------- replay ----------
-  const goLive = useCallback(() => {
-    setPlaying(false);
-    setMode("live");
-    setFollow(true);
-  }, [setPlaying]);
-
-  /** The replay has moved into another mission of the day: show it. What was picked belongs to the old one. */
-  const enterMission = useCallback((code: string) => {
-    replayRef.current.session = code;
-    setPicked(null);
-    setTool(null);
-    setSelection(null);
-    setFocus(null);
-    setConfirmEnd(false);
-    showSession(code, true);
-  }, [setPicked, setSelection, setFocus]);
-
-  const scrub = useCallback(
-    (t: number) => {
-      setMode("replay");
-      setReplayT(t);
-      const { stretches: day, session: shown } = replayRef.current;
-      const s = stretchAt(day, t, shown);
-      if (s && s.code !== shown) enterMission(s.code);
-    },
-    [enterMission],
-  );
-
-  // A shared link opens the mission at its moment, with the track that was open [273].
-  useEffect(() => {
-    if (moment == null || !session || !stretches.length) return;
-    const key = `${session}:${moment}:${deepTrack ?? ""}`;
-    if (appliedDeepLink.current === key) return;
-    appliedDeepLink.current = key;
-    queueMicrotask(() => {
-      setTimelineOpen(false);
-      setOpenUnit(null);
-      setBarCompact(false);
-      setFollow(false);
-      setPlaying(false);
-      setReplayOpen(true);
-      scrub(moment);
-      if (deepTrack != null) setPicked(deepTrack);
-    });
-  }, [moment, deepTrack, session, stretches.length, scrub]);
 
   // A short card for a first visit with no mission on screen: on the public site, the way in.
   useEffect(() => {
@@ -1240,37 +1213,6 @@ export default function CommandPost() {
       if (hoverMarker.current === marker) hoverMarker.current = null;
     };
   }, [hoverEvent, mapReady]);
-
-  const togglePlay = useCallback(() => {
-    if (playing) {
-      setPlaying(false);
-      return;
-    }
-    // From live, or from the end, a replay starts at the beginning of the mission on screen.
-    if (mode === "live" || replayRef.current.t >= replayRef.current.end) setReplayT(shownStretch?.start ?? rangeStart);
-    setMode("replay");
-    setFollow(true);
-    setPlaying(true);
-  }, [playing, mode, shownStretch, rangeStart, setPlaying]);
-
-  useEffect(() => {
-    if (!playing) return;
-    const id = setInterval(() => {
-      const { t, end, stretches: day, session: shown } = replayRef.current;
-      if (t + STEP_MS * speed >= end) {
-        // The replay has caught up with the present, or the day's last end: back to live.
-        setPlaying(false);
-        setMode("live");
-        return;
-      }
-      // The gray between two missions is skipped: the replay goes on at the next one's start.
-      const next = stepAlong(day, t, 1, STEP_MS * speed);
-      setReplayT(next);
-      const s = stretchAt(day, next, shown);
-      if (s && s.code !== shown) enterMission(s.code);
-    }, STEP_MS);
-    return () => clearInterval(id);
-  }, [playing, speed, enterMission]);
 
   // ---------- map ----------
   useEffect(() => {
@@ -2741,14 +2683,6 @@ export default function CommandPost() {
   const latest = view.feed[0];
   /** An ended mission shown as it ended, not replayed. */
   const atEnd = mode === "live" && ended != null;
-  // Live, the bar stands at the shown mission's end: now while it is open.
-  const barLo = barZoom && shownStretch ? shownStretch.start : rangeStart;
-  const barHi = barZoom && shownStretch ? shownStretch.end : rangeEnd;
-  const barStretches = barZoom && shownStretch ? [shownStretch] : stretches;
-  const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, barLo), barHi);
-  const barSpan = barHi - barLo;
-  const sliderMission = stretchAt(stretches, sliderValue, session);
-
   // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [258].
   // Where it was dropped, or as far across a map that has changed size since.
   const deckAt = (() => {
