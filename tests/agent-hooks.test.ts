@@ -61,7 +61,9 @@ describe("agent hooks and skills", () => {
     }
   });
 
-  it("share one skills folder: .claude/skills links to .agents/skills", () => {
+  // Windows checkouts that do not support symlinks store the link as a plain file; the check
+  // runs on the Mac and on CI.
+  it.skipIf(process.platform === "win32")("share one skills folder: .claude/skills links to .agents/skills", () => {
     const link = join(root, ".claude", "skills");
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(realpathSync(link)).toBe(realpathSync(join(root, ".agents", "skills")));

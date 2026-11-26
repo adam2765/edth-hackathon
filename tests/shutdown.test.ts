@@ -43,7 +43,8 @@ describe("orphan shutdown", () => {
     expect(selectProjectProcesses(root, processes, { selfPid: 100, parentPid: 90 }).map((p: { pid: number }) => p.pid)).toEqual([10, 11, 12, 13, 23, 24, 25]);
   });
 
-  it("closes a stale Stopped controller and an orphan on random ports, keeping an unrelated server alive", async () => {
+  // Windows has no SIGKILL; the check runs on the Mac and on CI.
+  it.skipIf(process.platform === "win32")("closes a stale Stopped controller and an orphan on random ports, keeping an unrelated server alive", async () => {
     const root = await directory();
     const other = await directory();
     const script = path.join(root, "fixture.mjs");
