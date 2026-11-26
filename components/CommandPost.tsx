@@ -16,7 +16,7 @@ import { AFFILIATION_COLOUR, AFFILIATION_LABEL, AFFILIATIONS, describeTrack, HEA
 import type { Affiliation, TrackKind } from "@/lib/geo/types";
 import { CP_COLOUR, colourMap, describeSender, FADE_AFTER_MS, foldLog, knownAt, TRACK_OLD_AFTER_MS, type FeedItem, type TrackState, type UnitState } from "@/lib/reports/fold";
 import { PLOT_RADII, PLOT_RADIUS_DEFAULT } from "@/lib/reports/plot";
-import { barRange, dayStretches, detents, keyTarget, settle, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
+import { barRange, dayStretches, stepAlong, stretchAt, type ShownMission, type Stretch } from "@/lib/reports/timeline";
 import { decisionsOf, optionsOf, type Decision, type DecisionOption } from "@/lib/reports/decisions";
 import { handover } from "@/lib/reports/handover";
 import { anchorFor, arrangeTracks, moveNextTo, parseOrders, parseTrackView, previewMove, TRACK_GROUPS, TRACK_HIDES, TRACK_SORTS, withSaved, type LaneOrders, type TrackHide, type TrackView } from "@/lib/reports/lanes";
@@ -30,6 +30,7 @@ import { TrackRecon, type TaskBody } from "./ReconTools";
 import { UnitPanel } from "./UnitTools";
 import { ReportInspector } from "./ReportInspector";
 import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "./CommandPostHeader";
+import { CommandPostReplayBar, CommandPostReplayBarProvider, type CommandPostReplayBarModel } from "./CommandPostReplayBar";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -38,7 +39,6 @@ const POLL_MS = 1000;
 /** How often the list of missions is read: to find one with none on screen, and for the replay bar. */
 const LIST_POLL_MS = 5000;
 const STEP_MS = 200;
-const SPEEDS = [1, 10, 30];
 /** The timeline's filters: what kind of event to show [271]. */
 const TIMELINE_FILTERS = [
   ["all", "All"],
@@ -48,10 +48,6 @@ const TIMELINE_FILTERS = [
   ["tasks", "Tasks"],
 ] as const;
 type TimelineFilter = (typeof TIMELINE_FILTERS)[number][0];
-/** How close to a mission's start or end, in pixels on the bar, the replay is pulled onto it. */
-const DETENT_PX = 8;
-/** The replay bar's thumb, in CSS pixels: its middle runs from half this in from each end. */
-const THUMB_PX = 16;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_LOG: LogEntry[] = [];
 // The bottom leaves room for the replay bar; the right for the zoom buttons; the sides for a
@@ -2759,8 +2755,6 @@ export default function CommandPost() {
   const barStretches = barZoom && shownStretch ? [shownStretch] : stretches;
   const sliderValue = mode === "live" ? (shownStretch?.end ?? rangeEnd) : Math.min(Math.max(replayT, barLo), barHi);
   const barSpan = barHi - barLo;
-  /** Where a time sits along the bar, in per cent. */
-  const barPct = (t: number) => (barSpan > 0 ? ((t - barLo) / barSpan) * 100 : 0);
   const sliderMission = stretchAt(stretches, sliderValue, session);
 
   // Where a dragged Decisions card sits, in its own pixels: it is drawn larger on a big screen [258].
@@ -2877,6 +2871,54 @@ export default function CommandPost() {
   }, [view.feed, timelineFilter, timelineQuery, timelineWindow, mode, replayT, effNow]);
   const newSince = seenBefore != null && view.feed.some((f) => f.ts > seenBefore) ? seenBefore : null;
   const newCount = newSince != null ? timelineEvents.filter((f) => f.ts > newSince).length : 0;
+
+  const replayBarModel: CommandPostReplayBarModel = {
+    barShut,
+    mapShort,
+    hasEntries: entries.length > 0,
+    replayOpen,
+    playing,
+    session,
+    mode,
+    ended,
+    lost,
+    now,
+    replayT,
+    rangeEnd,
+    barLo,
+    barHi,
+    sliderValue,
+    barSpan,
+    barStretches,
+    stretches,
+    shownStretch,
+    sliderMission,
+    barZoom,
+    speed,
+    fmtTime,
+    fmtSpan,
+    onShowBar: () => {
+      setBarCompact(false);
+      if (entries.length) setReplayOpen(true);
+    },
+    onHideBar: () => setBarCompact(true),
+    onToggleReplay: () => {
+      if (replayOpen) {
+        goLive();
+        setBarCompact(true);
+      }
+      setReplayOpen(!replayOpen);
+    },
+    onLive: goLive,
+    onTogglePlay: togglePlay,
+    onScrub: (t) => {
+      setPlaying(false);
+      scrub(t);
+    },
+    onZoom: () => setBarZoom((z) => !z),
+    onSpeed: (s) => setSpeed(s),
+    onCopy: () => void copyMoment(),
+  };
 
   const headerModel: CommandPostHeaderModel = {
     mission,
@@ -3139,166 +3181,9 @@ export default function CommandPost() {
         </div>
 
         <div ref={replayEl} className={styles.replayBar} data-compact={barShut ? "" : undefined}>
-          {barShut ? (
-            <button type="button" className={styles.liveBtn} disabled={mapShort} onClick={() => {
-              setBarCompact(false);
-              if (entries.length) setReplayOpen(true);
-            }} title={mapShort ? "Enlarge the map to show the replay bar" : entries.length ? "Open the replay" : "Nothing to replay yet"} aria-label="Show the replay bar">
-              Replay <span aria-hidden="true">▴</span>
-            </button>
-          ) : (
-            <>
-          <button type="button" className={styles.barToggle} onClick={() => setBarCompact(true)} title="Hide the replay bar, to see the map" aria-label="Hide the replay bar">
-            <span aria-hidden="true">▾</span>
-          </button>
-          <button type="button" className={`${styles.liveBtn} ${styles.replayClose}`} aria-expanded={replayOpen} disabled={!entries.length} title={!entries.length ? "Nothing to replay yet: no report, track or unit placed in this mission" : replayOpen ? "Back to the live view and close the replay" : "Read this mission from its log, from a moment you choose"} onClick={() => {
-            if (replayOpen) {
-              goLive();
-              setBarCompact(true);
-            }
-            setReplayOpen(!replayOpen);
-          }}>{replayOpen ? "Close replay" : "Replay"}</button>
-          {replayOpen ? <>
-          <button
-            type="button"
-            className={`${styles.liveBtn} ${styles.replayLive}`}
-            aria-pressed={mode === "live" && !!session}
-            disabled={!session}
-            data-stale={ended != null ? "ended" : lost ? "lost" : undefined}
-            onClick={goLive}
-            title={ended != null ? "Show the mission as it ended" : "Show the present and follow the units"}
-          >
-            <span className={styles.liveDot} aria-hidden="true" /> {ended != null ? "At end" : "Live"}
-          </button>
-          <button
-            type="button"
-            className={styles.playBtn}
-            onClick={togglePlay}
-            disabled={!stretches.length}
-            aria-label={playing ? "Pause replay" : "Play replay"}
-            title={playing ? "Pause the replay" : "Replay from the start of this mission"}
-          >
-            {playing ? "❚❚" : "▶"}
-          </button>
-          {/* The day's missions in this area: a stretch for each, gray where none was running, and
-              a detent at every start and end. The replay never rests in the gray. */}
-          <div className={styles.timeline}>
-            <div className={styles.rail} aria-hidden="true">
-              {barStretches.map((s) => (
-                <span
-                  key={s.code}
-                  className={styles.stretch}
-                  data-shown={s.code === session ? "" : undefined}
-                  style={{ left: `${barPct(s.start)}%`, width: `${barPct(s.end) - barPct(s.start)}%` }}
-                />
-              ))}
-              {detents(barStretches).map((d) => (
-                <span key={d} className={styles.detent} style={{ left: `${barPct(d)}%` }} />
-              ))}
-            </div>
-            <input
-              className={styles.slider}
-              type="range"
-              min={barLo}
-              max={barHi}
-              step="any"
-              value={sliderValue}
-              disabled={!stretches.length}
-              onChange={(e) => {
-                setPlaying(false);
-                // A start or end within a few pixels pulls the replay onto it.
-                const width = e.currentTarget.getBoundingClientRect().width - THUMB_PX;
-                const pull = width > 0 ? (barSpan * DETENT_PX) / width : 0;
-                scrub(Math.round(settle(barStretches, Number(e.currentTarget.value), pull)));
-              }}
-              onKeyDown={(e) => {
-                const to = keyTarget(barStretches, sliderValue, e.key);
-                if (to == null) return;
-                e.preventDefault();
-                setPlaying(false);
-                scrub(to);
-              }}
-              aria-label="Replay time"
-              title="The day's missions in this area; gray where none was running. Page Up and Page Down jump between starts and ends."
-              // No time before the first entry: the server's locale would not match the browser's.
-              aria-valuetext={stretches.length ? `${fmtTime(sliderValue)}${sliderMission ? `, ${sliderMission.name}` : ""}` : undefined}
-            />
-          </div>
-          <div className={styles.time}>
-            {mode === "replay" ? (
-              <>
-                {fmtTime(replayT)} <span className={styles.muted}>{fmtSpan(Math.max(0, (shownStretch?.end ?? rangeEnd) - replayT))} left</span>
-              </>
-            ) : ended != null ? (
-              <>Ended · {fmtTime(ended)}</>
-            ) : !session ? (
-              // No mission on screen, so nothing is live: only the clock.
-              <>{now ? fmtTime(now) : ""}</>
-            ) : (
-              <>
-                {lost ? "No contact" : "Live"}
-                {now ? ` · ${fmtTime(now)}` : ""}
-              </>
-            )}
-          </div>
-          <div className={styles.replayExtra}>
-            {shownStretch ? (
-              <button
-                type="button"
-                className={styles.liveBtn}
-                aria-pressed={barZoom}
-                onClick={() => setBarZoom((z) => !z)}
-                title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
-              >
-                {barZoom ? "Day" : "Mission"}
-              </button>
-            ) : null}
-            {mode === "replay" ? (
-              <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
-                Link
-              </button>
-            ) : null}
-            <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
-              {SPEEDS.map((s) => (
-                <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
-                  {s}×
-                </button>
-              ))}
-            </div>
-          </div>
-          <details className={styles.replayMore}>
-            <summary aria-label="More replay controls" title="Mission zoom, link and speed">
-              …
-            </summary>
-            <div className={styles.replayMorePanel}>
-              {shownStretch ? (
-                <button
-                  type="button"
-                  className={styles.liveBtn}
-                  aria-pressed={barZoom}
-                  onClick={() => setBarZoom((z) => !z)}
-                  title={barZoom ? "Show the whole day again" : "Zoom the bar onto this mission"}
-                >
-                  {barZoom ? "Day" : "Mission"}
-                </button>
-              ) : null}
-              {mode === "replay" ? (
-                <button type="button" className={styles.liveBtn} onClick={() => void copyMoment()} title="Copy a link to this moment">
-                  Link
-                </button>
-              ) : null}
-              <div className={styles.segmentedSmall} role="group" aria-label="Replay speed" title="Replay speed">
-                {SPEEDS.map((s) => (
-                  <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}>
-                    {s}×
-                  </button>
-                ))}
-              </div>
-            </div>
-          </details>
-          </> : <div className={styles.time}>{lost ? "No contact" : ended != null ? "Mission ended" : "Live"}</div>}
-            </>
-          )}
+          <CommandPostReplayBarProvider value={replayBarModel}>
+            <CommandPostReplayBar />
+          </CommandPostReplayBarProvider>
         </div>
 
         {/* Everything that waits on the operator, oldest first, one open at a time [240], on a card over
