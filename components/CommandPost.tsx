@@ -25,11 +25,11 @@ import { centred, declutter, outside, textBox, type Mark, type Rect } from "./de
 import DecisionQueue from "./DecisionQueue";
 import { FLOW_STEPS, FLOW_TICK_MS, flowDots, NEW_TRACK_MS, SLIDE_MS, SLIDE_MS_REPLAY, Slides, steppedOn, type Scene } from "./motion";
 import MapTools from "./MapTools";
-import MissionPanel from "./MissionPanel";
 import { AFFILIATION_KEY, DEFAULT_WHAT, describeWhat, DraftCard, GridTag, TrackCard, TrackPalette, trackSvg, type MilSymbol, type TrackWhat } from "./TrackTools";
 import { TrackRecon, type TaskBody } from "./ReconTools";
 import { UnitPanel } from "./UnitTools";
 import { ReportInspector } from "./ReportInspector";
+import { CommandPostHeader, CommandPostHeaderProvider, type CommandPostHeaderModel } from "./CommandPostHeader";
 import styles from "./CommandPost.module.css";
 
 import { loadBaseMap } from "@/lib/map/baseMap";
@@ -531,7 +531,6 @@ export default function CommandPost() {
   const [helpOpen, setHelpOpen] = useState(false);
   /** The header's More menu: Brief, Help and Stop mission [274]. */
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
   /** The screen wake lock, for a tablet at the post [273]. */
   const [awake, setAwake] = useState(false);
   const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -1178,16 +1177,6 @@ export default function CommandPost() {
       // A private window that refuses storage still closes the card.
     }
   }, []);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const el = moreRef.current;
-      if (el && !el.contains(e.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [moreOpen]);
 
   /** Copies a link that opens this replay at this moment, and the picked track [273]. */
   const copyMoment = async () => {
@@ -2889,6 +2878,47 @@ export default function CommandPost() {
   const newSince = seenBefore != null && view.feed.some((f) => f.ts > seenBefore) ? seenBefore : null;
   const newCount = newSince != null ? timelineEvents.filter((f) => f.ts > newSince).length : 0;
 
+  const headerModel: CommandPostHeaderModel = {
+    mission,
+    session,
+    ended,
+    mode,
+    lost,
+    connected,
+    stored,
+    demo,
+    canEdit,
+    placing: activeTool?.kind === "place",
+    actionError,
+    panelOpen,
+    moreOpen,
+    confirmEnd,
+    now,
+    defaultArea: mission?.area ?? area,
+    onStartPlace: startPlace,
+    onOpenMissions: () => setPanelOpen(true),
+    onToggleMissions: () => setPanelOpen((o) => !o),
+    onOpenTimeline: () => {
+      setPicked(null);
+      setOpenUnit(null);
+      setTimelineOpen(true);
+    },
+    onOpenFind: () => setFindOpen(true),
+    onToggleMore: () => setMoreOpen((o) => !o),
+    onCloseMore: () => setMoreOpen(false),
+    onCopySituation: () => void copySituation(),
+    onOpenHelp: () => setHelpOpen(true),
+    onStopMission: () => void endMission(),
+    onConfirmStop: () => setConfirmEnd(true),
+    onCancelStop: () => {
+      setConfirmEnd(false);
+      setMoreOpen(false);
+    },
+    onCloseMissions: closePanel,
+    onPickMission: pickSession,
+    fmtWhen,
+  };
+
   return (
     <div
       className={styles.root}
@@ -2897,170 +2927,9 @@ export default function CommandPost() {
       data-bar={barShut ? "compact" : undefined}
       style={listsHeight != null ? ({ "--lists-h": `${listsHeight}px` } as CSSProperties) : undefined}
     >
-      <header className={styles.header}>
-        <h1 className={styles.brand}>
-          <span className={styles.brandMark} aria-hidden="true" />
-          Voice-to-Map <span className={styles.brandSub}>Command post</span>
-        </h1>
-        {mission ? (
-          <div className={styles.missionHead}>
-            <span className={styles.missionTitle} title={`${mission.name} · code ${session}`}>
-              {mission.name}
-            </span>
-            {/* What is on screen, in words: an ended mission, a replay, or the present. */}
-            {ended != null ? (
-              <span className={styles.stateChip} data-state="ended">
-                Ended {fmtWhen(ended, now)}
-              </span>
-            ) : mode === "replay" ? (
-              <span className={styles.stateChip} data-state="replay">
-                Replay
-              </span>
-            ) : lost ? (
-              <span className={styles.stateChip} data-state="lost">
-                No contact
-              </span>
-            ) : (
-              <span className={styles.stateChip} data-state="live">
-                <span className={styles.stateDot} data-state={connected ? "on" : "wait"} aria-hidden="true" />
-                Live
-              </span>
-            )}
-            {stored === false ? (
-              <span className={styles.chip} data-state="warn" title="This coordinator keeps no record: missions and reports vanish on reload">
-                No record
-              </span>
-            ) : null}
-            {demo ? (
-              <span className={styles.chip} data-state="demo" title="A recorded mission, read only. Open your own mission to answer questions and place units.">
-                Demo · read-only
-              </span>
-            ) : null}
-          </div>
-        ) : session ? (
-          <div className={styles.chip} title="A session from before missions">
-            Session <strong>{session}</strong>
-          </div>
-        ) : (
-          <div className={styles.chip}>No mission</div>
-        )}
-        {canEdit ? (
-          <button
-            type="button"
-            className={activeTool?.kind === "place" ? styles.primaryBtn : styles.ghostBtn}
-            aria-pressed={activeTool?.kind === "place"}
-            onClick={startPlace}
-            title="Place a track by hand: friend, foe or unknown (P)"
-          >
-            Place track
-          </button>
-        ) : null}
-        {actionError ? (
-          <span className={styles.error} role="alert">
-            {actionError}
-          </span>
-        ) : null}
-        {/* The connection, the drawers and the missions menu wrap together, not one by one [271]. */}
-        <div className={styles.headActions}>
-          {!mission || ended != null ? <button type="button" className={styles.ghostBtn} onClick={() => setPanelOpen(true)}>Start mission</button> : null}
-          {!mission && session !== DEMO_SESSION ? (
-            <button type="button" className={styles.ghostBtn} onClick={() => pickSession(DEMO_SESSION)} title="Open the recorded mission: four units, three tracks and a question asked back">
-              Demo
-            </button>
-          ) : null}
-          <button type="button" className={styles.ghostBtn} onClick={() => {
-            setPicked(null);
-            setOpenUnit(null);
-            setTimelineOpen(true);
-          }} title="The mission's events, newest first; choose one to replay it">
-            Timeline
-          </button>
-          <button type="button" className={styles.ghostBtn} onClick={() => setFindOpen(true)} title="Find a call sign, a track or a place (Ctrl+K)">
-            Find
-          </button>
-          <button type="button" className={styles.menuBtn} aria-expanded={panelOpen} aria-haspopup="dialog" onClick={() => setPanelOpen((o) => !o)}>
-            Missions ▾
-          </button>
-          <div className={styles.headerMore} ref={moreRef}>
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              aria-expanded={moreOpen}
-              aria-haspopup="menu"
-              aria-label="More actions"
-              title="Brief, help and stop"
-              onClick={() => setMoreOpen((o) => !o)}
-            >
-              <span aria-hidden="true">…</span>
-            </button>
-            {moreOpen ? (
-              <div className={styles.headerMorePanel} role="menu" aria-label="More actions">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.headerMoreItem}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    void copySituation();
-                  }}
-                >
-                  Copy situation
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.headerMoreItem}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    setHelpOpen(true);
-                  }}
-                >
-                  Keys and clicks
-                </button>
-                {mission && ended == null && !demo ? (
-                  confirmEnd ? (
-                    <div className={styles.headerMoreConfirm}>
-                      <span>Stop this mission? Reports stop. It stays here for replay.</span>
-                      <div className={styles.headerMoreButtons}>
-                        <button
-                          type="button"
-                          className={styles.dangerBtn}
-                          onClick={() => {
-                            setMoreOpen(false);
-                            void endMission();
-                          }}
-                        >
-                          Stop mission
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.linkBtn}
-                          onClick={() => {
-                            setConfirmEnd(false);
-                            setMoreOpen(false);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={`${styles.headerMoreItem} ${styles.headerMoreDanger}`}
-                      onClick={() => setConfirmEnd(true)}
-                    >
-                      Stop mission
-                    </button>
-                  )
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {panelOpen ? <MissionPanel current={session} defaultArea={mission?.area ?? area} onPick={pickSession} onClose={closePanel} /> : null}
-      </header>
+      <CommandPostHeaderProvider value={headerModel}>
+        <CommandPostHeader />
+      </CommandPostHeaderProvider>
 
       <main className={styles.mapCol} data-drawer={timelineOpen ? "" : undefined} data-panel={(pickedTrack || openedUnit) && !activeTool ? "" : undefined}>
         <div ref={mapEl} className={styles.map} aria-label="Map of all units and tracks" />
