@@ -567,8 +567,8 @@ function associationCost(obs: FusionObservation, track: TrackPrediction, center:
     const inv = invertCov(s);
     if (!inv) return Number.POSITIVE_INFINITY;
     const d2 = inv[0][0] * de * de + 2 * inv[0][1] * de * dn + inv[1][1] * dn * dn;
-    const dt = Math.max(1, Math.abs(obs.ts - track.ts) / 1000);
-    if (Math.hypot(de, dn) / dt > (opts.maxSpeedMps ?? DEFAULT_MAX_SPEED_MPS)) {
+    const dt = Math.abs(obs.ts - track.ts) / 1000;
+    if (dt >= 1 && Math.hypot(de, dn) / dt > (opts.maxSpeedMps ?? DEFAULT_MAX_SPEED_MPS)) {
       return Number.POSITIVE_INFINITY;
     }
     return d2;
@@ -659,11 +659,11 @@ export function associate(observations: FusionObservation[], tracks: TrackPredic
   const best = hungarian(matrix);
   const assignments: Assignment[] = [];
   let total = 0;
+  for (let k = 0; k < size; k++) total += matrix[k][best[k]];
   for (let i = 0; i < n; i++) {
     const j = best[i];
     if (j >= 0 && j < m && matrix[i][j] < BIG / 2) {
       assignments.push({ observation: observations[i].id, track: tracks[j].id, cost: matrix[i][j] });
-      total += matrix[i][j];
     }
   }
   const ambiguous: AssociationResult["ambiguous"] = [];
@@ -688,10 +688,7 @@ export function associate(observations: FusionObservation[], tracks: TrackPredic
     copy[i][j] = BIG;
     const alt = hungarian(copy);
     let altTotal = 0;
-    for (let k = 0; k < n; k++) {
-      const l = alt[k];
-      if (l >= 0 && l < m && copy[k][l] < BIG / 2) altTotal += copy[k][l];
-    }
+    for (let k = 0; k < size; k++) altTotal += copy[k][alt[k]];
     if (altTotal - total < margin) {
       ambiguous.push({ observation: a.observation, tracks: [a.track], costs: [a.cost] });
     }

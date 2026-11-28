@@ -11,6 +11,8 @@
  * resolver's own circle (`max(50, 0.4 * r)` for a stated distance and bearing); a bearing alone
  * places nothing today, so the current method asks how far.
  */
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AREAS, type AreaId } from "../lib/geo/areas";
 import { bearingDeg, distanceM, type LatLon } from "../lib/geo/geo";
 import {
@@ -60,7 +62,7 @@ interface Observer {
   sigma_m: number;
 }
 
-interface Scenario {
+export interface Scenario {
   id: string;
   title: string;
   area: AreaId;
@@ -75,7 +77,7 @@ interface Scenario {
 
 const OBSERVER_SIGMA_M = 10;
 
-const SCENARIOS: Scenario[] = [
+export const SCENARIOS: Scenario[] = [
   {
     id: "bearings-perpendicular",
     title: "Two bearings, about perpendicular",
@@ -158,7 +160,6 @@ function sighting(
   sigmaHumanDeg: number,
   gross: boolean,
 ): FusionObservation {
-  const center = AREAS[scenario.area].centre;
   const oe = observer.e + normal(rng) * observer.sigma_m;
   const on = observer.n + normal(rng) * observer.sigma_m;
   const from: LatLon = at(scenario.area, { e: oe, n: on });
@@ -228,7 +229,9 @@ function stats(errors: number[], nees: number[], hits50: boolean[], hits90: bool
   };
 }
 
-function runScenario(scenario: Scenario, sigmaHumanDeg: number): { fused: Stats; current: Stats | null } {
+export function runScenario(scenario: Scenario, sigmaHumanDeg: number, seedValue = seed, trialCount = trials): { fused: Stats; current: Stats | null } {
+  const seed = seedValue;
+  const trials = trialCount;
   let idHash = 2166136261;
   for (let i = 0; i < scenario.id.length; i++) idHash = Math.imul(idHash ^ scenario.id.charCodeAt(i), 16777619);
   const rng = rngFrom((seed ^ idHash ^ Math.round(sigmaHumanDeg * 1000)) >>> 0);
@@ -333,4 +336,5 @@ function main() {
   }
 }
 
-main();
+const isMain = process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) main();
