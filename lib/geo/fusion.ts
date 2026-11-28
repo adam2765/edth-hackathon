@@ -75,6 +75,8 @@ export const CHI2_2DOF_99 = 9.21034;
 export const DEFAULT_MAX_SPEED_MPS = 30;
 export const DEFAULT_MAX_AGE_MS = 300_000;
 export const DEFAULT_AMBIGUITY_MARGIN = 1;
+/** Below this spread, bearing-only sightings leave the range effectively unobserved. */
+export const MIN_BEARING_SPREAD_DEG = 15;
 
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
@@ -237,10 +239,14 @@ export function correlationClusters(observations: FusionObservation[], windowMs 
   return out;
 }
 
-function makeGrid(half: number, cell: number): { cols: number; rows: number; cellM: number; origin: LocalPoint } {
+function makeGridAround(center: LocalPoint, half: number, cell: number): { cols: number; rows: number; cellM: number; origin: LocalPoint } {
   const side = Math.max(1, Math.round((2 * half) / cell));
   const cols = side + 1;
-  return { cols, rows: cols, cellM: cell, origin: { e: -side * cell * 0.5, n: -side * cell * 0.5 } };
+  return { cols, rows: cols, cellM: cell, origin: { e: center.e - side * cell * 0.5, n: center.n - side * cell * 0.5 } };
+}
+
+function makeGrid(half: number, cell: number): { cols: number; rows: number; cellM: number; origin: LocalPoint } {
+  return makeGridAround({ e: 0, n: 0 }, half, cell);
 }
 
 function cellPoint(grid: { origin: LocalPoint; cellM: number }, i: number, j: number): LocalPoint {
@@ -496,33 +502,21 @@ function edgeMass(grid: ProbabilityGrid): number {
   return mass;
 }
 
-/**
- * Fuse observations of one thing. Each observer's sightings inside the same time window are
- * treated as correlated and intersected; different observers' groups are multiplied. A bearing
- * with no range contributes a ridge, never an invented distance.
- */
-export function fuseObservations(observations: FusionObservation[], opts: FusionOptions): FusionResult {
-  const o = options(opts);
-  const usable = observations.filter((x) => x.bearing_deg != null || x.range_m != null);
-  if (!usable.length) {
-    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no bearing and no range" };
-  }
-  let half = o.gridHalfSizeM;
-  if (half == null) {
-    half = o.maxRangeM + o.gridCellM;
-    for (const obs of usable) {
-      const at = toLocal(obs.observer, o.center);
-      half = Math.max(half, Math.hypot(at.e, at.n) + o.gridCellM);
-      if (obs.range_m != null) {
-        const g = observationGaussian(obs, o.center, o);
-        if (g) {
-          const spread = Math.sqrt(Math.max(g.cov[0][0], g.cov[1][1]));
-          half = Math.max(half, Math.hypot(g.mean.e, g.mean.n) + 4 * spread);
-        }
-      }
-    }
-  }
-  const dims = makeGrid(half, o.gridCellM);
+interface Posterior {
+  grid: ProbabilityGrid;
+  mean: LocalPoint;
+  cov: Covariance;
+  priorMass: number;
+  edgeMass: number;
+  groups: number;
+}
+
+/** The normalised posterior of all clusters on one grid. */
+function posteriorOn(
+  dims: { origin: LocalPoint; cellM: number; cols: number; rows: number },
+  usable: FusionObservation[],
+  o: Resolved,
+): Posterior | null {
   const clusters = correlationClusters(usable, o.correlationWindowMs);
   const total = new Float64Array(dims.cols * dims.rows);
   let groups = 0;
@@ -547,25 +541,108 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
   }
   let max = Number.NEGATIVE_INFINITY;
   for (const v of total) if (v > max && Number.isFinite(v)) max = v;
-  if (!Number.isFinite(max)) {
-    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups, truncated: false, reason: "no usable likelihood" };
-  }
+  if (!Number.isFinite(max)) return null;
   const normalized = new Float64Array(total.length);
   for (let k = 0; k < total.length; k++) normalized[k] = Number.isFinite(total[k]) ? total[k] - max : Number.NEGATIVE_INFINITY;
   const { grid, mean, cov } = gridFromLog(normalized, dims);
-  const mass = edgeMass(grid);
-  const priorMass = priorEdgeMass(grid, usable, o.center, o.maxRangeM);
-  const truncated = mass > 0.002 || priorMass > 0.01;
   return {
-    status: truncated ? "unresolved" : "resolved",
+    grid,
     mean,
     cov,
-    radius50_m: credibleRadius(grid, mean, 0.5),
-    radius90_m: credibleRadius(grid, mean, 0.9),
-    grid,
+    priorMass: priorEdgeMass(grid, usable, o.center, o.maxRangeM),
+    edgeMass: edgeMass(grid),
     groups,
+  };
+}
+
+function resultOf(p: Posterior, truncated: boolean): FusionResult {
+  return {
+    status: truncated ? "unresolved" : "resolved",
+    mean: p.mean,
+    cov: p.cov,
+    radius50_m: credibleRadius(p.grid, p.mean, 0.5),
+    radius90_m: credibleRadius(p.grid, p.mean, 0.9),
+    grid: p.grid,
+    groups: p.groups,
     truncated,
   };
+}
+
+/** The widest angle between any two bearing-only lines, 0 to 90 degrees. */
+function bearingSpread(observations: FusionObservation[]): number {
+  const bearings = observations.filter((x) => x.range_m == null && x.bearing_deg != null).map((x) => ((x.bearing_deg! % 180) + 180) % 180);
+  let widest = 0;
+  for (let i = 0; i < bearings.length; i++) {
+    for (let j = i + 1; j < bearings.length; j++) {
+      const d = Math.abs(bearings[i] - bearings[j]);
+      widest = Math.max(widest, Math.min(d, 180 - d));
+    }
+  }
+  return widest;
+}
+
+function maxSpread(c: Covariance): number {
+  const tr = c[0][0] + c[1][1];
+  const det = detCov(c);
+  const root = Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+  return Math.sqrt(Math.max(0, tr / 2 + root));
+}
+
+/**
+ * Fuse observations of one thing. Each observer's sightings inside the same time window are
+ * treated as correlated and intersected; different observers' groups are multiplied. A bearing
+ * with no range contributes a ridge, never an invented distance.
+ *
+ * A bearing-only posterior is found on a coarse 50 m grid over the whole prior, then on a 10 m
+ * grid around its own mean. The coarse pass locates the ridge and detects a result that the prior
+ * cuts; the fine pass gives the metres. A posterior that reaches either edge is `unresolved`.
+ */
+export function fuseObservations(observations: FusionObservation[], opts: FusionOptions): FusionResult {
+  const o = options(opts);
+  const usable = observations.filter((x) => x.bearing_deg != null || x.range_m != null);
+  if (!usable.length) {
+    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no bearing and no range" };
+  }
+  let autoHalf = o.gridHalfSizeM;
+  if (autoHalf == null) {
+    autoHalf = o.maxRangeM + o.gridCellM;
+    for (const obs of usable) {
+      const at = toLocal(obs.observer, o.center);
+      autoHalf = Math.max(autoHalf, Math.hypot(at.e, at.n) + o.gridCellM);
+      if (obs.range_m != null) {
+        const g = observationGaussian(obs, o.center, o);
+        if (g) autoHalf = Math.max(autoHalf, Math.hypot(g.mean.e, g.mean.n) + 4 * maxSpread(g.cov));
+      }
+    }
+  }
+  const bearingOnly = usable.some((x) => x.range_m == null && x.bearing_deg != null);
+  if (!bearingOnly) {
+    let ce = 0;
+    let cn = 0;
+    let half = 5 * o.gridCellM;
+    for (const obs of usable) {
+      const g = observationGaussian(obs, o.center, o);
+      if (!g) continue;
+      ce += g.mean.e / usable.length;
+      cn += g.mean.n / usable.length;
+      half = Math.max(half, Math.hypot(g.mean.e - ce, g.mean.n - cn) + 6 * maxSpread(g.cov));
+    }
+    const dims = makeGridAround({ e: ce, n: cn }, Math.min(autoHalf, half), o.gridCellM);
+    const p = posteriorOn(dims, usable, o);
+    if (!p) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
+    return resultOf(p, p.edgeMass > 0.002 || p.priorMass > 0.01);
+  }
+
+  const coarse = posteriorOn(makeGrid(autoHalf, Math.max(50, o.gridCellM * 5)), usable, o);
+  if (!coarse) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
+  if (bearingSpread(usable) < MIN_BEARING_SPREAD_DEG) return resultOf(coarse, true);
+  const coarseWide = credibleRadius(coarse.grid, coarse.mean, 0.9) > 0.25 * o.maxRangeM;
+  if (coarse.edgeMass > 0.002 || coarse.priorMass > 0.01 || coarseWide) return resultOf(coarse, true);
+  const half = Math.min(autoHalf, Math.max(6 * maxSpread(coarse.cov), 5 * o.gridCellM));
+  const fine = posteriorOn(makeGridAround(coarse.mean, half, o.gridCellM), usable, o);
+  if (!fine) return resultOf(coarse, true);
+  const wide = credibleRadius(fine.grid, fine.mean, 0.9) > 0.25 * o.maxRangeM;
+  return resultOf(fine, fine.edgeMass > 0.002 || fine.priorMass > 0.01 || wide);
 }
 
 // ---- association ----
