@@ -83,3 +83,10 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - At 4,096 (the cut prompt, `results/ollama_ministral-3_3b-2026-11-22-11-12-cut-at-4096.jsonl`): 174 of 357 (49%), outcomes 339 of 357, 6 wrong pins (`a-two-places-5` and `-9` new), median 3.7 s. Worst tags: two-places 6 of 30, adversarial 24 of 105, compass-only 3 of 21, track 33 of 129.
 - With `num_ctx` 8,192 on every call (`results/ollama_ministral-3_3b-2026-11-22-11-31.jsonl`): 237 of 357 (66%), outcomes 333 of 357, 9 wrong pins, median 2.5 s. The same as the baseline, case by case. Replies: 345 of 372, no regression.
 - So the baselines were taken on the whole prompt (their median, 3.4 s, is too fast for a cut prompt), and the prompt has been over 4,095 tokens since `2fc3bd9` (21 Nov 11:05). Anything seen live through an Ollama started at 4,096, with `docs/setup.md` from 21 Nov 11:06 or the launcher from 21 Nov 19:57, was on the cut prompt: read those observations again before tuning for them.
+
+## 2026-11-28, finding: track-sighting fusion, simulation [ghost]
+
+- Built `lib/geo/fusion.ts`, `scripts/sim-fusion.ts` (seed 20261128) and `tests/fusion.test.ts`; report `evals/fusion-2026-11-28.md`. No app import: the resolver and the command post still place a track from one report.
+- Five synthetic scenarios, 200 trials each, human sigma 2/5/10. Perpendicular bearings: CEP50 75.8 m and NEES 1.96 at 5°, with 93% inside the announced 90% circle. Nearly parallel bearings: 80 to 83% of posteriors reach the grid edge and NEES rises to 2.99-3.71 when cut. One gross outlier: 48 m of movement with epsilon 0, 0.1 m with 0.05. One observer's five reports: NEES 0.21, conservative by design.
+- Not measured: real bearings, ranges, observer circles or voices; association on a live log; any map display. The 5° human sigma is an assumption.
+- Next: decide with Alex whether a ghost overlay is worth building, where to show a cut-off ridge, and how to feed the observations from the mission log without changing the resolver.
