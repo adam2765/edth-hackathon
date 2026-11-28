@@ -104,7 +104,7 @@ export interface TrackState {
   seenBy: string;
   seenTs: number;
   /** Where the observer was at the latest sighting, for the line of sight. */
-  from: { lat: number; lon: number } | null;
+  from: { lat: number; lon: number; radius_m?: number; bearing_deg?: number | null; bearing_source?: "degrees" | "mils" | "clock" | "compass8" | null } | null;
   openedBy: string;
   openedTs: number;
   /** The report whose question about where the track is still waits for an answer. */
@@ -414,6 +414,16 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
     t.pendingReport = null;
   };
 
+  /** The observer geometry, keeping new fields only when the entry has them. */
+  const fromOf = (s: TrackSighting): TrackState["from"] =>
+    s.from
+      ? {
+          ...s.from,
+          ...(s.bearing_deg !== undefined ? { bearing_deg: s.bearing_deg } : {}),
+          ...(s.bearing_source !== undefined ? { bearing_source: s.bearing_source } : {}),
+        }
+      : null;
+
   /** Takes a report about a track in. Returns the track, and whether this report opened it. */
   const seeTrack = (e: ReportEntry, s: TrackSighting): { track: TrackState; opened: boolean } => {
     let t = tracks.get(s.n);
@@ -460,7 +470,7 @@ export function foldLog(entries: LogEntry[], upTo = Number.POSITIVE_INFINITY, co
       placeTrack(t, s.position, e.ts);
       // The way it was moving belongs to the sighting: an older one says nothing about now.
       t.heading = s.heading;
-      t.from = s.from;
+      t.from = fromOf(s);
     } else if (e.resolution.status === "ambiguous") {
       t.pendingReport = e.id;
       t.heading = s.heading;

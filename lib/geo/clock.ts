@@ -12,6 +12,8 @@ export interface ClockSaid {
   hour: number;
   /** The bearing, degrees: 12 o'clock is 0 (north), 3 o'clock is 90 (east). */
   deg: number;
+  /** Which wording produced it: a clock hour, degrees or mils. */
+  source?: "clock" | "degrees" | "mils";
   /** The nearest of the eight compass points. 1 and 2 o'clock are both north-east. */
   direction: Direction;
 }
@@ -43,7 +45,7 @@ function hourOf(t: string | undefined): number | null {
 
 function said(hour: number): ClockSaid {
   const deg = ((hour % 12) * 30) % 360;
-  return { hour, deg, direction: POINTS[Math.round(deg / 45) % 8] };
+  return { hour, deg, source: "clock", direction: POINTS[Math.round(deg / 45) % 8] };
 }
 
 /**
@@ -212,9 +214,9 @@ function numberAt(toks: string[], i: number): { n: number; end: number; spoken: 
   return digits ? { n: Number(digits), end: j, spoken: digits } : null;
 }
 
-const asSaid = (deg: number): ClockSaid => {
+const asSaid = (deg: number, source: "degrees" | "mils"): ClockSaid => {
   const d = Math.round(((deg % 360) + 360) % 360);
-  return { hour: d / 30, deg: d, direction: POINTS[Math.round(d / 45) % 8] };
+  return { hour: d / 30, deg: d, source, direction: POINTS[Math.round(d / 45) % 8] };
 };
 
 /** A bearing said, from north: "bearing 060", "azimut 120 degrés", "1600 mils". Null when none was. */
@@ -231,11 +233,11 @@ export function bearingSaid(transcript: string): ClockSaid | null {
     if (num.spoken.length === 4 && !MILS_WORDS.has(toks[num.end] ?? "")) num = { n: Number(num.spoken.slice(0, 3)), end: num.end - 1, spoken: num.spoken.slice(0, 3) };
     const unit = toks[num.end];
     if (unit && MILS_WORDS.has(unit)) {
-      if (num.n <= 6400) return asSaid((num.n * 360) / 6400);
+      if (num.n <= 6400) return asSaid((num.n * 360) / 6400, "mils");
       continue;
     }
-    if (after && num.n <= 360) return asSaid(num.n);
-    if (!after && unit && DEGREE_WORDS.has(unit) && num.n <= 360 && (BEARING_WORDS.has(toks[i - 1] ?? "") || toks[i - 1] === "at")) return asSaid(num.n);
+    if (after && num.n <= 360) return asSaid(num.n, "degrees");
+    if (!after && unit && DEGREE_WORDS.has(unit) && num.n <= 360 && (BEARING_WORDS.has(toks[i - 1] ?? "") || toks[i - 1] === "at")) return asSaid(num.n, "degrees");
   }
   return null;
 }

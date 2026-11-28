@@ -525,7 +525,7 @@ describe("tracks in a mission", () => {
     expect(alpha.position).toMatchObject({ lat: START.lat, lon: START.lon, estimated: true });
     expect(alpha.atStart).toBe(true);
     expect(alpha.lastHeard).toBe(t(10));
-    expect(s.tracks[0].from).toEqual({ lat: START.lat, lon: START.lon });
+    expect(s.tracks[0].from).toEqual({ lat: START.lat, lon: START.lon, radius_m: 300 });
     expect(s.feed[0]).toMatchObject({ track: 1, status: "resolved", outcome: "Marked Track 1: hostile vehicle at Bérault (±40 m)", position: { label: "Bérault" } });
   });
 

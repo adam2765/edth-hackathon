@@ -10,6 +10,7 @@ import { withTrackNumber, type KnownTrack } from "../geo/tracks";
 import { FADE_AFTER_MS, foldLog, headingOf } from "./fold";
 import { endOf, missionOf, missionRoster, sortMissions, startPosition, summarizeMission, toLastPosition } from "./mission";
 import { nextTrackNumber, plotPosition, type FixInput, type PlotInput } from "./plot";
+import { sightingGeometry } from "./sighting";
 import { positionFromPlacement, positionFromReport } from "./position";
 import { AUDIO_FILE, getStore, newEntryId, withSessionLock } from "./store";
 import { checkTask, checkUnit, trackInLog, type TaskInput, type UnitInput } from "./tasks";
@@ -272,7 +273,7 @@ export async function saveReport(full: ReportInput, now = Date.now()): Promise<S
       // The same count as tracks placed at the command post.
       const n = t.n ?? nextTrackNumber(entries);
       resolution = input.intent ? withTrackNumber(resolution, n, input.intent, read ?? input.transcript) : { ...resolution, track: { ...t, n } };
-      const from = input.lastPosition;
+      const geometry = sightingGeometry(read ?? input.transcript, input.intent, input.lastPosition);
       track = {
         n,
         affiliation: t.affiliation,
@@ -281,7 +282,9 @@ export async function saveReport(full: ReportInput, now = Date.now()): Promise<S
         text: t.text,
         heading: t.heading,
         position: t.placement ? positionFromPlacement(t.placement, t.label ?? "position") : null,
-        from: from ? { lat: from.lat, lon: from.lon } : null,
+        from: geometry.from,
+        ...(geometry.bearing_deg != null ? { bearing_deg: geometry.bearing_deg } : {}),
+        ...(geometry.bearing_source != null ? { bearing_source: geometry.bearing_source } : {}),
       };
     }
     // A report about a track never moves the speaker.

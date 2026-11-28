@@ -43,7 +43,10 @@ export interface TrackSighting {
   /** Where the report puts the track; null while its question is open, or when it only says what the track is. */
   position: UnitPosition | null;
   /** Where the observer was, for the line of sight on the map; null when not known. */
-  from: { lat: number; lon: number } | null;
+  from: { lat: number; lon: number; radius_m?: number } | null;
+  /** The continuous bearing as said, or the centre of a compass bin; null when none. */
+  bearing_deg?: number | null;
+  bearing_source?: "degrees" | "mils" | "clock" | "compass8" | null;
 }
 
 export interface ReportEntry {
