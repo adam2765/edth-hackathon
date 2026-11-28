@@ -101,7 +101,7 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 - Mismatch: truth 10 / estimator 5 gives NEES 7.97 and 46% inside the 90% circle; a 3 degree bias gives 2.81 and 82%; heavy tails 7.21 and 81%; a 20% range understatement 2.56 and 83%.
 - One observer, five reports: NEES 0.35 to 0.40, deliberately conservative; the covariance area is never smaller than the same reports treated as independent (test).
 - Not measured: real bearings, ranges, observer circles or voices; live association; any display. Logging proposal in the report, not built.
-- Robust corrections, 1,000 trials: sigma mixture 2/5/10 (prior 0.25/0.5/0.25) is too conservative (100% coverage everywhere); Student-t nu=3 is closest to nominal (mean 90% deviation 5.8 points against 14.4), with matched case 99% and NEES 0.73; nu=4 is the less conservative compromise (matched 0.93, truth 10 72%). Neither is a default.
+- Robust corrections, 1,000 trials: sigma mixture 2/5/10 (prior 0.25/0.5/0.25) is too conservative (100% coverage everywhere); Student-t nu=3 is closest to nominal (mean 90% deviation 5.8 points against 14.2), with matched case 99% and NEES 0.73; nu=4 is the less conservative compromise (matched 0.93, truth 10 72%). Neither is a default.
 - Unresolved thresholds 10/15/25 degrees and 0.25/0.5 prior: no change on perpendicular (0% unresolved) or nearly parallel (100% unresolved). Intermediate geometries not tested.
 - Final reproducible run: commit f59baf7e26aab501ca24958c30baacde000059bd, seed 20261128, 2,000 trials, 1,706 s, command `npx tsx scripts/sim-fusion.ts --trials 2000`.
 - Additive logging is built: TrackSighting keeps observer radius and continuous bearing; old entries read unchanged; resolver untouched.
