@@ -98,12 +98,22 @@ describe("bearing-only fusion", () => {
       [sighting("a", "A", at(-100, 0), target), sighting("b", "B", at(100, 0), target)],
       { center, gridHalfSizeM: 2000, humanBearingSigmaDeg: 5 },
     );
-    expect(r.status).toBe("resolved");
+    expect(r.status).toBe("unresolved");
     const [major, minor] = sigmaAxis(r.cov!);
     expect(Math.sqrt(major)).toBeGreaterThan(150);
     expect(Math.sqrt(minor)).toBeGreaterThan(20);
     expect(major / minor).toBeGreaterThan(4);
     expect(r.radius90_m!).toBeGreaterThan(200);
+    expect(r.truncated).toBe(true);
+  });
+
+  it("marks a posterior cut by the range prior as unresolved", () => {
+    const target = at(0, 1500);
+    const r = fuseObservations(
+      [sighting("a", "A", at(-100, 0), target), sighting("b", "B", at(100, 0), target)],
+      { center, maxRangeM: 1600, humanBearingSigmaDeg: 5 },
+    );
+    expect(r.status).toBe("unresolved");
     expect(r.truncated).toBe(true);
   });
 

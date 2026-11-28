@@ -84,7 +84,8 @@ export interface Scenario {
   end: LocalPoint;
   kind: "bearings" | "ranged" | "same-observer";
   outlier?: boolean;
-  gridHalf: number;
+  /** The maximum range a bearing-only sighting is allowed to reach. */
+  maxRange: number;
 }
 
 const OBSERVER_SIGMA_M = 10;
@@ -101,7 +102,7 @@ export const SCENARIOS: Scenario[] = [
     start: { e: 0, n: 450 },
     end: { e: 0, n: 550 },
     kind: "bearings",
-    gridHalf: 1500,
+    maxRange: 1500,
   },
   {
     id: "bearings-near-parallel",
@@ -114,7 +115,7 @@ export const SCENARIOS: Scenario[] = [
     start: { e: 0, n: 1450 },
     end: { e: 0, n: 1550 },
     kind: "bearings",
-    gridHalf: 2000,
+    maxRange: 2000,
   },
   {
     id: "bearings-outlier",
@@ -130,7 +131,7 @@ export const SCENARIOS: Scenario[] = [
     end: { e: 0, n: 300 },
     kind: "bearings",
     outlier: true,
-    gridHalf: 1200,
+    maxRange: 1200,
   },
   {
     id: "ranged-three",
@@ -144,7 +145,7 @@ export const SCENARIOS: Scenario[] = [
     start: { e: -200, n: 0 },
     end: { e: 200, n: 0 },
     kind: "ranged",
-    gridHalf: 1200,
+    maxRange: 1200,
   },
   {
     id: "ranged-same-observer",
@@ -154,7 +155,7 @@ export const SCENARIOS: Scenario[] = [
     start: { e: 0, n: -100 },
     end: { e: 0, n: 100 },
     kind: "same-observer",
-    gridHalf: 1000,
+    maxRange: 1000,
   },
 ];
 
@@ -213,6 +214,7 @@ function observationsFor(rng: () => number, scenario: Scenario, truth: LocalPoin
 interface Stats {
   n: number;
   failed: number;
+  unresolved: number;
   cep50: number;
   cep90: number;
   nees: number;
@@ -230,10 +232,11 @@ function quantile(xs: number[], q: number): number {
   return s[lo] + (s[hi] - s[lo]) * (at - lo);
 }
 
-function stats(errors: number[], nees: number[], hits50: boolean[], hits90: boolean[], truncated: boolean[], failed: number): Stats {
+function stats(errors: number[], nees: number[], hits50: boolean[], hits90: boolean[], truncated: boolean[], failed: number, unresolved = 0): Stats {
   return {
     n: errors.length,
     failed,
+    unresolved,
     cep50: quantile(errors, 0.5),
     cep90: quantile(errors, 0.9),
     nees: nees.length ? nees.reduce((a, b) => a + b, 0) / nees.length : Number.NaN,
@@ -267,6 +270,7 @@ export function runScenario(
   const hits90: boolean[] = [];
   const truncated: boolean[] = [];
   let failed = 0;
+  let unresolved = 0;
   const currentErrors: number[] = [];
   const currentHits: boolean[] = [];
   const exactErrors: number[] = [];
@@ -281,10 +285,14 @@ export function runScenario(
     const result = fuseObservations(observations, {
       center: AREAS[scenario.area].centre,
       gridCellM: 10,
-      gridHalfSizeM: scenario.gridHalf,
+      maxRangeM: scenario.maxRange,
       humanBearingSigmaDeg: estimatorSigmaDeg,
       rangePrior,
     });
+    if (result.status === "unresolved") {
+      unresolved++;
+      continue;
+    }
     if (result.status !== "resolved" || !result.mean || !result.cov) {
       failed++;
       continue;
@@ -325,6 +333,7 @@ export function runScenario(
       ? {
           n: errors.length,
           failed: 0,
+          unresolved: 0,
           cep50: quantile(errors, 0.5),
           cep90: quantile(errors, 0.9),
           nees: Number.NaN,
@@ -334,7 +343,7 @@ export function runScenario(
         }
       : null;
   return {
-    fused: stats(errors, nees, hits50, hits90, truncated, failed),
+    fused: stats(errors, nees, hits50, hits90, truncated, failed, unresolved),
     current: single(currentErrors, currentHits),
     exact: single(exactErrors, exactHits),
   };
@@ -346,6 +355,10 @@ function m(x: number, digits = 1): string {
 function p(x: number): string {
   return Number.isFinite(x) ? `${(100 * x).toFixed(0)}%` : "-";
 }
+function unresolvedShare(s: Stats): string {
+  const total = s.n + s.unresolved + s.failed;
+  return total ? p(s.unresolved / total) : "-";
+}
 
 function main() {
   console.log(`Fixed seed ${seed}, ${trials} trials per row. Synthetic paths, observers and measurements only.`);
@@ -353,9 +366,9 @@ function main() {
   console.log("A bearing-only report places nothing today, so the current method asks how far.\n");
   for (const scenario of SCENARIOS) {
     console.log(`### ${scenario.title}`);
-    console.log(`Area: ${scenario.area}. Grid: 10 m cells, half-size ${scenario.gridHalf} m.\n`);
-    console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | current 8-point CEP50 | current 8-point CEP90 | current circle | exact single CEP50 | exact single CEP90 | exact circle |");
-    console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+    console.log(`Area: ${scenario.area}. 10 m cells, bearing range prior ${scenario.maxRange} m.\n`);
+    console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | unresolved | current 8-point CEP50 | current 8-point CEP90 | current circle | exact single CEP50 | exact single CEP90 | exact circle |");
+    console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
     for (const sigma of SIGMAS) {
       const { fused, current, exact } = runScenario(scenario, sigma);
       const currentCols = current
@@ -364,7 +377,7 @@ function main() {
       const exactCols = exact
         ? `${m(exact.cep50)} m | ${m(exact.cep90)} m | ${p(exact.hit90)} inside`
         : "no placement | no placement | asks how far";
-      console.log(`| ${sigma}° | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} | ${currentCols} | ${exactCols} |`);
+      console.log(`| ${sigma}° | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} | ${unresolvedShare(fused)} | ${currentCols} | ${exactCols} |`);
     }
     console.log("");
   }

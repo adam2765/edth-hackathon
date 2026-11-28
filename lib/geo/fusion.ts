@@ -67,6 +67,7 @@ export const SIGMA_QUANT_MILS_DEG = 0;
 
 export const DEFAULT_GRID_CELL_M = 10;
 export const DEFAULT_GRID_HALF_M = 2000;
+export const DEFAULT_MAX_RANGE_M = 3000;
 export const DEFAULT_OUTLIER_EPSILON = 0.05;
 export const DEFAULT_CORRELATION_WINDOW_MS = 120_000;
 /** Chi-square, 2 degrees of freedom, 99 percent. */
@@ -88,7 +89,10 @@ export interface FusionOptions {
   humanBearingSigmaDeg?: number;
   outlierEpsilon?: number;
   gridCellM?: number;
+  /** Overrides the automatic grid; rare. */
   gridHalfSizeM?: number;
+  /** The maximum range a bearing-only sighting is allowed to reach, metres. */
+  maxRangeM?: number;
   correlationWindowMs?: number;
   /**
    * What the bearing-only ridge assumes about distance: uniform per unit area (the 1/r factor)
@@ -97,7 +101,7 @@ export interface FusionOptions {
   rangePrior?: RangePrior;
 }
 
-type Resolved = Required<Omit<FusionOptions, "center">> & { center: LatLon };
+type Resolved = Required<Omit<FusionOptions, "center" | "gridHalfSizeM">> & { center: LatLon; gridHalfSizeM?: number };
 
 function options(o: FusionOptions): Resolved {
   return {
@@ -106,7 +110,8 @@ function options(o: FusionOptions): Resolved {
     humanBearingSigmaDeg: o.humanBearingSigmaDeg ?? SIGMA_HUMAN_BEARING_DEG,
     outlierEpsilon: Math.min(0.5, Math.max(0, o.outlierEpsilon ?? DEFAULT_OUTLIER_EPSILON)),
     gridCellM: Math.max(1, o.gridCellM ?? DEFAULT_GRID_CELL_M),
-    gridHalfSizeM: Math.max(50, o.gridHalfSizeM ?? DEFAULT_GRID_HALF_M),
+    gridHalfSizeM: o.gridHalfSizeM,
+    maxRangeM: Math.max(100, o.maxRangeM ?? DEFAULT_MAX_RANGE_M),
     correlationWindowMs: Math.max(0, o.correlationWindowMs ?? DEFAULT_CORRELATION_WINDOW_MS),
     rangePrior: o.rangePrior ?? "uniform-area",
   };
@@ -192,7 +197,7 @@ export interface ProbabilityGrid {
 }
 
 export interface FusionResult {
-  status: "resolved" | "insufficient";
+  status: "resolved" | "unresolved" | "insufficient";
   mean: LocalPoint | null;
   cov: Covariance | null;
   /** The smallest circle around `mean` that holds this share of the posterior. */
@@ -272,7 +277,7 @@ function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows
 }
 
 /** Log likelihood of one bearing-only observation: a ridge along the line of sight. */
-function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number, rangePrior: RangePrior): Float64Array {
+function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number, rangePrior: RangePrior, maxRange: number): Float64Array {
   const sigma = Math.max(1e-6, sigmaDeg * DEG);
   const peak = 1 / (Math.sqrt(TWO_PI) * sigma);
   const area = (grid.cols * grid.cellM) * (grid.rows * grid.cellM);
@@ -286,6 +291,10 @@ function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; row
       const de = q.e - observer.e;
       const dn = q.n - observer.n;
       const r = Math.max(near, Math.hypot(de, dn));
+      if (r > maxRange) {
+        log[j * grid.cols + i] = Number.NEGATIVE_INFINITY;
+        continue;
+      }
       // The ridge's height as a function of distance is the range prior, not a likelihood term.
       const delta = wrapPi(Math.atan2(de, dn) - theta);
       const along = rangePrior === "uniform-area" ? peak / r : peak;
@@ -306,7 +315,7 @@ function logOfObservation(obs: FusionObservation, center: LatLon, grid: { origin
     if (!g) return new Float64Array(grid.cols * grid.rows).fill(Number.NEGATIVE_INFINITY);
     return rangedLog(grid, g.mean, g.cov, opts.outlierEpsilon);
   }
-  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg), opts.outlierEpsilon, opts.rangePrior);
+  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg), opts.outlierEpsilon, opts.rangePrior, opts.maxRangeM);
 }
 
 /** A normalised grid from log weights; returns the grid and its mean and covariance. */
@@ -453,6 +462,30 @@ function credibleRadius(grid: ProbabilityGrid, mean: LocalPoint, mass: number): 
   return cells.length ? Math.sqrt(cells[cells.length - 1].d2) : 0;
 }
 
+/** Posterior mass within two cells of a bearing-only observation's maximum range. */
+function priorEdgeMass(
+  grid: ProbabilityGrid,
+  observations: FusionObservation[],
+  center: LatLon,
+  maxRange: number,
+): number {
+  const sensors = observations
+    .filter((x) => x.range_m == null && x.bearing_deg != null)
+    .map((x) => toLocal(x.observer, center));
+  if (!sensors.length) return 0;
+  const near = maxRange - 2 * grid.cellM;
+  let mass = 0;
+  for (let j = 0; j < grid.rows; j++) {
+    for (let i = 0; i < grid.cols; i++) {
+      const p = grid.p[j * grid.cols + i];
+      if (!(p > 0)) continue;
+      const q = { e: grid.origin.e + i * grid.cellM, n: grid.origin.n + j * grid.cellM };
+      if (sensors.some((s) => Math.hypot(q.e - s.e, q.n - s.n) >= near)) mass += p;
+    }
+  }
+  return mass;
+}
+
 function edgeMass(grid: ProbabilityGrid): number {
   let mass = 0;
   for (let j = 0; j < grid.rows; j++) {
@@ -474,7 +507,22 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
   if (!usable.length) {
     return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no bearing and no range" };
   }
-  const dims = makeGrid(o.gridHalfSizeM, o.gridCellM);
+  let half = o.gridHalfSizeM;
+  if (half == null) {
+    half = o.maxRangeM + o.gridCellM;
+    for (const obs of usable) {
+      const at = toLocal(obs.observer, o.center);
+      half = Math.max(half, Math.hypot(at.e, at.n) + o.gridCellM);
+      if (obs.range_m != null) {
+        const g = observationGaussian(obs, o.center, o);
+        if (g) {
+          const spread = Math.sqrt(Math.max(g.cov[0][0], g.cov[1][1]));
+          half = Math.max(half, Math.hypot(g.mean.e, g.mean.n) + 4 * spread);
+        }
+      }
+    }
+  }
+  const dims = makeGrid(half, o.gridCellM);
   const clusters = correlationClusters(usable, o.correlationWindowMs);
   const total = new Float64Array(dims.cols * dims.rows);
   let groups = 0;
@@ -506,15 +554,17 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
   for (let k = 0; k < total.length; k++) normalized[k] = Number.isFinite(total[k]) ? total[k] - max : Number.NEGATIVE_INFINITY;
   const { grid, mean, cov } = gridFromLog(normalized, dims);
   const mass = edgeMass(grid);
+  const priorMass = priorEdgeMass(grid, usable, o.center, o.maxRangeM);
+  const truncated = mass > 0.002 || priorMass > 0.01;
   return {
-    status: "resolved",
+    status: truncated ? "unresolved" : "resolved",
     mean,
     cov,
     radius50_m: credibleRadius(grid, mean, 0.5),
     radius90_m: credibleRadius(grid, mean, 0.9),
     grid,
     groups,
-    truncated: mass > 0.002,
+    truncated,
   };
 }
 
