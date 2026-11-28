@@ -400,6 +400,32 @@ function intersectGaussians(a: Gaussian, b: Gaussian): Gaussian {
   return best;
 }
 
+/**
+ * Covariance intersection of more than two estimates. Equal weights: the intersection is
+ * contained in this weighted estimate, and no order or numerical tie can pull it to one report.
+ */
+function intersectGaussianList(list: Gaussian[]): Gaussian {
+  if (!list.length) throw new Error("no estimate");
+  if (list.length === 1) return list[0];
+  if (list.length === 2) return intersectGaussians(list[0], list[1]);
+  let info: Covariance = [[0, 0], [0, 0]];
+  let etaE = 0;
+  let etaN = 0;
+  for (const g of list) {
+    const inv = invertCov(g.cov);
+    if (!inv) continue;
+    info = [
+      [info[0][0] + inv[0][0] / list.length, info[0][1] + inv[0][1] / list.length],
+      [info[1][0] + inv[1][0] / list.length, info[1][1] + inv[1][1] / list.length],
+    ];
+    etaE += (inv[0][0] * g.mean.e + inv[0][1] * g.mean.n) / list.length;
+    etaN += (inv[1][0] * g.mean.e + inv[1][1] * g.mean.n) / list.length;
+  }
+  const cov = invertCov(info);
+  if (!cov) return list[0];
+  return { cov, mean: { e: cov[0][0] * etaE + cov[0][1] * etaN, n: cov[1][0] * etaE + cov[1][1] * etaN } };
+}
+
 function credibleRadius(grid: ProbabilityGrid, mean: LocalPoint, mass: number): number {
   const cells: { d2: number; p: number }[] = [];
   for (let j = 0; j < grid.rows; j++) {
@@ -448,15 +474,17 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
     let group: Float64Array;
     const allRanged = cluster.observations.every((x) => x.range_m != null && x.bearing_deg != null);
     if (allRanged) {
-      let g = observationGaussian(cluster.observations[0], o.center, o)!;
-      for (let k = 1; k < cluster.observations.length; k++) {
-        g = intersectGaussians(g, observationGaussian(cluster.observations[k], o.center, o)!);
-      }
+      const gaussians = cluster.observations.map((x) => observationGaussian(x, o.center, o)!);
+      const g = intersectGaussianList(gaussians);
       group = rangedLog(dims, g.mean, g.cov, o.outlierEpsilon);
     } else {
       const logs = cluster.observations.map((x) => logOfObservation(x, o.center, dims, o));
-      group = logs[0];
-      for (let k = 1; k < logs.length; k++) group = intersectLogs(group, logs[k], dims);
+      if (logs.length === 1) group = logs[0];
+      else if (logs.length === 2) group = intersectLogs(logs[0], logs[1], dims);
+      else {
+        group = new Float64Array(logs[0].length);
+        for (const log of logs) for (let i = 0; i < group.length; i++) group[i] += log[i] / logs.length;
+      }
     }
     for (let i = 0; i < total.length; i++) total[i] += group[i];
     groups++;
