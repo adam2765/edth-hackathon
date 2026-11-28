@@ -233,5 +233,9 @@ describe("reproducibility", () => {
     expect(b).toEqual(a);
     const c = runScenario(SCENARIOS[0], 5, 4243, 3);
     expect(c.fused.cep50).not.toBe(a.fused.cep50);
+    expect(a.fused.cep50_ci.lo).toBeLessThanOrEqual(a.fused.cep50);
+    expect(a.fused.cep50_ci.hi).toBeGreaterThanOrEqual(a.fused.cep50);
+    expect(a.fused.hit90_ci.lo).toBeLessThanOrEqual(a.fused.hit90);
+    expect(a.fused.hit90_ci.hi).toBeGreaterThanOrEqual(a.fused.hit90);
   }, 30_000);
 });
