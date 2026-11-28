@@ -87,6 +87,18 @@ Entry heading: `## YYYY-MM-DD, attack|tune|baseline: <rule> [<extractor>]`.
 ## 2026-11-28, finding: track-sighting fusion, simulation [ghost]
 
 - Built `lib/geo/fusion.ts`, `scripts/sim-fusion.ts` (seed 20261128) and `tests/fusion.test.ts`; report `evals/fusion-2026-11-28.md`. No app import: the resolver and the command post still place a track from one report.
-- Five synthetic scenarios, 200 trials each, human sigma 2/5/10. Perpendicular bearings: CEP50 75.8 m and NEES 1.96 at 5°, with 93% inside the announced 90% circle. Nearly parallel bearings: 80 to 83% of posteriors reach the grid edge and NEES rises to 2.99-3.71 when cut. One gross outlier: 48 m of movement with epsilon 0, 0.1 m with 0.05. One observer's five reports: NEES 0.21, conservative by design.
-- Not measured: real bearings, ranges, observer circles or voices; association on a live log; any map display. The 5° human sigma is an assumption.
+- Five synthetic scenarios, 200 trials each, human sigma 2/5/10. Perpendicular bearings: CEP50 75.8 m and NEES 1.96 at 5ï¿½, with 93% inside the announced 90% circle. Nearly parallel bearings: 80 to 83% of posteriors reach the grid edge and NEES rises to 2.99-3.71 when cut. One gross outlier: 48 m of movement with epsilon 0, 0.1 m with 0.05. One observer's five reports: NEES 0.21, conservative by design.
+- Not measured: real bearings, ranges, observer circles or voices; association on a live log; any map display. The 5ï¿½ human sigma is an assumption.
 - Next: decide with Alex whether a ghost overlay is worth building, where to show a cut-off ridge, and how to feed the observations from the mission log without changing the resolver.
+
+
+## 2026-11-28, final: fusion simulation after the validity pass [ghost]
+
+- Supersedes the earlier finding entry above. 2,000 trials per row, seed 20261128; 95% intervals on CEP and NEES (bootstrap) and on 50/90 circle coverage (Wilson). Truth and estimator are separate; matched rows set the estimator to the truth's sigma.
+- Perpendicular bearings: CEP50 29.6 m at 2?, 75.4 m at 5?, 141.3 m at 10?; NEES 2.02, 1.97, 1.94. At 2/5 the intervals contain nominal; at 10 the 50 and 90 circles over-cover significantly, and 13% are unresolved.
+- Nearly parallel bearings: 100% unresolved at 2, 5 and 10 degrees and under both range priors. No point estimate; the long covariance is returned only for inspection.
+- Current method, 5 degrees: 8-point CEP50 283.8 m, exact single 128.5 m, fused 56.8 m; the continuous angle is the larger gain, fusion the second. The earlier "fusion halves the error" sentence was corrected in the report.
+- Mismatch: truth 10 / estimator 5 gives NEES 7.97 and 46% inside the 90% circle; a 3 degree bias gives 2.81 and 82%; heavy tails 7.21 and 81%; a 20% range understatement 2.56 and 83%.
+- One observer, five reports: NEES 0.35 to 0.40, deliberately conservative; the covariance area is never smaller than the same reports treated as independent (test).
+- Not measured: real bearings, ranges, observer circles or voices; live association; any display. Logging proposal in the report, not built.
+- Next: decide with Alex whether a ghost overlay is worth building, and whether to log the observer radius and continuous bearing first.
