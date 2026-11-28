@@ -149,6 +149,31 @@ describe("correlated reports", () => {
     expect(Math.hypot(rSame.mean!.e, rSame.mean!.n)).toBeLessThan(5);
   });
 
+  it("never gives one observer a smaller area than the same reports treated as independent", () => {
+    const from = at(-400, 0);
+    const target = at(0, 0);
+    const offsets = [
+      [0, 0, 0, 0, 0],
+      [3, -2, 1, -1, 2],
+      [-4, 4, -3, 3, -2],
+      [8, -8, 6, -6, 2],
+      [12, -12, 9, -9, 3],
+    ];
+    for (const set of offsets) {
+      const same = set.map((off, i) =>
+        sighting(`r${i}`, "A", from, target, { range: 400 + off * 10, ts: i * 30_000 }),
+      );
+      const independent = same.map((o) => ({ ...o, observerId: `A${o.id}` }));
+      const a = fuseObservations(same, { center, gridHalfSizeM: 1000 });
+      const b = fuseObservations(independent, { center, gridHalfSizeM: 1000 });
+      expect(a.status).toBe("resolved");
+      expect(b.status).toBe("resolved");
+      expect(a.groups).toBe(1);
+      expect(b.groups).toBe(5);
+      expect(detCov(a.cov!)).toBeGreaterThanOrEqual(detCov(b.cov!) * 0.999);
+    }
+  });
+
   it("clusters one observer's reports only inside the time window", () => {
     const from = at(-400, 0);
     const target = at(0, 0);
