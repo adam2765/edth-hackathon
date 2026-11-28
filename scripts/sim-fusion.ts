@@ -16,7 +16,6 @@ import { fileURLToPath } from "node:url";
 import { AREAS, type AreaId } from "../lib/geo/areas";
 import { bearingDeg, distanceM, type LatLon } from "../lib/geo/geo";
 import {
-  bearingSigmaDeg,
   fromLocal,
   fuseObservations,
   invertCov,
@@ -60,6 +59,18 @@ interface Observer {
   e: number;
   n: number;
   sigma_m: number;
+}
+
+/** What the world does, as opposed to what the estimator assumes. */
+export interface TruthModel {
+  /** The true bearing noise. The estimator's value is passed separately. */
+  bearingSigmaDeg: number;
+  /** A constant offset added to every bearing. */
+  biasDeg?: number;
+  /** Reported range as a fraction of the true range. 0.8 is a 20 percent understatement. */
+  rangeFactor?: number;
+  /** One bearing in ten gets five times the stated sigma. */
+  heavyTail?: boolean;
 }
 
 export interface Scenario {
@@ -157,7 +168,7 @@ function sighting(
   observer: Observer,
   truth: LocalPoint,
   index: number,
-  sigmaHumanDeg: number,
+  model: TruthModel,
   gross: boolean,
 ): FusionObservation {
   const oe = observer.e + normal(rng) * observer.sigma_m;
@@ -166,7 +177,9 @@ function sighting(
   const to: LatLon = at(scenario.area, truth);
   let bearing = bearingDeg(from, to);
   let range = distanceM(from, to);
-  bearing += normal(rng) * bearingSigmaDeg("degrees", sigmaHumanDeg);
+  const tail = model.heavyTail && rng() < 0.1 ? 5 : 1;
+  bearing += normal(rng) * model.bearingSigmaDeg * tail + (model.biasDeg ?? 0);
+  range *= model.rangeFactor ?? 1;
   range *= 1 + normal(rng) * 0.25;
   if (gross) {
     bearing += 100;
@@ -184,13 +197,13 @@ function sighting(
   };
 }
 
-function observationsFor(rng: () => number, scenario: Scenario, truth: LocalPoint, sigmaHumanDeg: number): FusionObservation[] {
+function observationsFor(rng: () => number, scenario: Scenario, truth: LocalPoint, model: TruthModel): FusionObservation[] {
   const out: FusionObservation[] = [];
   const reports = scenario.kind === "same-observer" ? 5 : 1;
   for (let index = 0; index < reports; index++) {
     for (const observer of scenario.observers) {
       const gross = !!scenario.outlier && observer.id === "D";
-      out.push(sighting(rng, scenario, observer, truth, index, sigmaHumanDeg, gross));
+      out.push(sighting(rng, scenario, observer, truth, index, model, gross));
     }
   }
   return out;
@@ -229,12 +242,19 @@ function stats(errors: number[], nees: number[], hits50: boolean[], hits90: bool
   };
 }
 
-export function runScenario(scenario: Scenario, sigmaHumanDeg: number, seedValue = seed, trialCount = trials): { fused: Stats; current: Stats | null } {
+export function runScenario(
+  scenario: Scenario,
+  estimatorSigmaDeg: number,
+  seedValue = seed,
+  trialCount = trials,
+  truthModel: TruthModel = { bearingSigmaDeg: estimatorSigmaDeg },
+): { fused: Stats; current: Stats | null } {
   const seed = seedValue;
   const trials = trialCount;
   let idHash = 2166136261;
-  for (let i = 0; i < scenario.id.length; i++) idHash = Math.imul(idHash ^ scenario.id.charCodeAt(i), 16777619);
-  const rng = rngFrom((seed ^ idHash ^ Math.round(sigmaHumanDeg * 1000)) >>> 0);
+  const key = [scenario.id, estimatorSigmaDeg, truthModel.bearingSigmaDeg, truthModel.biasDeg ?? 0, truthModel.rangeFactor ?? 1, truthModel.heavyTail ? 1 : 0].join("|");
+  for (let i = 0; i < key.length; i++) idHash = Math.imul(idHash ^ key.charCodeAt(i), 16777619);
+  const rng = rngFrom((seed ^ idHash) >>> 0);
   const errors: number[] = [];
   const nees: number[] = [];
   const hits50: boolean[] = [];
@@ -249,12 +269,12 @@ export function runScenario(scenario: Scenario, sigmaHumanDeg: number, seedValue
       e: scenario.start.e + u * (scenario.end.e - scenario.start.e),
       n: scenario.start.n + u * (scenario.end.n - scenario.start.n),
     };
-    const observations = observationsFor(rng, scenario, truth, sigmaHumanDeg);
+    const observations = observationsFor(rng, scenario, truth, truthModel);
     const result = fuseObservations(observations, {
       center: AREAS[scenario.area].centre,
       gridCellM: 10,
       gridHalfSizeM: scenario.gridHalf,
-      humanBearingSigmaDeg: sigmaHumanDeg,
+      humanBearingSigmaDeg: estimatorSigmaDeg,
     });
     if (result.status !== "resolved" || !result.mean || !result.cov) {
       failed++;
@@ -309,12 +329,12 @@ function p(x: number): string {
 
 function main() {
   console.log(`Fixed seed ${seed}, ${trials} trials per row. Synthetic paths, observers and measurements only.`);
-  console.log("Observer position sigma 10 m; range sigma 0.25 r; bearing sigma = the human value (the source is a stated bearing).");
+  console.log("Observer position sigma 10 m; range sigma 0.25 r. In the 2/5/10 rows the estimator is set to the truth's sigma (matched), not fixed at 5.");
   console.log("A bearing-only report places nothing today, so the current method asks how far.\n");
   for (const scenario of SCENARIOS) {
     console.log(`### ${scenario.title}`);
     console.log(`Area: ${scenario.area}. Grid: 10 m cells, half-size ${scenario.gridHalf} m.\n`);
-    console.log("| sigma human | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | current CEP50 | current CEP90 | current circle |");
+    console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | current CEP50 | current CEP90 | current circle |");
     console.log("|---|---|---|---|---|---|---|---|---|---|");
     for (const sigma of SIGMAS) {
       const { fused, current } = runScenario(scenario, sigma);
@@ -325,6 +345,33 @@ function main() {
     }
     console.log("");
   }
+
+  console.log("### Estimator mismatch: perpendicular bearings, estimator fixed at 5°\n");
+  console.log("| truth | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off |");
+  console.log("|---|---|---|---|---|---|---|");
+  const mismatch: { label: string; model: TruthModel }[] = [
+    { label: "5° (matched)", model: { bearingSigmaDeg: 5 } },
+    { label: "10° (estimator assumes 5°)", model: { bearingSigmaDeg: 10 } },
+    { label: "5° + constant bias 3°", model: { bearingSigmaDeg: 5, biasDeg: 3 } },
+    { label: "5° + heavy tails (10% at ×5)", model: { bearingSigmaDeg: 5, heavyTail: true } },
+  ];
+  for (const row of mismatch) {
+    const { fused } = runScenario(SCENARIOS[0], 5, seed, trials, row.model);
+    console.log(`| ${row.label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+  }
+
+  console.log("\n### Estimator mismatch: three observers with range, estimator fixed at 5°\n");
+  console.log("| truth | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off |");
+  console.log("|---|---|---|---|---|---|---|");
+  const rangeMismatch: { label: string; model: TruthModel }[] = [
+    { label: "5° (matched)", model: { bearingSigmaDeg: 5 } },
+    { label: "5°, reported range 0.8 × true", model: { bearingSigmaDeg: 5, rangeFactor: 0.8 } },
+  ];
+  for (const row of rangeMismatch) {
+    const { fused } = runScenario(SCENARIOS[3], 5, seed, trials, row.model);
+    console.log(`| ${row.label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+  }
+  console.log("");
 
   console.log("### The same perpendicular geometry at the three area centres (sigma human 5°)\n");
   console.log("| area | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle |");
