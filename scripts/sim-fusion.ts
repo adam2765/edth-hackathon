@@ -36,6 +36,7 @@ const opt = (name: string) => {
 };
 const seed = Number(opt("seed") ?? SEED_DEFAULT) >>> 0;
 const trials = Math.max(10, Number(opt("trials") ?? TRIALS_DEFAULT) || TRIALS_DEFAULT);
+const only = opt("only")?.split(",").filter(Boolean);
 
 function rngFrom(seedValue: number): () => number {
   let a = seedValue >>> 0;
@@ -416,6 +417,7 @@ function main() {
   console.log("A bearing-only report places nothing today, so the current method asks how far.");
   console.log("Each CEP, NEES and circle cell is point estimate [95% bootstrap or Wilson interval].\n");
   for (const scenario of SCENARIOS) {
+    if (only && !only.includes(scenario.id)) continue;
     console.log(`### ${scenario.title}`);
     console.log(`Area: ${scenario.area}. 10 m cells, bearing range prior ${scenario.maxRange} m.\n`);
     console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | unresolved | current 8-point CEP50 | current 8-point CEP90 | current circle | exact single CEP50 | exact single CEP90 | exact circle |");
@@ -433,6 +435,7 @@ function main() {
     console.log("");
   }
 
+  if (!only) {
   console.log("### Estimator mismatch: perpendicular bearings, estimator fixed at 5°\n");
   console.log("| truth | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off |");
   console.log("|---|---|---|---|---|---|---|");
@@ -478,6 +481,7 @@ function main() {
     const scenario = { ...SCENARIOS[0], area, title: "perpendicular" };
     const { fused } = runScenario(scenario, 5);
     console.log(`| ${AREAS[area].label} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} |`);
+  }
   }
 }
 

@@ -575,9 +575,26 @@ function resultOf(p: Posterior, truncated: boolean, radii: number[] = credibleRa
   };
 }
 
-/** The widest angle between any two bearing-only lines, 0 to 90 degrees. */
-function bearingSpread(observations: FusionObservation[]): number {
-  const bearings = observations.filter((x) => x.range_m == null && x.bearing_deg != null).map((x) => ((x.bearing_deg! % 180) + 180) % 180);
+/** The longest distance between two bearing-only observers, metres. */
+function observerBaseline(observations: FusionObservation[], center: LatLon): number {
+  const points = observations.filter((x) => x.range_m == null && x.bearing_deg != null).map((x) => toLocal(x.observer, center));
+  let widest = 0;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      widest = Math.max(widest, Math.hypot(points[i].e - points[j].e, points[i].n - points[j].n));
+    }
+  }
+  return widest;
+}
+
+/** The widest angle between the lines from the observers to one point, 0 to 90 degrees. */
+function bearingSpreadAt(observations: FusionObservation[], target: LocalPoint, center: LatLon): number {
+  const bearings = observations
+    .filter((x) => x.range_m == null && x.bearing_deg != null)
+    .map((x) => {
+      const o = toLocal(x.observer, center);
+      return ((Math.atan2(target.e - o.e, target.n - o.n) * RAD + 180) % 180 + 180) % 180;
+    });
   let widest = 0;
   for (let i = 0; i < bearings.length; i++) {
     for (let j = i + 1; j < bearings.length; j++) {
@@ -644,7 +661,10 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
   const coarse = posteriorOn(makeGrid(autoHalf, Math.max(50, o.gridCellM * 5)), usable, o);
   if (!coarse) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
   const coarseRadii = credibleRadii(coarse.grid, coarse.mean);
-  if (bearingSpread(usable) < MIN_BEARING_SPREAD_DEG) return resultOf(coarse, true, coarseRadii);
+  const onlyBearings = usable.filter((x) => x.range_m == null && x.bearing_deg != null).length;
+  const narrow = bearingSpreadAt(usable, coarse.mean, o.center) < MIN_BEARING_SPREAD_DEG ||
+    (onlyBearings === usable.length && observerBaseline(usable, o.center) < Math.tan(MIN_BEARING_SPREAD_DEG * DEG) * o.maxRangeM);
+  if (narrow) return resultOf(coarse, true, coarseRadii);
   const coarseWide = coarseRadii[1] > 0.25 * o.maxRangeM;
   if (coarse.edgeMass > 0.002 || coarse.priorMass > 0.01 || coarseWide) return resultOf(coarse, true, coarseRadii);
   const half = Math.min(autoHalf, Math.max(6 * maxSpread(coarse.cov), 5 * o.gridCellM));
