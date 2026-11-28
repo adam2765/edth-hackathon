@@ -26,7 +26,7 @@ import {
 } from "../lib/geo/fusion";
 
 const SEED_DEFAULT = 20261128;
-const TRIALS_DEFAULT = 200;
+const TRIALS_DEFAULT = 2000;
 const SIGMAS = [2, 5, 10];
 
 const args = process.argv.slice(2);
@@ -211,6 +211,11 @@ function observationsFor(rng: () => number, scenario: Scenario, truth: LocalPoin
   return out;
 }
 
+export interface Interval {
+  lo: number;
+  hi: number;
+}
+
 interface Stats {
   n: number;
   failed: number;
@@ -221,6 +226,11 @@ interface Stats {
   hit50: number;
   hit90: number;
   truncated: number;
+  cep50_ci: Interval;
+  cep90_ci: Interval;
+  nees_ci: Interval;
+  hit50_ci: Interval;
+  hit90_ci: Interval;
 }
 
 function quantile(xs: number[], q: number): number {
@@ -232,7 +242,48 @@ function quantile(xs: number[], q: number): number {
   return s[lo] + (s[hi] - s[lo]) * (at - lo);
 }
 
-function stats(errors: number[], nees: number[], hits50: boolean[], hits90: boolean[], truncated: boolean[], failed: number, unresolved = 0): Stats {
+/** 95% Wilson interval for a proportion. */
+function wilson(k: number, n: number, z = 1.96): Interval {
+  if (!n) return { lo: Number.NaN, hi: Number.NaN };
+  const p = k / n;
+  const den = 1 + (z * z) / n;
+  const mid = (p + (z * z) / (2 * n)) / den;
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / den;
+  return { lo: Math.max(0, mid - half), hi: Math.min(1, mid + half) };
+}
+
+function bootstrapQuantile(values: number[], q: number, rng: () => number, reps = 400): Interval {
+  if (!values.length) return { lo: Number.NaN, hi: Number.NaN };
+  const out: number[] = [];
+  for (let r = 0; r < reps; r++) {
+    const sample = new Array<number>(values.length);
+    for (let i = 0; i < values.length; i++) sample[i] = values[Math.floor(rng() * values.length)];
+    out.push(quantile(sample, q));
+  }
+  return { lo: quantile(out, 0.025), hi: quantile(out, 0.975) };
+}
+
+function bootstrapMean(values: number[], rng: () => number, reps = 400): Interval {
+  if (!values.length) return { lo: Number.NaN, hi: Number.NaN };
+  const out: number[] = [];
+  for (let r = 0; r < reps; r++) {
+    let sum = 0;
+    for (let i = 0; i < values.length; i++) sum += values[Math.floor(rng() * values.length)];
+    out.push(sum / values.length);
+  }
+  return { lo: quantile(out, 0.025), hi: quantile(out, 0.975) };
+}
+
+function stats(
+  errors: number[],
+  nees: number[],
+  hits50: boolean[],
+  hits90: boolean[],
+  truncated: boolean[],
+  failed: number,
+  unresolved = 0,
+  rng: () => number = rngFrom(0),
+): Stats {
   return {
     n: errors.length,
     failed,
@@ -243,6 +294,11 @@ function stats(errors: number[], nees: number[], hits50: boolean[], hits90: bool
     hit50: hits50.length ? hits50.filter(Boolean).length / hits50.length : Number.NaN,
     hit90: hits90.length ? hits90.filter(Boolean).length / hits90.length : Number.NaN,
     truncated: truncated.length ? truncated.filter(Boolean).length / truncated.length : Number.NaN,
+    cep50_ci: bootstrapQuantile(errors, 0.5, rng),
+    cep90_ci: bootstrapQuantile(errors, 0.9, rng),
+    nees_ci: bootstrapMean(nees, rng),
+    hit50_ci: wilson(hits50.filter(Boolean).length, hits50.length),
+    hit90_ci: wilson(hits90.filter(Boolean).length, hits90.length),
   };
 }
 
@@ -264,6 +320,7 @@ export function runScenario(
   const key = [scenario.id, estimatorSigmaDeg, truthModel.bearingSigmaDeg, truthModel.biasDeg ?? 0, truthModel.rangeFactor ?? 1, truthModel.heavyTail ? 1 : 0].join("|");
   for (let i = 0; i < key.length; i++) idHash = Math.imul(idHash ^ key.charCodeAt(i), 16777619);
   const rng = rngFrom((seed ^ idHash) >>> 0);
+  const ciRng = rngFrom((seed ^ idHash ^ 0x9e3779b9) >>> 0);
   const errors: number[] = [];
   const nees: number[] = [];
   const hits50: boolean[] = [];
@@ -329,31 +386,24 @@ export function runScenario(
     }
   }
   const single = (errors: number[], hits: boolean[]): Stats | null =>
-    errors.length
-      ? {
-          n: errors.length,
-          failed: 0,
-          unresolved: 0,
-          cep50: quantile(errors, 0.5),
-          cep90: quantile(errors, 0.9),
-          nees: Number.NaN,
-          hit50: Number.NaN,
-          hit90: hits.filter(Boolean).length / hits.length,
-          truncated: Number.NaN,
-        }
-      : null;
+    errors.length ? stats(errors, [], [], hits, [], 0, 0, ciRng) : null;
   return {
-    fused: stats(errors, nees, hits50, hits90, truncated, failed, unresolved),
+    fused: stats(errors, nees, hits50, hits90, truncated, failed, unresolved, ciRng),
     current: single(currentErrors, currentHits),
     exact: single(exactErrors, exactHits),
   };
 }
 
-function m(x: number, digits = 1): string {
-  return Number.isFinite(x) ? x.toFixed(digits) : "-";
-}
 function p(x: number): string {
   return Number.isFinite(x) ? `${(100 * x).toFixed(0)}%` : "-";
+}
+function ci(x: number, i: Interval, digits = 1): string {
+  if (!Number.isFinite(x)) return "-";
+  return Number.isFinite(i.lo) ? `${x.toFixed(digits)} [${i.lo.toFixed(digits)}-${i.hi.toFixed(digits)}]` : x.toFixed(digits);
+}
+function ciP(x: number, i: Interval): string {
+  if (!Number.isFinite(x)) return "-";
+  return Number.isFinite(i.lo) ? `${(100 * x).toFixed(0)}% [${(100 * i.lo).toFixed(0)}-${(100 * i.hi).toFixed(0)}]` : `${(100 * x).toFixed(0)}%`;
 }
 function unresolvedShare(s: Stats): string {
   const total = s.n + s.unresolved + s.failed;
@@ -363,7 +413,8 @@ function unresolvedShare(s: Stats): string {
 function main() {
   console.log(`Fixed seed ${seed}, ${trials} trials per row. Synthetic paths, observers and measurements only.`);
   console.log("Observer position sigma 10 m; range sigma 0.25 r. In the 2/5/10 rows the estimator is set to the truth's sigma (matched), not fixed at 5.");
-  console.log("A bearing-only report places nothing today, so the current method asks how far.\n");
+  console.log("A bearing-only report places nothing today, so the current method asks how far.");
+  console.log("Each CEP, NEES and circle cell is point estimate [95% bootstrap or Wilson interval].\n");
   for (const scenario of SCENARIOS) {
     console.log(`### ${scenario.title}`);
     console.log(`Area: ${scenario.area}. 10 m cells, bearing range prior ${scenario.maxRange} m.\n`);
@@ -372,12 +423,12 @@ function main() {
     for (const sigma of SIGMAS) {
       const { fused, current, exact } = runScenario(scenario, sigma);
       const currentCols = current
-        ? `${m(current.cep50)} m | ${m(current.cep90)} m | ${p(current.hit90)} inside`
+        ? `${ci(current.cep50, current.cep50_ci)} m | ${ci(current.cep90, current.cep90_ci)} m | ${ciP(current.hit90, current.hit90_ci)} inside`
         : "no placement | no placement | asks how far";
       const exactCols = exact
-        ? `${m(exact.cep50)} m | ${m(exact.cep90)} m | ${p(exact.hit90)} inside`
+        ? `${ci(exact.cep50, exact.cep50_ci)} m | ${ci(exact.cep90, exact.cep90_ci)} m | ${ciP(exact.hit90, exact.hit90_ci)} inside`
         : "no placement | no placement | asks how far";
-      console.log(`| ${sigma}° | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} | ${unresolvedShare(fused)} | ${currentCols} | ${exactCols} |`);
+      console.log(`| ${sigma}° | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} | ${p(fused.truncated)} | ${unresolvedShare(fused)} | ${currentCols} | ${exactCols} |`);
     }
     console.log("");
   }
@@ -393,7 +444,7 @@ function main() {
   ];
   for (const row of mismatch) {
     const { fused } = runScenario(SCENARIOS[0], 5, seed, trials, row.model);
-    console.log(`| ${row.label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+    console.log(`| ${row.label} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} | ${p(fused.truncated)} |`);
   }
 
   console.log("\n### Estimator mismatch: three observers with range, estimator fixed at 5°\n");
@@ -405,7 +456,7 @@ function main() {
   ];
   for (const row of rangeMismatch) {
     const { fused } = runScenario(SCENARIOS[3], 5, seed, trials, row.model);
-    console.log(`| ${row.label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+    console.log(`| ${row.label} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} | ${p(fused.truncated)} |`);
   }
   console.log("");
 
@@ -415,7 +466,7 @@ function main() {
   for (const scenario of [SCENARIOS[0], SCENARIOS[1]]) {
     for (const prior of ["uniform-area", "uniform-r"] as RangePrior[]) {
       const { fused } = runScenario(scenario, 5, seed, trials, { bearingSigmaDeg: 5 }, prior);
-      console.log(`| ${scenario.title} | ${prior} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+      console.log(`| ${scenario.title} | ${prior} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} | ${p(fused.truncated)} |`);
     }
   }
   console.log("");
@@ -426,7 +477,7 @@ function main() {
   for (const area of Object.keys(AREAS) as AreaId[]) {
     const scenario = { ...SCENARIOS[0], area, title: "perpendicular" };
     const { fused } = runScenario(scenario, 5);
-    console.log(`| ${AREAS[area].label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} |`);
+    console.log(`| ${AREAS[area].label} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} |`);
   }
 }
 
