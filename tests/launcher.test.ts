@@ -125,7 +125,8 @@ describe("owned processes", () => {
     expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
   }, 20_000);
 });
-describe("basic start/stop", () => {
+// The supervisor's signal and child-process handling is the Mac path; Windows cannot run it.
+describe.skipIf(process.platform === "win32")("basic start/stop", () => {
   it.each([["hosted", false, false], ["local", false, false], ["local", true, false], ["local", false, true]] as const)("restarts %s servers (light=%s, occupied=%s) without building or opening the phone, then stops everything", async (mode, light, occupied) => {
     const root = await fixture();
     await cp(new URL("../scripts/launcher/", import.meta.url), path.join(root, "scripts/launcher"), { recursive: true });
