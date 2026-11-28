@@ -19,7 +19,7 @@ import {
   fromLocal,
   fuseObservations,
   invertCov,
-  observationGaussian,
+  toLocal,
   type FusionObservation,
   type LocalPoint,
 } from "../lib/geo/fusion";
@@ -242,13 +242,17 @@ function stats(errors: number[], nees: number[], hits50: boolean[], hits90: bool
   };
 }
 
+function nearest8(deg: number): number {
+  return ((Math.round(deg / 45) * 45) % 360 + 360) % 360;
+}
+
 export function runScenario(
   scenario: Scenario,
   estimatorSigmaDeg: number,
   seedValue = seed,
   trialCount = trials,
   truthModel: TruthModel = { bearingSigmaDeg: estimatorSigmaDeg },
-): { fused: Stats; current: Stats | null } {
+): { fused: Stats; current: Stats | null; exact: Stats | null } {
   const seed = seedValue;
   const trials = trialCount;
   let idHash = 2166136261;
@@ -263,6 +267,8 @@ export function runScenario(
   let failed = 0;
   const currentErrors: number[] = [];
   const currentHits: boolean[] = [];
+  const exactErrors: number[] = [];
+  const exactHits: boolean[] = [];
   for (let trial = 0; trial < trials; trial++) {
     const u = rng();
     const truth = {
@@ -292,31 +298,42 @@ export function runScenario(
     hits90.push(error <= (result.radius90_m ?? 0));
     truncated.push(result.truncated);
 
-    const firstRanged = observations.find((x) => x.range_m != null);
+    const firstRanged = observations.find((x) => x.range_m != null && x.bearing_deg != null);
     if (firstRanged) {
-      const g = observationGaussian(firstRanged, AREAS[scenario.area].centre);
-      if (g) {
-        const currentError = Math.hypot(g.mean.e - truth.e, g.mean.n - truth.n);
-        const circle = Math.max(50, 0.4 * firstRanged.range_m!);
-        currentErrors.push(currentError);
-        currentHits.push(currentError <= circle);
-      }
+      const o = toLocal(firstRanged.observer, AREAS[scenario.area].centre);
+      const r = firstRanged.range_m!;
+      const point = (deg: number) => {
+        const rad = (deg * Math.PI) / 180;
+        return { e: o.e + r * Math.sin(rad), n: o.n + r * Math.cos(rad) };
+      };
+      const circle = Math.max(50, 0.4 * r);
+      const exact = point(firstRanged.bearing_deg!);
+      const exactError = Math.hypot(exact.e - truth.e, exact.n - truth.n);
+      exactErrors.push(exactError);
+      exactHits.push(exactError <= circle);
+      const eight = point(nearest8(firstRanged.bearing_deg!));
+      const currentError = Math.hypot(eight.e - truth.e, eight.n - truth.n);
+      currentErrors.push(currentError);
+      currentHits.push(currentError <= circle);
     }
   }
-  return {
-    fused: stats(errors, nees, hits50, hits90, truncated, failed),
-    current: currentErrors.length
+  const single = (errors: number[], hits: boolean[]): Stats | null =>
+    errors.length
       ? {
-          n: currentErrors.length,
+          n: errors.length,
           failed: 0,
-          cep50: quantile(currentErrors, 0.5),
-          cep90: quantile(currentErrors, 0.9),
+          cep50: quantile(errors, 0.5),
+          cep90: quantile(errors, 0.9),
           nees: Number.NaN,
           hit50: Number.NaN,
-          hit90: currentHits.filter(Boolean).length / currentHits.length,
+          hit90: hits.filter(Boolean).length / hits.length,
           truncated: Number.NaN,
         }
-      : null,
+      : null;
+  return {
+    fused: stats(errors, nees, hits50, hits90, truncated, failed),
+    current: single(currentErrors, currentHits),
+    exact: single(exactErrors, exactHits),
   };
 }
 
@@ -334,14 +351,17 @@ function main() {
   for (const scenario of SCENARIOS) {
     console.log(`### ${scenario.title}`);
     console.log(`Area: ${scenario.area}. Grid: 10 m cells, half-size ${scenario.gridHalf} m.\n`);
-    console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | current CEP50 | current CEP90 | current circle |");
-    console.log("|---|---|---|---|---|---|---|---|---|---|");
+    console.log("| sigma (matched) | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off | current 8-point CEP50 | current 8-point CEP90 | current circle | exact single CEP50 | exact single CEP90 | exact circle |");
+    console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
     for (const sigma of SIGMAS) {
-      const { fused, current } = runScenario(scenario, sigma);
+      const { fused, current, exact } = runScenario(scenario, sigma);
       const currentCols = current
-        ? `${m(current.cep50)} m | ${m(current.cep90)} m | ${p(current.hit90)} inside the resolver circle`
+        ? `${m(current.cep50)} m | ${m(current.cep90)} m | ${p(current.hit90)} inside`
         : "no placement | no placement | asks how far";
-      console.log(`| ${sigma}° | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} | ${currentCols} |`);
+      const exactCols = exact
+        ? `${m(exact.cep50)} m | ${m(exact.cep90)} m | ${p(exact.hit90)} inside`
+        : "no placement | no placement | asks how far";
+      console.log(`| ${sigma}° | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} | ${currentCols} | ${exactCols} |`);
     }
     console.log("");
   }
