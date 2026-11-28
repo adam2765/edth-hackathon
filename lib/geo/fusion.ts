@@ -79,6 +79,8 @@ const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const TWO_PI = Math.PI * 2;
 
+export type RangePrior = "uniform-area" | "uniform-r";
+
 export interface FusionOptions {
   /** The mission's centre: the local plane's origin. */
   center: LatLon;
@@ -88,6 +90,11 @@ export interface FusionOptions {
   gridCellM?: number;
   gridHalfSizeM?: number;
   correlationWindowMs?: number;
+  /**
+   * What the bearing-only ridge assumes about distance: uniform per unit area (the 1/r factor)
+   * or uniform per metre of range (no factor). It is a prior, not a Jacobian of the likelihood.
+   */
+  rangePrior?: RangePrior;
 }
 
 type Resolved = Required<Omit<FusionOptions, "center">> & { center: LatLon };
@@ -101,6 +108,7 @@ function options(o: FusionOptions): Resolved {
     gridCellM: Math.max(1, o.gridCellM ?? DEFAULT_GRID_CELL_M),
     gridHalfSizeM: Math.max(50, o.gridHalfSizeM ?? DEFAULT_GRID_HALF_M),
     correlationWindowMs: Math.max(0, o.correlationWindowMs ?? DEFAULT_CORRELATION_WINDOW_MS),
+    rangePrior: o.rangePrior ?? "uniform-area",
   };
 }
 
@@ -264,7 +272,7 @@ function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows
 }
 
 /** Log likelihood of one bearing-only observation: a ridge along the line of sight. */
-function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number): Float64Array {
+function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number, rangePrior: RangePrior): Float64Array {
   const sigma = Math.max(1e-6, sigmaDeg * DEG);
   const peak = 1 / (Math.sqrt(TWO_PI) * sigma);
   const area = (grid.cols * grid.cellM) * (grid.rows * grid.cellM);
@@ -278,10 +286,10 @@ function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; row
       const de = q.e - observer.e;
       const dn = q.n - observer.n;
       const r = Math.max(near, Math.hypot(de, dn));
-      // The angle is measured at the cell, so its density on the plane is the angular
-      // density divided by r: an angular sector covers a wider strip farther out.
+      // The ridge's height as a function of distance is the range prior, not a likelihood term.
       const delta = wrapPi(Math.atan2(de, dn) - theta);
-      const g = (peak / r) * Math.exp(-0.5 * (delta / sigma) ** 2);
+      const along = rangePrior === "uniform-area" ? peak / r : peak;
+      const g = along * Math.exp(-0.5 * (delta / sigma) ** 2);
       log[j * grid.cols + i] = Math.log((1 - eps) * g + eps * uniform);
     }
   }
@@ -298,7 +306,7 @@ function logOfObservation(obs: FusionObservation, center: LatLon, grid: { origin
     if (!g) return new Float64Array(grid.cols * grid.rows).fill(Number.NEGATIVE_INFINITY);
     return rangedLog(grid, g.mean, g.cov, opts.outlierEpsilon);
   }
-  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg), opts.outlierEpsilon);
+  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg), opts.outlierEpsilon, opts.rangePrior);
 }
 
 /** A normalised grid from log weights; returns the grid and its mean and covariance. */

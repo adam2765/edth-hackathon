@@ -21,6 +21,7 @@ import {
   invertCov,
   toLocal,
   type FusionObservation,
+  type RangePrior,
   type LocalPoint,
 } from "../lib/geo/fusion";
 
@@ -252,6 +253,7 @@ export function runScenario(
   seedValue = seed,
   trialCount = trials,
   truthModel: TruthModel = { bearingSigmaDeg: estimatorSigmaDeg },
+  rangePrior: RangePrior = "uniform-area",
 ): { fused: Stats; current: Stats | null; exact: Stats | null } {
   const seed = seedValue;
   const trials = trialCount;
@@ -281,6 +283,7 @@ export function runScenario(
       gridCellM: 10,
       gridHalfSizeM: scenario.gridHalf,
       humanBearingSigmaDeg: estimatorSigmaDeg,
+      rangePrior,
     });
     if (result.status !== "resolved" || !result.mean || !result.cov) {
       failed++;
@@ -390,6 +393,17 @@ function main() {
   for (const row of rangeMismatch) {
     const { fused } = runScenario(SCENARIOS[3], 5, seed, trials, row.model);
     console.log(`| ${row.label} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+  }
+  console.log("");
+
+  console.log("### Range prior sensitivity, estimator = truth = 5°\n");
+  console.log("| scenario | range prior | fused CEP50 | fused CEP90 | NEES | 50% circle | 90% circle | cut off |");
+  console.log("|---|---|---|---|---|---|---|---|");
+  for (const scenario of [SCENARIOS[0], SCENARIOS[1]]) {
+    for (const prior of ["uniform-area", "uniform-r"] as RangePrior[]) {
+      const { fused } = runScenario(scenario, 5, seed, trials, { bearingSigmaDeg: 5 }, prior);
+      console.log(`| ${scenario.title} | ${prior} | ${m(fused.cep50)} m | ${m(fused.cep90)} m | ${m(fused.nees, 2)} | ${p(fused.hit50)} | ${p(fused.hit90)} | ${p(fused.truncated)} |`);
+    }
   }
   console.log("");
 
