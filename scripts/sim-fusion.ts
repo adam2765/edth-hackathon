@@ -18,6 +18,7 @@ import { bearingDeg, distanceM, type LatLon } from "../lib/geo/geo";
 import {
   fromLocal,
   fuseObservations,
+  fuseSigmaMixture,
   invertCov,
   toLocal,
   type FusionObservation,
@@ -314,6 +315,7 @@ export function runScenario(
   trialCount = trials,
   truthModel: TruthModel = { bearingSigmaDeg: estimatorSigmaDeg },
   rangePrior: RangePrior = "uniform-area",
+  thresholds: { minSpreadDeg?: number; wideFraction?: number } = {},
 ): { fused: Stats; current: Stats | null; exact: Stats | null } {
   const seed = seedValue;
   const trials = trialCount;
@@ -346,6 +348,8 @@ export function runScenario(
       maxRangeM: scenario.maxRange,
       humanBearingSigmaDeg: estimatorSigmaDeg,
       rangePrior,
+      minBearingSpreadDeg: thresholds.minSpreadDeg,
+      wideFraction: thresholds.wideFraction,
     });
     if (result.status === "unresolved") {
       unresolved++;
@@ -393,6 +397,65 @@ export function runScenario(
     current: single(currentErrors, currentHits),
     exact: single(exactErrors, exactHits),
   };
+}
+
+interface MethodStats {
+  name: string;
+  stats: Stats;
+}
+
+/** Four ways to read the same observations, for the five mismatch cases. */
+export function runRobustCase(scenario: Scenario, truthModel: TruthModel, trialCount: number, seedValue = seed): MethodStats[] {
+  let idHash = 2166136261;
+  const key = ["robust", scenario.id, truthModel.bearingSigmaDeg, truthModel.biasDeg ?? 0, truthModel.rangeFactor ?? 1, truthModel.heavyTail ? 1 : 0].join("|");
+  for (let i = 0; i < key.length; i++) idHash = Math.imul(idHash ^ key.charCodeAt(i), 16777619);
+  const rng = rngFrom((seedValue ^ idHash) >>> 0);
+  const ciRng = rngFrom((seedValue ^ idHash ^ 0x9e3779b9) >>> 0);
+  const names = ["baseline 5?", "sigma mix 2/5/10", "Student-t ?=3", "Student-t ?=4", "Student-t ?=5", "inflation ?2"];
+  const errors: number[][] = names.map(() => []);
+  const nees: number[][] = names.map(() => []);
+  const hits50: boolean[][] = names.map(() => []);
+  const hits90: boolean[][] = names.map(() => []);
+  const unresolved = names.map(() => 0);
+  const failed = names.map(() => 0);
+  for (let trial = 0; trial < trialCount; trial++) {
+    const u = rng();
+    const truth = {
+      e: scenario.start.e + u * (scenario.end.e - scenario.start.e),
+      n: scenario.start.n + u * (scenario.end.n - scenario.start.n),
+    };
+    const observations = observationsFor(rng, scenario, truth, truthModel);
+    const opts = { center: AREAS[scenario.area].centre, gridCellM: 10, maxRangeM: scenario.maxRange, humanBearingSigmaDeg: 5 };
+    const results = [
+      fuseObservations(observations, opts),
+      fuseSigmaMixture(observations, opts, [2, 5, 10], [0.25, 0.5, 0.25]),
+      fuseObservations(observations, { ...opts, bearingTailDof: 3 }),
+      fuseObservations(observations, { ...opts, bearingTailDof: 4 }),
+      fuseObservations(observations, { ...opts, bearingTailDof: 5 }),
+      fuseObservations(observations, { ...opts, covarianceInflation: 2 }),
+    ];
+    results.forEach((result, k) => {
+      if (result.status === "unresolved") {
+        unresolved[k]++;
+        return;
+      }
+      if (result.status !== "resolved" || !result.mean || !result.cov) {
+        failed[k]++;
+        return;
+      }
+      const error = Math.hypot(result.mean.e - truth.e, result.mean.n - truth.n);
+      errors[k].push(error);
+      const inv = invertCov(result.cov);
+      if (inv) {
+        const de = result.mean.e - truth.e;
+        const dn = result.mean.n - truth.n;
+        nees[k].push(inv[0][0] * de * de + 2 * inv[0][1] * de * dn + inv[1][1] * dn * dn);
+      }
+      hits50[k].push(error <= (result.radius50_m ?? 0));
+      hits90[k].push(error <= (result.radius90_m ?? 0));
+    });
+  }
+  return names.map((name, k) => ({ name, stats: stats(errors[k], nees[k], hits50[k], hits90[k], [], failed[k], unresolved[k], ciRng) }));
 }
 
 function p(x: number): string {
@@ -460,6 +523,40 @@ function main() {
   for (const row of rangeMismatch) {
     const { fused } = runScenario(SCENARIOS[3], 5, seed, trials, row.model);
     console.log(`| ${row.label} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.cep90, fused.cep90_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${ciP(fused.hit50, fused.hit50_ci)} | ${ciP(fused.hit90, fused.hit90_ci)} | ${p(fused.truncated)} |`);
+  }
+  console.log("");
+
+  console.log("### Unresolved thresholds, 500 trials per row\n");
+  console.log("| scenario | min spread | wide fraction | fused CEP50 | NEES | unresolved |");
+  console.log("|---|---|---|---|---|---|");
+  for (const scenario of [SCENARIOS[0], SCENARIOS[1]]) {
+    for (const minSpreadDeg of [10, 15, 25]) {
+      for (const wideFraction of [0.25, 0.5]) {
+        const { fused } = runScenario(scenario, 5, seed, 500, { bearingSigmaDeg: 5 }, "uniform-area", { minSpreadDeg, wideFraction });
+        const total = fused.n + fused.unresolved + fused.failed;
+        const u = total ? p(fused.unresolved / total) : "-";
+        console.log(`| ${scenario.title} | ${minSpreadDeg}? | ${wideFraction} | ${ci(fused.cep50, fused.cep50_ci)} m | ${ci(fused.nees, fused.nees_ci, 2)} | ${u} |`);
+      }
+    }
+  }
+  console.log("");
+
+  console.log("### Robust corrections, five mismatch cases\n");
+  console.log("| case | method | CEP50 | NEES | 50% circle | 90% circle | unresolved |");
+  console.log("|---|---|---|---|---|---|---|");
+  const robustCases: { label: string; scenario: Scenario; model: TruthModel }[] = [
+    { label: "perpendicular, truth 5 (matched)", scenario: SCENARIOS[0], model: { bearingSigmaDeg: 5 } },
+    { label: "perpendicular, truth 10", scenario: SCENARIOS[0], model: { bearingSigmaDeg: 10 } },
+    { label: "perpendicular, bias +3", scenario: SCENARIOS[0], model: { bearingSigmaDeg: 5, biasDeg: 3 } },
+    { label: "perpendicular, heavy tails", scenario: SCENARIOS[0], model: { bearingSigmaDeg: 5, heavyTail: true } },
+    { label: "ranged, range 0.8", scenario: SCENARIOS[3], model: { bearingSigmaDeg: 5, rangeFactor: 0.8 } },
+  ];
+  for (const c of robustCases) {
+    for (const method of runRobustCase(c.scenario, c.model, Math.min(trials, 1000))) {
+      const total = method.stats.n + method.stats.unresolved + method.stats.failed;
+      const u = total ? p(method.stats.unresolved / total) : "-";
+      console.log(`| ${c.label} | ${method.name} | ${ci(method.stats.cep50, method.stats.cep50_ci)} m | ${ci(method.stats.nees, method.stats.nees_ci, 2)} | ${ciP(method.stats.hit50, method.stats.hit50_ci)} | ${ciP(method.stats.hit90, method.stats.hit90_ci)} | ${u} |`);
+    }
   }
   console.log("");
 

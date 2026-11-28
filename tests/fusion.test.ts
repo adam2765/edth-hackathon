@@ -8,6 +8,7 @@ import {
   detCov,
   fromLocal,
   fuseObservations,
+  fuseSigmaMixture,
   invertCov,
   observationGaussian,
   toLocal,
@@ -128,6 +129,26 @@ describe("bearing-only fusion", () => {
     expect(Math.hypot(fixed.mean!.e, fixed.mean!.n)).toBeLessThan(5);
     expect(Math.hypot(fixed.mean!.e - without.mean!.e, fixed.mean!.n - without.mean!.n)).toBeLessThan(5);
     expect(Math.hypot(fragile.mean!.e, fragile.mean!.n)).toBeGreaterThan(20);
+  });
+});
+
+describe("robust likelihoods", () => {
+  const target = at(0, 500);
+  const obs = [sighting("a", "A", at(-500, 0), target), sighting("b", "B", at(500, 0), target)];
+
+  it("gives a Student-t ridge wider credible circles than the Gaussian", () => {
+    const g = fuseObservations(obs, { center, gridHalfSizeM: 1500 });
+    const t = fuseObservations(obs, { center, gridHalfSizeM: 1500, bearingTailDof: 3 });
+    expect(t.status).toBe("resolved");
+    expect(t.radius90_m!).toBeGreaterThan(g.radius90_m!);
+  });
+
+  it("marginalises a sigma mixture without pretending the matched case is sharper", () => {
+    const g = fuseObservations(obs, { center, gridHalfSizeM: 1500, humanBearingSigmaDeg: 5 });
+    const mix = fuseSigmaMixture(obs, { center, gridHalfSizeM: 1500 }, [2, 5, 10], [0.25, 0.5, 0.25]);
+    expect(mix.status).toBe("resolved");
+    expect(mix.radius90_m!).toBeGreaterThanOrEqual(g.radius90_m! * 0.99);
+    expect(Math.hypot(mix.mean!.e, mix.mean!.n - 500)).toBeLessThan(10);
   });
 });
 

@@ -78,6 +78,16 @@ export const DEFAULT_AMBIGUITY_MARGIN = 1;
 /** Below this spread, bearing-only sightings leave the range effectively unobserved. */
 export const MIN_BEARING_SPREAD_DEG = 15;
 
+function logGamma(x: number): number {
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+  const z = x - 1;
+  let a = c[0];
+  const t = z + 7.5;
+  for (let i = 1; i < 9; i++) a += c[i] / (z + i);
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const TWO_PI = Math.PI * 2;
@@ -101,6 +111,14 @@ export interface FusionOptions {
    * or uniform per metre of range (no factor). It is a prior, not a Jacobian of the likelihood.
    */
   rangePrior?: RangePrior;
+  /** Student-t degrees of freedom for the bearing and range likelihoods; 0 or absent is Gaussian. */
+  bearingTailDof?: number;
+  /** Multiplies the measurement covariance by this factor (variance, not sigma). */
+  covarianceInflation?: number;
+  /** The minimum spread, degrees, below which a bearing-only range is unobserved. */
+  minBearingSpreadDeg?: number;
+  /** The share of the maximum range over which a 90% circle makes a result unresolved. */
+  wideFraction?: number;
 }
 
 type Resolved = Required<Omit<FusionOptions, "center" | "gridHalfSizeM">> & { center: LatLon; gridHalfSizeM?: number };
@@ -116,6 +134,10 @@ function options(o: FusionOptions): Resolved {
     maxRangeM: Math.max(100, o.maxRangeM ?? DEFAULT_MAX_RANGE_M),
     correlationWindowMs: Math.max(0, o.correlationWindowMs ?? DEFAULT_CORRELATION_WINDOW_MS),
     rangePrior: o.rangePrior ?? "uniform-area",
+    bearingTailDof: Math.max(0, o.bearingTailDof ?? 0),
+    covarianceInflation: Math.max(1e-6, o.covarianceInflation ?? 1),
+    minBearingSpreadDeg: Math.max(1, o.minBearingSpreadDeg ?? MIN_BEARING_SPREAD_DEG),
+    wideFraction: Math.max(0.01, o.wideFraction ?? 0.25),
   };
 }
 
@@ -178,11 +200,12 @@ export function observationGaussian(obs: FusionObservation, center: LatLon, opts
   const radial = sr * sr;
   const angular = (r * st) * (r * st);
   const observer = Math.max(0, obs.observer.sigma_m) ** 2;
+  const k = Math.max(1e-6, opts.covarianceInflation ?? 1);
   return {
     mean: { e: o.e + r * s, n: o.n + r * c },
     cov: [
-      [observer + radial * s * s + angular * c * c, (radial - angular) * s * c],
-      [(radial - angular) * s * c, observer + radial * c * c + angular * s * s],
+      [k * (observer + radial * s * s + angular * c * c), k * (radial - angular) * s * c],
+      [k * (radial - angular) * s * c, k * (observer + radial * c * c + angular * s * s)],
     ],
   };
 }
@@ -261,11 +284,12 @@ function wrapPi(a: number): number {
 }
 
 /** Log likelihood of one ranged observation at every cell, with the outlier mixture. */
-function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, mean: LocalPoint, cov: Covariance, eps: number): Float64Array {
+function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, mean: LocalPoint, cov: Covariance, eps: number, tailDof: number): Float64Array {
   const inv = invertCov(cov);
   const det = detCov(cov);
   if (!inv || !(det > 0)) return new Float64Array(grid.cols * grid.rows).fill(Number.NEGATIVE_INFINITY);
-  const norm = -Math.log(TWO_PI) - 0.5 * Math.log(det);
+  const gaussianNorm = -Math.log(TWO_PI) - 0.5 * Math.log(det);
+  const studentNorm = tailDof > 0 ? logGamma((tailDof + 2) / 2) - logGamma(tailDof / 2) - Math.log(tailDof * Math.PI) - 0.5 * Math.log(det) : 0;
   const area = (grid.cols * grid.cellM) * (grid.rows * grid.cellM);
   const uniform = 1 / Math.max(1, area);
   const log = new Float64Array(grid.cols * grid.rows);
@@ -275,7 +299,9 @@ function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows
       const de = q.e - mean.e;
       const dn = q.n - mean.n;
       const m2 = inv[0][0] * de * de + 2 * inv[0][1] * de * dn + inv[1][1] * dn * dn;
-      const g = Math.exp(norm - 0.5 * m2);
+      const g = tailDof > 0
+        ? Math.exp(studentNorm - ((tailDof + 2) / 2) * Math.log1p(m2 / tailDof))
+        : Math.exp(gaussianNorm - 0.5 * m2);
       log[j * grid.cols + i] = Math.log((1 - eps) * g + eps * uniform);
     }
   }
@@ -283,7 +309,7 @@ function rangedLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows
 }
 
 /** Log likelihood of one bearing-only observation: a ridge along the line of sight. */
-function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number, rangePrior: RangePrior, maxRange: number): Float64Array {
+function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; rows: number }, observer: LocalPoint, bearingDegrees: number, sigmaDeg: number, eps: number, rangePrior: RangePrior, maxRange: number, tailDof: number): Float64Array {
   const sigma = Math.max(1e-6, sigmaDeg * DEG);
   const peak = 1 / (Math.sqrt(TWO_PI) * sigma);
   const area = (grid.cols * grid.cellM) * (grid.rows * grid.cellM);
@@ -304,7 +330,9 @@ function bearingLog(grid: { origin: LocalPoint; cellM: number; cols: number; row
       // The ridge's height as a function of distance is the range prior, not a likelihood term.
       const delta = wrapPi(Math.atan2(de, dn) - theta);
       const along = rangePrior === "uniform-area" ? peak / r : peak;
-      const g = along * Math.exp(-0.5 * (delta / sigma) ** 2);
+      const g = tailDof > 0
+        ? along * Math.exp(logGamma((tailDof + 1) / 2) - logGamma(tailDof / 2) - 0.5 * Math.log(tailDof * Math.PI) - ((tailDof + 1) / 2) * Math.log1p((delta / sigma) ** 2 / tailDof))
+        : along * Math.exp(-0.5 * (delta / sigma) ** 2);
       log[j * grid.cols + i] = Math.log((1 - eps) * g + eps * uniform);
     }
   }
@@ -319,9 +347,9 @@ function logOfObservation(obs: FusionObservation, center: LatLon, grid: { origin
   if (obs.range_m != null) {
     const g = observationGaussian(obs, center, opts);
     if (!g) return new Float64Array(grid.cols * grid.rows).fill(Number.NEGATIVE_INFINITY);
-    return rangedLog(grid, g.mean, g.cov, opts.outlierEpsilon);
+    return rangedLog(grid, g.mean, g.cov, opts.outlierEpsilon, opts.bearingTailDof);
   }
-  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg), opts.outlierEpsilon, opts.rangePrior, opts.maxRangeM);
+  return bearingLog(grid, toLocal(obs.observer, center), obs.bearing_deg, bearingSigmaDeg(obs.bearing_source, opts.humanBearingSigmaDeg) * Math.sqrt(opts.covarianceInflation), opts.outlierEpsilon, opts.rangePrior, opts.maxRangeM, opts.bearingTailDof);
 }
 
 /** A normalised grid from log weights; returns the grid and its mean and covariance. */
@@ -533,7 +561,7 @@ function posteriorOn(
     if (allRanged) {
       const gaussians = cluster.observations.map((x) => observationGaussian(x, o.center, o)!);
       const g = intersectGaussianList(gaussians);
-      group = rangedLog(dims, g.mean, g.cov, o.outlierEpsilon);
+      group = rangedLog(dims, g.mean, g.cov, o.outlierEpsilon, o.bearingTailDof);
     } else {
       const logs = cluster.observations.map((x) => logOfObservation(x, o.center, dims, o));
       if (logs.length === 1) group = logs[0];
@@ -662,17 +690,103 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
   if (!coarse) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
   const coarseRadii = credibleRadii(coarse.grid, coarse.mean);
   const onlyBearings = usable.filter((x) => x.range_m == null && x.bearing_deg != null).length;
-  const narrow = bearingSpreadAt(usable, coarse.mean, o.center) < MIN_BEARING_SPREAD_DEG ||
-    (onlyBearings === usable.length && observerBaseline(usable, o.center) < Math.tan(MIN_BEARING_SPREAD_DEG * DEG) * o.maxRangeM);
+  const narrow = bearingSpreadAt(usable, coarse.mean, o.center) < o.minBearingSpreadDeg ||
+    (onlyBearings === usable.length && observerBaseline(usable, o.center) < Math.tan(o.minBearingSpreadDeg * DEG) * o.maxRangeM);
   if (narrow) return resultOf(coarse, true, coarseRadii);
-  const coarseWide = coarseRadii[1] > 0.25 * o.maxRangeM;
+  const coarseWide = coarseRadii[1] > o.wideFraction * o.maxRangeM;
   if (coarse.edgeMass > 0.002 || coarse.priorMass > 0.01 || coarseWide) return resultOf(coarse, true, coarseRadii);
   const half = Math.min(autoHalf, Math.max(6 * maxSpread(coarse.cov), 5 * o.gridCellM));
   const fine = posteriorOn(makeGridAround(coarse.mean, half, o.gridCellM), usable, o);
   if (!fine) return resultOf(coarse, true, coarseRadii);
   const fineRadii = credibleRadii(fine.grid, fine.mean);
-  const wide = fineRadii[1] > 0.25 * o.maxRangeM;
+  const wide = fineRadii[1] > o.wideFraction * o.maxRangeM;
   return resultOf(fine, fine.edgeMass > 0.002 || fine.priorMass > 0.01 || wide, fineRadii);
+}
+
+/** The radius of a circle around the mean that holds `mass` of a 2D Gaussian. */
+function gaussianCircleRadius(c: Covariance, mass: number): number {
+  const inv = invertCov(c);
+  const det = detCov(c);
+  if (!inv || !(det > 0)) return 0;
+  const norm = 1 / (2 * Math.PI * Math.sqrt(det));
+  const p = (radius: number) => {
+    const n = 360;
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TWO_PI;
+      const ue = Math.sin(a);
+      const un = Math.cos(a);
+      const q = inv[0][0] * ue * ue + 2 * inv[0][1] * ue * un + inv[1][1] * un * un;
+      sum += q > 1e-12 ? (1 - Math.exp(-0.5 * q * radius * radius)) / q : 0.5 * radius * radius;
+    }
+    return (sum / n) * norm;
+  };
+  const sigma = Math.sqrt(Math.max(c[0][0], c[1][1]));
+  let hi = Math.max(1, 10 * sigma);
+  while (p(hi) < mass && hi < 1e9) hi *= 2;
+  let lo = 0;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (p(mid) >= mass) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/**
+ * Marginalise a shared, unknown bearing sigma over a small set of values. Each component is a
+ * full fusion at its sigma; the result is the moment-matched Gaussian mixture, with credible
+ * circles from that Gaussian. The prior is explicit and must have the same length.
+ */
+export function fuseSigmaMixture(
+  observations: FusionObservation[],
+  opts: FusionOptions,
+  sigmas: number[] = [2, 5, 10],
+  prior: number[] = [0.25, 0.5, 0.25],
+): FusionResult {
+  if (!sigmas.length || sigmas.length !== prior.length) {
+    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "sigma mixture needs one prior weight per sigma" };
+  }
+  const total = prior.reduce((a, b) => a + Math.max(0, b), 0);
+  if (!(total > 0)) {
+    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "sigma mixture prior is zero" };
+  }
+  const weights = prior.map((w) => Math.max(0, w) / total);
+  const results = sigmas.map((sigma, i) => ({ w: weights[i], r: fuseObservations(observations, { ...opts, humanBearingSigmaDeg: sigma }) }));
+  const usable = results.filter((x) => x.r.mean && x.r.cov);
+  if (!usable.length) {
+    return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no mixture component resolved" };
+  }
+  const sumW = usable.reduce((a, b) => a + b.w, 0);
+  let me = 0;
+  let mn = 0;
+  for (const x of usable) {
+    me += (x.w / sumW) * x.r.mean!.e;
+    mn += (x.w / sumW) * x.r.mean!.n;
+  }
+  let vEE = 0;
+  let vEN = 0;
+  let vNN = 0;
+  for (const x of usable) {
+    const de = x.r.mean!.e - me;
+    const dn = x.r.mean!.n - mn;
+    const w = x.w / sumW;
+    vEE += w * (x.r.cov![0][0] + de * de);
+    vEN += w * (x.r.cov![0][1] + de * dn);
+    vNN += w * (x.r.cov![1][1] + dn * dn);
+  }
+  const cov: Covariance = [[vEE, vEN], [vEN, vNN]];
+  const unresolved = results.some((x) => x.r.status === "unresolved");
+  return {
+    status: unresolved ? "unresolved" : "resolved",
+    mean: { e: me, n: mn },
+    cov,
+    radius50_m: gaussianCircleRadius(cov, 0.5),
+    radius90_m: gaussianCircleRadius(cov, 0.9),
+    grid: null,
+    groups: usable[0].r.groups,
+    truncated: unresolved,
+  };
 }
 
 // ---- association ----
