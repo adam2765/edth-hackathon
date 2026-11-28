@@ -449,7 +449,8 @@ function intersectGaussianList(list: Gaussian[]): Gaussian {
   return { cov, mean: { e: cov[0][0] * etaE + cov[0][1] * etaN, n: cov[1][0] * etaE + cov[1][1] * etaN } };
 }
 
-function credibleRadius(grid: ProbabilityGrid, mean: LocalPoint, mass: number): number {
+/** The smallest circles around the mean that hold each requested share, from one sort. */
+function credibleRadii(grid: ProbabilityGrid, mean: LocalPoint, levels: number[] = [0.5, 0.9]): number[] {
   const cells: { d2: number; p: number }[] = [];
   for (let j = 0; j < grid.rows; j++) {
     for (let i = 0; i < grid.cols; i++) {
@@ -460,12 +461,18 @@ function credibleRadius(grid: ProbabilityGrid, mean: LocalPoint, mass: number): 
     }
   }
   cells.sort((x, y) => x.d2 - y.d2);
+  const out = levels.map(() => Number.NaN);
   let sum = 0;
+  let k = 0;
   for (const c of cells) {
     sum += c.p;
-    if (sum >= mass) return Math.sqrt(c.d2);
+    while (k < levels.length && sum >= levels[k]) {
+      out[k] = Math.sqrt(c.d2);
+      k++;
+    }
+    if (k >= levels.length) break;
   }
-  return cells.length ? Math.sqrt(cells[cells.length - 1].d2) : 0;
+  return out;
 }
 
 /** Posterior mass within two cells of a bearing-only observation's maximum range. */
@@ -486,7 +493,7 @@ function priorEdgeMass(
       const p = grid.p[j * grid.cols + i];
       if (!(p > 0)) continue;
       const q = { e: grid.origin.e + i * grid.cellM, n: grid.origin.n + j * grid.cellM };
-      if (sensors.some((s) => Math.hypot(q.e - s.e, q.n - s.n) >= near)) mass += p;
+      if (sensors.some((sensor) => Math.hypot(q.e - sensor.e, q.n - sensor.n) >= near)) mass += p;
     }
   }
   return mass;
@@ -555,13 +562,13 @@ function posteriorOn(
   };
 }
 
-function resultOf(p: Posterior, truncated: boolean): FusionResult {
+function resultOf(p: Posterior, truncated: boolean, radii: number[] = credibleRadii(p.grid, p.mean)): FusionResult {
   return {
     status: truncated ? "unresolved" : "resolved",
     mean: p.mean,
     cov: p.cov,
-    radius50_m: credibleRadius(p.grid, p.mean, 0.5),
-    radius90_m: credibleRadius(p.grid, p.mean, 0.9),
+    radius50_m: radii[0],
+    radius90_m: radii[1],
     grid: p.grid,
     groups: p.groups,
     truncated,
@@ -630,19 +637,22 @@ export function fuseObservations(observations: FusionObservation[], opts: Fusion
     const dims = makeGridAround({ e: ce, n: cn }, Math.min(autoHalf, half), o.gridCellM);
     const p = posteriorOn(dims, usable, o);
     if (!p) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
-    return resultOf(p, p.edgeMass > 0.002 || p.priorMass > 0.01);
+    const radii = credibleRadii(p.grid, p.mean);
+    return resultOf(p, p.edgeMass > 0.002 || p.priorMass > 0.01, radii);
   }
 
   const coarse = posteriorOn(makeGrid(autoHalf, Math.max(50, o.gridCellM * 5)), usable, o);
   if (!coarse) return { status: "insufficient", mean: null, cov: null, radius50_m: null, radius90_m: null, grid: null, groups: 0, truncated: false, reason: "no usable likelihood" };
-  if (bearingSpread(usable) < MIN_BEARING_SPREAD_DEG) return resultOf(coarse, true);
-  const coarseWide = credibleRadius(coarse.grid, coarse.mean, 0.9) > 0.25 * o.maxRangeM;
-  if (coarse.edgeMass > 0.002 || coarse.priorMass > 0.01 || coarseWide) return resultOf(coarse, true);
+  const coarseRadii = credibleRadii(coarse.grid, coarse.mean);
+  if (bearingSpread(usable) < MIN_BEARING_SPREAD_DEG) return resultOf(coarse, true, coarseRadii);
+  const coarseWide = coarseRadii[1] > 0.25 * o.maxRangeM;
+  if (coarse.edgeMass > 0.002 || coarse.priorMass > 0.01 || coarseWide) return resultOf(coarse, true, coarseRadii);
   const half = Math.min(autoHalf, Math.max(6 * maxSpread(coarse.cov), 5 * o.gridCellM));
   const fine = posteriorOn(makeGridAround(coarse.mean, half, o.gridCellM), usable, o);
-  if (!fine) return resultOf(coarse, true);
-  const wide = credibleRadius(fine.grid, fine.mean, 0.9) > 0.25 * o.maxRangeM;
-  return resultOf(fine, fine.edgeMass > 0.002 || fine.priorMass > 0.01 || wide);
+  if (!fine) return resultOf(coarse, true, coarseRadii);
+  const fineRadii = credibleRadii(fine.grid, fine.mean);
+  const wide = fineRadii[1] > 0.25 * o.maxRangeM;
+  return resultOf(fine, fine.edgeMass > 0.002 || fine.priorMass > 0.01 || wide, fineRadii);
 }
 
 // ---- association ----
